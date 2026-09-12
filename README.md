@@ -1,251 +1,243 @@
 # dotnet-workflow-kit
 
-dotnet-workflow-kit is a budgeted plan-to-review delivery workflow for .NET teams. A
-short implementation plan and a short review are each published as a Claude Artifact
-page instead of scrollback or a wiki doc, with a word budget enforced by a script so
-nobody has to read five thousand words to approve a ticket. One profile file,
-`.claude/dotnet-workflow-kit.json`, tells every skill how the team builds (architecture,
-testing, stack), how work flows (tracker, source control, QA) and whether the Artifact
-tool is even available, so the same skills produce the right shape of page for a Clean
-Architecture GraphQL service or a vertical-slice minimal API without any prompt-writing
-per project. It is for .NET teams who want a lightweight, repeatable plan and review
-step around Claude Code, whether or not they also run Azure Boards, GitHub Issues, or
-nothing at all for tracking.
+A Claude Code plugin for .NET teams that takes work from a ticket through planning,
+implementation, review and QA hand-off. It builds plan and review pages with enforced
+word budgets, so you can read the proposed work and the results before approving each.
+
+One project profile sets your architecture, tests, tracker and QA workflow. Use the
+six skills together or on their own, with or without a ticket tracker or the Artifact tool.
+
+[Install](#install) | [Workflow](#workflow) | [Skills](#skills) | [/goal](#running-with-goal) | [Profile reference](#profile-reference) | [dotnet-claude-kit](#dotnet-claude-kit) | [Contributing](#contributing)
 
 ## Install
 
-```
+Run in a terminal:
+
+```bash
 claude plugin marketplace add chrisjainsley/claude-dotnet-workflow-kit
 claude plugin install dotnet-workflow-kit@dotnet-workflow-kit
 ```
 
-Then run `/dotnet-workflow-kit:setup` inside Claude Code, or `python scripts/setup.py`
-in a terminal if you would rather answer questions outside the assistant. Either way
-the profile lands at `.claude/dotnet-workflow-kit.json` in the project root. Commit
-that file so the whole team shares one workflow instead of each person's local guess.
+Then run setup in Claude Code from your project:
 
-Python 3.11 or later is required to run the scripts. Pillow is optional; without it,
-image downscaling in the plan builder is skipped and full-size images are embedded
-instead.
+```text
+/dotnet-workflow-kit:setup
+```
 
-## The workflow
+Setup asks about your team and writes `.claude/dotnet-workflow-kit.json`. Commit that
+file to share the settings. Run setup again when your workflow changes.
 
-The kit walks one ticket through the same stages every time. `/next` runs the stages
-below in order and stops at the review page for a decision.
+The scripts require Python 3.11 or later. Pillow is optional; without it, the plan
+builder embeds full-size images instead of downscaling them.
 
-1. **Start the ticket.** `start-ticket` creates a branch from `base_branch`
-   using `branch_pattern`, assigns the ticket and moves it to active.
-2. **Plan page.** `visual-plan` publishes a plan Artifact ordered from the
-   requirement outward through the architecture's layers, ending in an open-questions
-   form. Answer the open questions directly on the page; each one is a title, context,
-   and a set of recommended and alternative options. When you are done, tell the
-   session "answered" and it reads the stored choices back and folds them into the plan
-   as settled decisions.
-3. **Execute.** Implementation proceeds against the approved plan.
-4. **Mega-review.** Runs the profile's reviewers, always `bug-hunt` and
-   `conventions`, plus any optional ones the profile turns on, across the branch
-   before a PR goes up.
-5. **Draft PR.** Opened against `base_branch` following `branch_pattern`.
-6. **QA.** Testing runs the way `qa.owner` and `qa.environment` describe; whatever
-   evidence comes out of it feeds the review's QA report section.
-7. **Review page.** `visual-review` publishes one Artifact that is both the
-   code review and the QA report: verdict tiles, a plan-versus-delivered table, a
-   diagram of the change, per-service change tables whose files link to their full
-   diffs, a findings table, the QA report itself, a persistent rollout checklist, and
-   an approve or request-changes decision form.
-8. **Hand-off.** On approve, the QA report section is posted wherever `qa.evidence`
-   says (a work item, a PR comment, or nowhere at all), and the pipeline continues
-   past the checkpoint.
+For terminal setup from a clone of this repository:
 
-## Running the pipeline unattended with /goal
+```bash
+python scripts/setup.py
+```
 
-`/next` runs stage after stage without asking, but it stops at two points that need a
-human: the plan page (approve or answer the open questions) and the review page (approve
-or request changes). Claude Code's `/goal` command keeps a session working turn after
-turn until a condition is met, so the two together take a ticket from start to hand-off
-with only those two decisions from you.
+## Workflow
 
-1. Start the ticket and set the goal in one go:
-   ```
-   /dotnet-workflow-kit:start-ticket 1234
-   /goal Run /next until it stops at the review checkpoint for ticket 1234 and has printed the review page link. Stop within 3 hours.
-   ```
-   `/next` then runs the plan, execute, mega-review, draft PR, comment and QA stages.
-   After each turn a small evaluator model checks the transcript against the condition
-   and starts the next turn until the review link appears, so keep the condition about
-   something that shows up in chat, not on the page.
-2. When `/next` publishes the plan page it prints the link and waits. Open the page,
-   answer the questions or leave the recommended defaults, press Send answers, then
-   type `answered`. `/next` reads the answers from the page and carries on; the goal
-   keeps it moving.
-3. At the review checkpoint the goal is met and clears itself. Open the review page,
-   tick the rollout items, choose Approve or Request changes, press Send decision, then
-   type `decided`. `/next` reads the decision. Approve runs the hand-off stage; request
-   changes returns to execute with your notes and per-finding fix or accept actions.
-4. If you want the hand-off to run unattended too, set a second goal after deciding:
-   ```
-   /goal Run /next until the hand-off stage reports done for ticket 1234.
-   ```
+Start with a ticket ID, or a short slug when `tracker` is `none`:
 
-Notes that keep this safe:
+```text
+/dotnet-workflow-kit:start-ticket 1234
+```
 
-- Run in auto permission mode for a hands-free session. In manual mode the goal still
-  runs, but every unapproved tool call waits for you, which is a slower checkpoint.
-- Always put a time or turn bound in the condition. A blocked stage (CI red for a reason
-  outside the branch, a merge conflict, a missing profile) makes `/next` stop and say
-  why; the bound stops the goal from re-prompting past that.
-- One goal per session. `/goal` on its own shows the current one and `/goal clear`
-  removes it. `/next status` prints the stage table without running anything.
-- With `artifacts` false in the profile there are no pages; answers and the decision are
-  given in chat, and the same two goals still apply.
+Use the pipeline driver to continue:
+
+```text
+/dotnet-workflow-kit:next
+```
+
+The driver checks the branch, PR and saved state, then runs the earliest unfinished
+stage. It pauses for plan answers or approval, the review decision, and blockers.
+Invoking it authorizes commits, pushes, a draft PR and configured deployment labels
+before the review checkpoint.
+
+| Stage | Result |
+|---|---|
+| 0. Start ticket | Create and push a branch; assign and activate the item when a tracker is configured. |
+| 1. Plan | Build the plan page; read your answers or approval. |
+| 2. Execute | Implement the plan, using the configured command when set. |
+| 3. Review | Run mega-review, clean up and verify the branch. |
+| 4. Draft PR | Open a draft against the base branch or stacked parent; check CI. |
+| 5. Resolve comments | Address review threads and check CI again. |
+| 6. QA | Run the scenarios in the configured environment; fix failures and rerun. |
+| 7. Review page | Present the final diff, findings and QA evidence for your decision. |
+| 8. Publish and hand off | After approval, post the QA report where configured and mark the PR ready. Follow the QA adapter for labels and tracker state. |
+
+Requesting changes returns the pipeline to implementation with your notes and
+per-finding fix or accept choices. The draft stays a draft until approval.
 
 ## Skills
 
 ### visual-plan
 
-Triggers on "plan this", "visual plan", "plan `<ticket id>`", `/visual-plan`, or
-the pipeline reaching the Plan stage. Reads the profile, the ticket through the
-tracker adapter, the codebase read-only, and the architecture, stack and testing
-adapters for section wording. Produces `plans/<id>-<slug>/plan.md` and `plan.html`,
-published as a Claude Artifact (or left as local HTML when `artifacts` is false),
-with sections from Context through Open questions and an answerable open-questions
-form. **Shipped in v0.1.**
+Use for an implementation plan. It reads the ticket and codebase, then writes
+`plans/<id>-<slug>/plan.md` and builds `plan.html`. Sections follow your architecture,
+with test scenarios, decisions, risks and open questions. A script checks section
+budgets before publication.
+
+On an Artifact page, choose answers and press **Send answers**, then tell the session
+"answered". The skill reads the stored choices, updates the plan and republishes it.
+
+![Plan page showing Context, Specs and the Open questions form](docs/images/plan-page.png)
 
 ### visual-review
 
-Triggers on "review this", "recap", "qa report", "write up the review",
-`/visual-review`, or the pipeline reaching the Review stage. Reads the profile,
-the PR and diff through the scm adapter, the approved plan and its stored answers,
-mega-review findings from the session, and QA evidence gathered by the user or the
-session. Produces `review.md` and `review.html`: verdict tiles, plan versus delivered,
-a change diagram, per-service change tables linking every file to its diff, findings,
-a QA report, a rollout checklist and a decision form. **Shipped in v0.1.**
+Use to review a branch or PR. It combines the approved plan, actual diff,
+mega-review findings and QA evidence into `review.md` and `review.html`.
+
+The page includes verdict counts, plan versus delivered, a change diagram, file links
+to full diffs, findings, the QA report and a rollout checklist. Choose **Approve** or
+**Request changes**, press **Send decision**, then tell the session "decided".
+The skill reads the decision and each open finding's fix or accept choice.
+
+![Review page showing verdict tiles, the change diagram and decision form](docs/images/review-page.png)
 
 ### start-ticket
 
-Triggers on "start ticket", "start work on `<id>`", "pick up `<id>`", or
-`/start-ticket`. Reads the profile's `tracker` (which adapter parses and fetches the
-item), `tracker_project`, `base_branch`, `branch_pattern` and `user`, following
-`adapters/tracker/<tracker>.md` to fetch, assign and activate the item. Produces a
-branch named from `branch_pattern` off `base_branch`, the item assigned to `user` and
-moved to the tracker's active state, the session renamed to the id and slug, and a
-hand-off to `visual-plan`. It does not write a pipeline state key itself; `next`
-records the `startTicket` stage when it drives this skill. **Shipped in v0.2.**
+Use to start work from an ID, issue URL or untracked slug. It creates and pushes a
+branch from `base_branch` using `branch_pattern`. With a tracker, it assigns the item
+to `user` and moves it to the configured active state. It then renames the session
+when supported and hands off to visual-plan.
 
 ### qa-report
 
-Has two modes. Default mode triggers on "qa report", "write up the testing", or
-"document what we tested" when used outside the review-page flow. Reads the profile's
-`qa.evidence` (work item, PR comment, or none), `tracker` or `scm` for the matching
-adapter, `testing.acceptance` for naming the automated runner, and `artifacts` for
-whether to publish a page. Produces a BDD-format report: one Given/When/Then card per
-behaviour tagged Acceptance test or Manual test with Pass, Fail or Blocked and
-evidence, a summary table, and a Not covered list, posted to the work item or PR
-comment per `qa.evidence` after the user approves it.
+Use for a standalone QA report or testing instructions. If a review page already
+contains the QA report, this skill reuses that section.
 
-Notes mode triggers on "qa notes", "test notes", "notes for QA", or the argument
-`notes`. Reads the approved plan's Specs section at `plans/<id>-<slug>/plan.md` when
-one exists, else `git diff <base>...HEAD`, plus the profile's `qa.owner`,
-`qa.evidence`, `tracker` and `scm` fields for who the notes are for and where they go.
-Produces notes covering what changed, how to test it per persona, test data and
-accounts, edge cases, out of scope, and environment or feature-flag setup, posted to
-the work item or PR comment when `qa.owner` is `qa-team`, printed otherwise.
+| Mode | Content | Posting |
+|---|---|---|
+| Report | Given/When/Then scenarios, Pass/Fail/Blocked results, evidence, summary and untested criteria. | After approval, post according to `qa.evidence`. |
+| Notes | What changed, steps per persona, test data, edge cases, scope, environment and flags. | After approval, post for `qa-team` according to `qa.evidence`; otherwise print in chat. |
 
-Both modes post through the same adapter step; neither has scripts or templates of its
-own, and neither writes a pipeline state key. **Shipped in v0.2.**
+Reports cover acceptance runs against a real environment and manual checks. Unit and
+integration suites do not count as QA evidence. Notes come from the approved plan's
+Specs, or the diff when no plan exists. Select notes mode with:
+
+```text
+/dotnet-workflow-kit:qa-report notes
+```
 
 ### mega-review
 
-Triggers on "mega review", "full review", "review everything", or "pre-PR check".
-Reads the profile's `reviewers` list, `optional.dotnet-claude-kit`, `optional.codex`,
-`architecture` (for `adapters/architecture/<value>.md`), `scm`, `base_branch` and
-`testing.*`. Two reviewers are always on, `bug-hunt` and `conventions`; `reviewers`
-can add `kit` (`dotnet-claude-kit:code-review` and `80-20-review` in Phase 1,
-`de-sloppify` in Phase 2, `verification-loop` in Phase 3), `security-scan`,
-`convention-learner`, or `code-review-workflow` (only when `optional.roslyn-mcp` is
-true); `optional.codex` adds a codex second-opinion reviewer. A reviewer whose skill
-or plugin is missing is recorded as `skipped: <reason>` instead of failing the run.
-Produces a consolidated findings table, a cleanup summary, a verification result and
-a skipped list, and writes the pipeline state file's `megaReview` key as
-`{"done": true, "findings": [...], "skipped": [...]}`, which `visual-review`
-reads instead of re-running a review. **Shipped in v0.3.**
+Use before opening a PR. It runs read-only reviewers in parallel, then applies
+cleanup and runs verification in sequence. The built-in reviewers are `bug-hunt` and
+`conventions`. The profile can enable companion reviewers and a Codex second opinion.
+
+Missing tools appear in the skipped list with a reason. The result includes
+consolidated findings, cleanup changes and verification results. It saves findings
+for visual-review to reuse. This skill can edit files during cleanup.
 
 ### next
 
-Triggers on "next", "what's next", "keep going", or "run the pipeline"; `/next
-status` prints the table only. Reads the profile end to end: `tracker`, `scm`,
-`base_branch`, `branch_pattern`, `qa.owner`, `qa.evidence`, `qa.handoff_label`,
-`qa.deploy_label`, `qa.environment`, `testing.tdd`, `pipeline.execute`,
-`pipeline.resolve_comments`, `pipeline.qa`, `artifacts`, `reviewers` and
-`optional.*`. Produces the nine-stage pipeline run:
+Use to run the [workflow](#workflow) from the current stage. It reads live signals
+alongside `~/.claude/dotnet-workflow-kit/pipeline/<slug>.json` and updates stage completion.
+Live evidence overrides saved state; reviews and QA results older than new commits
+must run again.
 
-0. Start ticket, via `start-ticket`.
-1. Plan, via `visual-plan`.
-2. Execute, via `pipeline.execute` or by implementing the plan directly.
-3. Review, via `mega-review`.
-4. Draft PR, against `base_branch` or a stacked parent.
-5. Resolve comments, via `pipeline.resolve_comments` or the scm adapter.
-6. QA, via `pipeline.qa` or the plan's Specs run manually.
-7. Review page, via `visual-review`.
-8. Publish and hand off, posting the QA report and moving the item to the tracker's
-   QA-ready state.
+To inspect progress without running a stage:
 
-It writes and reads stage completion at
-`~/.claude/dotnet-workflow-kit/pipeline/<slug>.json`, and at the checkpoint after
-stage 7 it reads the approve-or-changes decision from the review page rather than
-asking in chat. **Shipped in v0.3.**
+```text
+/next status
+```
+
+## Running with /goal
+
+If your Claude Code session supports the goal command, use it to keep the pipeline
+moving toward a stated checkpoint. Plan approval and the review decision still need
+your input.
+
+Start the ticket, then set a bounded goal:
+
+```text
+/dotnet-workflow-kit:start-ticket 1234
+/goal Run /next until it stops at the review checkpoint for ticket 1234 and has printed the review page link. Stop within 3 hours.
+```
+
+At the plan page, send your answers and tell the session "answered", or approve the
+plan. At the review page, send your decision and tell the session "decided".
+Pages cannot wake the session themselves.
+
+After approving, you can set a goal for hand-off:
+
+```text
+/goal Run /next until the hand-off stage reports done for ticket 1234. Stop within 1 hour.
+```
+
+Name an observable result and include a time bound. Tool permission prompts may
+still require input. When the pipeline reports a blocker, resolve it before continuing.
+
+## Without the Artifact tool
+
+Set `artifacts` to `false` through setup when the Artifact tool is unavailable.
+The skills build the same HTML pages and give you local file paths to open.
+
+Local forms cannot save answers or decisions. Reply in chat with question numbers
+and choices, or with "approve" or "changes" and your finding decisions.
+Rollout checklist ticks do not persist; track rollout outside the kit.
+See [Running without the Artifact tool](docs/without-artifacts.md).
 
 ## Profile reference
 
-All fields live in `.claude/dotnet-workflow-kit.json`. Dotted names below are nested
-under their parent object (for example `testing.tdd` is `{"testing": {"tdd": ...}}`).
+Setup writes `.claude/dotnet-workflow-kit.json` in the project. Profile resolution
+uses an explicit path first, then the project file, then the user file at
+`~/.claude/dotnet-workflow-kit.json`, then defaults. Missing fields receive defaults.
 
-| Field | Allowed values | Default | What it changes |
+Each row below names a field, including nested fields in dotted form.
+For example, `testing.tdd` lives inside the `testing` object. Empty strings appear as `""`.
+
+| Field | Allowed values | Default | Purpose |
 |---|---|---|---|
-| `user` | free text | `""` (shown as "you") | The name used in plan and review page prose. |
-| `architecture` | `clean`, `vertical`, `ddd-clean`, `modular-monolith` | `clean` | The plan's section order and word caps, the review's slice names, and which `adapters/architecture/<value>.md` loads. |
-| `testing.tdd` | `strict`, `encouraged`, `none` | `encouraged` | How firmly the plan and review state the TDD expectation. |
-| `testing.unit` | `xunit`, `nunit`, `mstest` | `xunit` | The unit test framework named in the Tests section. |
-| `testing.integration` | `webapplicationfactory`, `testcontainers`, `none` | `webapplicationfactory` | The integration test style named in Specs and Tests. |
-| `testing.acceptance` | `reqnroll`, `specflow`, `none` | `none` | Whether Specs promises a BDD feature file and which runner drives it. |
-| `qa.owner` | `qa-team`, `self`, `none` | `self` | Who signs off in the review's QA section; loads `adapters/qa/<value>.md`. |
-| `qa.evidence` | `work-item`, `pr-comment`, `none` | `none` | Where the QA report is posted on approve. |
-| `qa.handoff_label` | free text | `""` | The PR label that hands a PR to QA, named in Rollout. |
-| `qa.deploy_label` | free text | `""` | The PR label that deploys to the QA environment, named in Rollout. |
-| `qa.environment` | free text | `"local"` | The environment named throughout the QA report. |
-| `tracker` | `azure-boards`, `github-issues`, `jira`, `none` | `none` | How the ticket is fetched; loads `adapters/tracker/<value>.md`, or `adapters/tracker/<value>/README.md` when the adapter is a folder. |
-| `tracker_project` | free text | `""` | The project or org identifier passed to tracker commands. |
-| `tracker_states.active` | free text | `""` | The tracker state a ticket moves to when work starts. |
-| `tracker_states.qa_ready` | free text | `""` | The tracker state a ticket moves to for hand-off to QA. |
-| `scm` | `github`, `azure-repos` | `github` | How the PR, base and diff are found; loads `adapters/scm/<value>.md`. |
-| `base_branch` | free text | `"main"` | The branch PRs target and diffs compare against. |
-| `branch_pattern` | free text, must contain `{slug}` | `"{kind}/{id}-{slug}"` | The branch naming template `start-ticket` uses. |
-| `branch_kinds.feature` | any short prefix | `feat` | The `{kind}` value in `branch_pattern` for features. |
-| `branch_kinds.bug` | any short prefix | `bug` | The `{kind}` value in `branch_pattern` for bugs. |
-| `tracker_states.active` | a state name, or blank | blank | The tracker state start-ticket moves an item to. Blank keeps the adapter's default. |
-| `tracker_states.qa_ready` | a state or column name, or blank | blank | The state next moves an item to at hand-off. Blank keeps the adapter's default. |
-| `artifacts` | `true`, `false` | `true` | Whether pages publish as Claude Artifacts or open as local HTML with answers taken in chat. |
-| `stack.data` | `ef-core`, `dapper`, `cosmos`, `other` | `ef-core` | The data access named in Infrastructure and Contracts sections. |
-| `stack.api` | `minimal-api`, `controllers`, `graphql`, `grpc` | `minimal-api` | The API style named in the API and Contracts sections. |
-| `stack.messaging` | `masstransit`, `wolverine`, `service-bus`, `none` | `none` | The messaging technology named in Infrastructure and Contracts. |
-| `stack.errors` | `result`, `exceptions` | `exceptions` | The error handling convention named in Application and API sections. |
-| `stack.local_run` | `aspire`, `docker`, `plain` | `plain` | How the QA stage describes starting the system locally. |
-| `pipeline.execute` | any command or slash command, or blank | blank | What `/next` runs at the Execute stage. Blank means it implements the plan directly, tests first when `testing.tdd` is `strict`. |
-| `pipeline.resolve_comments` | any command, or blank | blank | What `/next` runs to resolve PR review threads. Blank means the scm adapter's steps. |
-| `pipeline.qa` | any command, or blank | blank | What `/next` runs at the QA stage. Blank means the plan's Specs are run by hand per the QA adapter. |
-| `reviewers` | `bug-hunt`, `conventions` (always on), plus `kit`, `security-scan`, `convention-learner`, `code-review-workflow` | `[bug-hunt, conventions]` | Which reviewers mega-review runs beyond the two built-ins. |
-| `optional` | object with `dotnet-claude-kit`, `codex`, `roslyn-mcp`, each `true`/`false` | all `false` | Whether the companion kit, Codex and a Roslyn MCP server were detected or installed. |
-| `schema` | integer | `1` | Internal profile version; setup fills in defaults for anything an older file lacks. |
+| `schema` | Integer | `1` | Profile schema version. |
+| `user` | Free text | `""` | Assignee and name used in page prose. |
+| `architecture` | `clean`, `vertical`, `ddd-clean`, `modular-monolith` | `"clean"` | Plan section order and review rules. |
+| `testing.tdd` | `strict`, `encouraged`, `none` | `"encouraged"` | TDD expectation; strict means tests first during execution. |
+| `testing.unit` | `xunit`, `nunit`, `mstest` | `"xunit"` | Unit test framework. |
+| `testing.integration` | `webapplicationfactory`, `testcontainers`, `none` | `"webapplicationfactory"` | Integration test approach. |
+| `testing.acceptance` | `reqnroll`, `specflow`, `none` | `"none"` | Acceptance test runner; none keeps scenarios without a BDD runner. |
+| `qa.owner` | `qa-team`, `self`, `none` | `"self"` | Who tests and signs off. |
+| `qa.evidence` | `work-item`, `pr-comment`, `none` | `"none"` | Where approved QA reports go. |
+| `qa.handoff_label` | Free text | `""` | PR label for QA hand-off. |
+| `qa.deploy_label` | Free text | `""` | PR label to deploy to QA. |
+| `qa.environment` | Free text | `"local"` | Environment named in QA evidence. |
+| `tracker` | `azure-boards`, `github-issues`, `jira`, `none` | `"none"` | Ticket adapter; none uses your description. |
+| `tracker_project` | Free text | `""` | Project or organization identifier for tracker calls. |
+| `scm` | `github`, `azure-repos` | `"github"` | PR and diff adapter. |
+| `base_branch` | Free text | `"main"` | Starting branch and fallback PR base; stacked work uses its parent. |
+| `branch_pattern` | Free text containing `{slug}`; supports `{kind}` and `{id}` | `"{kind}/{id}-{slug}"` | Branch naming template. |
+| `branch_kinds.feature` | Non-empty text | `"feat"` | Feature value for the kind token. |
+| `branch_kinds.bug` | Non-empty text | `"bug"` | Bug value for the kind token. |
+| `tracker_states.active` | Free text | `""` | State when work starts; blank uses the adapter default. |
+| `tracker_states.qa_ready` | Free text | `""` | QA hand-off state; blank uses the adapter default. |
+| `artifacts` | `true`, `false` | `true` | Publish Artifacts, or build local HTML and take answers in chat. |
+| `stack.data` | `ef-core`, `dapper`, `cosmos`, `other` | `"ef-core"` | Data access conventions. |
+| `stack.api` | `minimal-api`, `controllers`, `graphql`, `grpc` | `"minimal-api"` | API contract style. |
+| `stack.messaging` | `masstransit`, `wolverine`, `service-bus`, `none` | `"none"` | Messaging conventions. |
+| `stack.errors` | `result`, `exceptions` | `"exceptions"` | Error handling conventions. |
+| `stack.local_run` | `aspire`, `docker`, `plain` | `"plain"` | How to start the system for local QA. |
+| `reviewers` | `bug-hunt`, `conventions`, `kit`, `security-scan`, `convention-learner`, `code-review-workflow` | `["bug-hunt", "conventions"]` | Review passes; the two built-ins always run. |
+| `pipeline.execute` | Free text | `""` | Execution command; blank implements the plan directly. |
+| `pipeline.resolve_comments` | Free text | `""` | Comment-resolution command; blank uses the SCM adapter. |
+| `pipeline.qa` | Free text | `""` | QA command; blank runs plan Specs manually per the QA adapter. |
+| `optional.dotnet-claude-kit` | `true`, `false` | `false` | Companion plugin availability. |
+| `optional.codex` | `true`, `false` | `false` | Enable the Codex second-opinion reviewer. |
+| `optional.roslyn-mcp` | `true`, `false` | `false` | Roslyn MCP availability for code-review-workflow. |
 
-Two invariants are enforced on every write and every load:
+Validation requires a tracker when `qa.evidence` is `work-item`. Both `bug-hunt` and
+`conventions` remain in the reviewer list.
 
-- `qa.evidence` cannot be `work-item` unless `tracker` is something other than `none`.
-- `reviewers` always includes `bug-hunt` and `conventions`; they cannot be removed.
+The `clean`, `ddd-clean` and `modular-monolith` profiles share Domain, Application,
+Infrastructure, API and Tests slices. Their adapters define different review rules.
+The `vertical` profile uses Slice, Persistence, Integration, Endpoint and Tests.
+See [Adapters](docs/adapters.md) for supported tools and extension points.
 
 ## dotnet-claude-kit
 
-Setup recommends the companion `dotnet-claude-kit` plugin and offers to install it
-whenever one of your answers needs a skill it provides. The mapping:
+Setup recommends the companion plugin when your answers need its skills, and asks
+before installing it. These mappings come from `scripts/kit_profile.py`:
 
 | Answer | dotnet-claude-kit skills it needs |
 |---|---|
@@ -264,55 +256,35 @@ whenever one of your answers needs a skill it provides. The mapping:
 | `reviewers: convention-learner` | `convention-learner` |
 | `reviewers: code-review-workflow` | `code-review-workflow` (also needs a Roslyn MCP server) |
 
-The kit runs fine without it. Plan sections still work using only the built-in
-adapters; the difference is that the extra `kit`, `security-scan`,
-`convention-learner` and `code-review-workflow` reviewers in mega-review are skipped
-and reported as such, rather than run.
-
-## Screenshots
-
-![Plan page](docs/images/plan-page.png)
-The plan page's Context, Specs and Open questions sections with the answer form open.
-
-![Review page](docs/images/review-page.png)
-The review page's verdict tiles, change diagram and decision form.
-
-## Architecture support
-
-`clean`, `ddd-clean` and `modular-monolith` all share the same plan section order and
-review slice names (Domain, Application, Infrastructure, API, Tests); the latter two
-describe different governance around that same structure. `vertical` has its own
-section order (Slice, Persistence, Integration, Endpoint, Tests) and is exercised by
-`tests/fixtures/plan-vertical.md` alongside the `clean` fixture.
-
-## Repository layout
-
-```
-claude-dotnet-workflow-kit/
-├── .claude-plugin/   # plugin.json and marketplace.json
-├── assets/           # page.html, the shared plan and review page shell
-├── adapters/         # tracker, scm, architecture, qa value files;
-│                     # stack/<field>.md holds every value as a section;
-│                     # tracker/azure-boards/ is a folder (README.md + fetch_context.py)
-├── commands/         # setup.md, the /dotnet-workflow-kit:setup command
-├── docs/             # this reference documentation
-├── scripts/          # kit_profile.py, setup.py, render.py and check.py (shared by the
-│                     # visual-plan and visual-review skills)
-├── skills/           # start-ticket, visual-plan, mega-review (see
-│                     # skills/mega-review/reviewers/), next, qa-report (report and
-│                     # notes modes), visual-review
-└── tests/            # pytest fixtures and skill tests
-```
+The workflow kit also runs without the companion. Built-in adapters still guide the
+pages; unavailable companion reviewers are recorded as skipped. The
+`code-review-workflow` reviewer also requires a Roslyn MCP server.
 
 ## Contributing
 
-Run `pytest` before opening a PR; the profile, setup and skill build scripts are all
-covered by fixture-backed tests in `tests/`. Run `claude plugin validate .` to check
-the plugin manifest and the command and skill front matter. CI also runs a
-private-string gate that scans the diff for internal identifiers, such as an
-employer's name, an internal hostname, or a personal email address, that must never
-land in this public repository; keep any examples you add generic.
+| Path | Contents |
+|---|---|
+| `.claude-plugin/` | Plugin and marketplace manifests. |
+| `commands/setup.md` | Setup command instructions. |
+| `skills/` | Six skills and their supporting files. |
+| `adapters/` | Tracker, source control, architecture, QA and stack instructions. |
+| `assets/` | Shared page shell. |
+| `scripts/` | Profile, setup, checks and rendering. |
+| `docs/` | Usage guides, writing rules and screenshots. |
+| `tests/` | Fixtures and automated checks. |
+
+Run the tests and plugin validation from the repository root before opening a PR:
+
+```bash
+python -m pytest
+claude plugin validate .
+```
+
+Keep examples generic. Hygiene tests check for private identifiers and em dashes.
+Follow the [writing rules](docs/writing-rules.md) for plan and review content.
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Author: Chris Ainsley.
+MIT. See [LICENSE](LICENSE).
+
+Author: Chris Ainsley
