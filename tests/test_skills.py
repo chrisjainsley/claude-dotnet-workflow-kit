@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILLS = ("visual-plan-doc", "visual-review-doc", "start-ticket", "qa-report", "qa-notes", "mega-review", "next")
+SKILLS = ("visual-plan", "visual-review", "start-ticket", "qa-report", "qa-notes", "mega-review", "next")
 FRONT_MATTER = re.compile(r"^---\nname: (?P<name>[a-z0-9-]+)\ndescription: (?P<description>.+?)\n---\n", re.S)
 
 
@@ -46,7 +46,7 @@ def test_given_mega_review_then_built_in_reviewers_ship():
 
 def test_given_next_then_stage_table_names_kit_skills_only():
     text = skill_text("next")
-    for kit_skill in ("start-ticket", "visual-plan-doc", "mega-review", "visual-review-doc"):
+    for kit_skill in ("start-ticket", "visual-plan", "mega-review", "visual-review"):
         assert f"dotnet-workflow-kit:{kit_skill}" in text
     assert "dotnet-workflow-kit/pipeline" in text, "state file must live under ~/.claude/dotnet-workflow-kit/pipeline"
     for field in ("pipeline.execute", "pipeline.resolve_comments", "pipeline.qa"):

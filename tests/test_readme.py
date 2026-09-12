@@ -10,8 +10,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 SKILL_NAMES = (
-    "visual-plan-doc",
-    "visual-review-doc",
+    "visual-plan",
+    "visual-review",
     "start-ticket",
     "qa-report",
     "qa-notes",

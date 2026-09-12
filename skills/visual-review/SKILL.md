@@ -1,6 +1,6 @@
 ---
-name: visual-review-doc
-description: Turn a finished branch or PR into one budgeted review Artifact that serves as the code review and the QA report together. Verdict tiles, plan versus delivered, a diagram of the change, changes grouped by service then slice with every file linked to its diff, contracts other teams must move for, review findings, the BDD QA report, a persistent rollout checklist and an approve / request-changes decision form. Use whenever the user says "review this", "recap", "visual recap", "qa report", "write up the review", "/visual-review-doc", or when the kit's pipeline reaches the Review stage. Prefer this over posting a bare QA report.
+name: visual-review
+description: Turn a finished branch or PR into one budgeted review Artifact that serves as the code review and the QA report together. Verdict tiles, plan versus delivered, a diagram of the change, changes grouped by service then slice with every file linked to its diff, contracts other teams must move for, review findings, the BDD QA report, a persistent rollout checklist and an approve / request-changes decision form. Use whenever the user says "review this", "recap", "visual recap", "qa report", "write up the review", "/visual-review", or when the kit's pipeline reaches the Review stage. Prefer this over posting a bare QA report.
 ---
 
 # Review document
@@ -10,7 +10,7 @@ was promised against what shipped, where the code moved, what a reviewer flagged
 QA proved, and what has to happen at rollout. One artifact, one link at the checkpoint,
 one decision form whose answer comes back to this session.
 
-The budget rules from `visual-plan-doc` apply. A standard review is about 1,400 prose
+The budget rules from `visual-plan` apply. A standard review is about 1,400 prose
 words, code excluded, with at most eight collapsed diff hunks. Every file named in the
 Changes tables opens its full diff on the page, so the reviewer never has to leave it;
 the hunks you write are the ones that carry a decision.
@@ -86,7 +86,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It dec
    `review.html`, `favicon` 🔍 on the first publish only, one-sentence `description`,
    `capabilities` `{"db": {}}`. Invoke `artifact-design` and `artifact-capabilities`
    because the tool asks; the template is already designed, leave it alone. Record the
-   URL in the pipeline state file as `reviewDoc.artifactUrl`. With `artifacts: false`,
+   URL in the pipeline state file as `review.artifactUrl`. With `artifacts: false`,
    give the path of `review.html`; the rollout ticks and the decision form render but
    cannot send, so take the decision in chat.
 10. **Hand off in chat.** The link or path, the Verdict line, and the headline numbers as
@@ -122,7 +122,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It dec
 
 ## Writing rules
 
-The `visual-plan-doc` rules carry over: code beats prose about code, each fact lives in
+The `visual-plan` rules carry over: code beats prose about code, each fact lives in
 one place, no containers except the generated ones, verified names only, the page
 stands alone, plain sentences under 25 words, no em dashes. Three rules are specific
 to reviews:

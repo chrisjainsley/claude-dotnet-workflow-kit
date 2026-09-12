@@ -12,8 +12,8 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 PROFILE_PY = SCRIPTS_DIR / "profile.py"
 SETUP_PY = SCRIPTS_DIR / "setup.py"
 
-PLAN_SKILL_DIR = REPO_ROOT / "skills" / "visual-plan-doc"
-REVIEW_SKILL_DIR = REPO_ROOT / "skills" / "visual-review-doc"
+PLAN_SKILL_DIR = REPO_ROOT / "skills" / "visual-plan"
+REVIEW_SKILL_DIR = REPO_ROOT / "skills" / "visual-review"
 
 CHECK_PLAN_PY = PLAN_SKILL_DIR / "scripts" / "check_plan.py"
 BUILD_PLAN_PY = PLAN_SKILL_DIR / "scripts" / "build_plan.py"

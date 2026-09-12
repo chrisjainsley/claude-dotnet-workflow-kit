@@ -86,7 +86,7 @@ run continues.
 7. **Write the pipeline state.** Save the consolidated findings to
    `~/.claude/dotnet-workflow-kit/pipeline/<slug>.json` under the key `megaReview`, as
    `{"done": true, "findings": [...], "skipped": [...]}`, one entry per reviewer in each
-   list. The `visual-review-doc` skill reads this key and copies it into its Findings
+   list. The `visual-review` skill reads this key and copies it into its Findings
    section instead of re-running a review.
 8. **Report** the consolidated report described below, in chat.
 

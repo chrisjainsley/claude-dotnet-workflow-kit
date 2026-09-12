@@ -37,14 +37,14 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
 | # | Stage | How it's done | Done when |
 |---|-------|----------------|-----------|
 | 0 | Start ticket | `/dotnet-workflow-kit:start-ticket` | Branch matching `branch_pattern` exists, item active per the tracker adapter; with `tracker: none`, the branch alone is enough |
-| 1 | Plan | `/dotnet-workflow-kit:visual-plan-doc` | Plan page produced and the user has answered or approved it; state `plan.artifactUrl` |
+| 1 | Plan | `/dotnet-workflow-kit:visual-plan` | Plan page produced and the user has answered or approved it; state `plan.artifactUrl` |
 | 2 | Execute | `pipeline.execute` when set, else implement the plan directly, tests first when `testing.tdd` is strict, one commit per plan layer | Commits exist on the branch beyond the base |
 | 3 | Review | `/dotnet-workflow-kit:mega-review` | State `megaReview.done`; findings fixed or accepted |
 | 4 | Draft PR | Scm adapter: draft against `base_branch` or the stacked parent, title from the ticket, body from the plan's Requirement and Specs, `qa.handoff_label` applied when `qa.owner` is `qa-team` | Draft PR open, checks green |
 | 5 | Resolve comments | `pipeline.resolve_comments` when set, else the scm adapter's review-thread steps | 0 unresolved threads, checks green |
 | 6 | QA | `pipeline.qa` when set, else the plan's Specs run manually per `adapters/qa/<qa.owner>.md`; `qa.deploy_label` applied when set, to reach `qa.environment`; fix and re-run | Scenarios pass; state `qa.done` |
-| 7 | Review page | `/dotnet-workflow-kit:visual-review-doc`, built after QA so it reflects the final diff; do not post to the tracker yet | State `reviewDoc.artifactUrl` |
-| 8 | Publish and hand off | Once approved: post the QA report per `qa.evidence`, mark the PR ready, apply `qa.handoff_label` if not set, move the item to the tracker's QA-ready state; `qa.owner` self or none just marks it ready | State `reviewDoc.decision`, `handoff.done` |
+| 7 | Review page | `/dotnet-workflow-kit:visual-review`, built after QA so it reflects the final diff; do not post to the tracker yet | State `review.artifactUrl` |
+| 8 | Publish and hand off | Once approved: post the QA report per `qa.evidence`, mark the PR ready, apply `qa.handoff_label` if not set, move the item to the tracker's QA-ready state; `qa.owner` self or none just marks it ready | State `review.decision`, `handoff.done` |
 
 Bug-fixing for a mega-review finding or a QA failure is never its own row: the stage that found it stays not-done, with the finding or bug in its evidence column, and fixing it is the next action inside that stage.
 
@@ -70,7 +70,7 @@ Key by the ticket id when the branch carries one, else the sanitized branch name
     "draftPr": { "done": true, "url": "" },
     "resolveComments": { "done": true },
     "qa": { "done": false, "at": "", "note": "" },
-    "reviewDoc": { "done": false, "artifactUrl": "", "decision": "" },
+    "review": { "done": false, "artifactUrl": "", "decision": "" },
     "handoff": { "done": false }
   }
 }
@@ -127,7 +127,7 @@ When stages 0 through 7 are done, present everything in one message and stop:
 
 The review link goes in the checkpoint message itself as a plain URL; a link only inside a subagent's transcript does not count as delivered.
 
-Then wait. When the user says "decided" or invokes the pipeline again, read the decision with the Artifact tool: `read_db`, `db_op: "list"`, `collection: "review"`, url from `reviewDoc.artifactUrl`. The `decision` document carries `verdict` (`approve` or `changes`) and `notes`; `finding-<n>` documents carry `action` (`fix` or `accept`) per open finding. Approve continues to stage 8. Changes returns to stage 2 with the notes and the per-finding fix or accept choices, then rebuilds and republishes the review to the same URL before re-presenting only what changed. With `artifacts: false`, take the verdict in chat instead.
+Then wait. When the user says "decided" or invokes the pipeline again, read the decision with the Artifact tool: `read_db`, `db_op: "list"`, `collection: "review"`, url from `review.artifactUrl`. The `decision` document carries `verdict` (`approve` or `changes`) and `notes`; `finding-<n>` documents carry `action` (`fix` or `accept`) per open finding. Approve continues to stage 8. Changes returns to stage 2 with the notes and the per-finding fix or accept choices, then rebuilds and republishes the review to the same URL before re-presenting only what changed. With `artifacts: false`, take the verdict in chat instead.
 
 ## Drafting the PR (stage 4)
 

@@ -35,7 +35,7 @@ below in order and stops at the review page for a decision.
 
 1. **Start the ticket.** `start-ticket` creates a branch from `base_branch`
    using `branch_pattern`, assigns the ticket and moves it to active.
-2. **Plan page.** `visual-plan-doc` publishes a plan Artifact ordered from the
+2. **Plan page.** `visual-plan` publishes a plan Artifact ordered from the
    requirement outward through the architecture's layers, ending in an open-questions
    form. Answer the open questions directly on the page; each one is a title, context,
    and a set of recommended and alternative options. When you are done, tell the
@@ -48,7 +48,7 @@ below in order and stops at the review page for a decision.
 5. **Draft PR.** Opened against `base_branch` following `branch_pattern`.
 6. **QA.** Testing runs the way `qa.owner` and `qa.environment` describe; whatever
    evidence comes out of it feeds the review's QA report section.
-7. **Review page.** `visual-review-doc` publishes one Artifact that is both the
+7. **Review page.** `visual-review` publishes one Artifact that is both the
    code review and the QA report: verdict tiles, a plan-versus-delivered table, a
    diagram of the change, per-service change tables whose files link to their full
    diffs, a findings table, the QA report itself, a persistent rollout checklist, and
@@ -101,9 +101,9 @@ Notes that keep this safe:
 
 ## Skills
 
-### visual-plan-doc
+### visual-plan
 
-Triggers on "plan this", "visual plan", "plan `<ticket id>`", `/visual-plan-doc`, or
+Triggers on "plan this", "visual plan", "plan `<ticket id>`", `/visual-plan`, or
 the pipeline reaching the Plan stage. Reads the profile, the ticket through the
 tracker adapter, the codebase read-only, and the architecture, stack and testing
 adapters for section wording. Produces `plans/<id>-<slug>/plan.md` and `plan.html`,
@@ -111,10 +111,10 @@ published as a Claude Artifact (or left as local HTML when `artifacts` is false)
 with sections from Context through Open questions and an answerable open-questions
 form. **Shipped in v0.1.**
 
-### visual-review-doc
+### visual-review
 
 Triggers on "review this", "recap", "qa report", "write up the review",
-`/visual-review-doc`, or the pipeline reaching the Review stage. Reads the profile,
+`/visual-review`, or the pipeline reaching the Review stage. Reads the profile,
 the PR and diff through the scm adapter, the approved plan and its stored answers,
 mega-review findings from the session, and QA evidence gathered by the user or the
 session. Produces `review.md` and `review.html`: verdict tiles, plan versus delivered,
@@ -129,7 +129,7 @@ item), `tracker_project`, `base_branch`, `branch_pattern` and `user`, following
 `adapters/tracker/<tracker>.md` to fetch, assign and activate the item. Produces a
 branch named from `branch_pattern` off `base_branch`, the item assigned to `user` and
 moved to the tracker's active state, the session renamed to the id and slug, and a
-hand-off to `visual-plan-doc`. It does not write a pipeline state key itself; `next`
+hand-off to `visual-plan`. It does not write a pipeline state key itself; `next`
 records the `startTicket` stage when it drives this skill. **Shipped in v0.2.**
 
 ### qa-report
@@ -168,7 +168,7 @@ true); `optional.codex` adds a codex second-opinion reviewer. A reviewer whose s
 or plugin is missing is recorded as `skipped: <reason>` instead of failing the run.
 Produces a consolidated findings table, a cleanup summary, a verification result and
 a skipped list, and writes the pipeline state file's `megaReview` key as
-`{"done": true, "findings": [...], "skipped": [...]}`, which `visual-review-doc`
+`{"done": true, "findings": [...], "skipped": [...]}`, which `visual-review`
 reads instead of re-running a review. **Shipped in v0.3.**
 
 ### next
@@ -181,13 +181,13 @@ status` prints the table only. Reads the profile end to end: `tracker`, `scm`,
 `optional.*`. Produces the nine-stage pipeline run:
 
 0. Start ticket, via `start-ticket`.
-1. Plan, via `visual-plan-doc`.
+1. Plan, via `visual-plan`.
 2. Execute, via `pipeline.execute` or by implementing the plan directly.
 3. Review, via `mega-review`.
 4. Draft PR, against `base_branch` or a stacked parent.
 5. Resolve comments, via `pipeline.resolve_comments` or the scm adapter.
 6. QA, via `pipeline.qa` or the plan's Specs run manually.
-7. Review page, via `visual-review-doc`.
+7. Review page, via `visual-review`.
 8. Publish and hand off, posting the QA report and moving the item to the tracker's
    QA-ready state.
 
@@ -290,9 +290,9 @@ claude-dotnet-workflow-kit/
 ├── commands/         # setup.md, the /dotnet-workflow-kit:setup command
 ├── docs/             # this reference documentation
 ├── scripts/          # profile.py, setup.py
-├── skills/           # start-ticket, visual-plan-doc, mega-review (see
+├── skills/           # start-ticket, visual-plan, mega-review (see
 │                     # skills/mega-review/reviewers/), next, qa-report, qa-notes,
-│                     # visual-review-doc
+│                     # visual-review
 └── tests/            # pytest fixtures and skill tests
 ```
 

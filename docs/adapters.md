@@ -3,7 +3,7 @@
 An adapter is a markdown file that tells a skill how to do something in terms of the
 tool the team actually uses. Skills never branch on a profile value themselves; they
 resolve the profile, then read the adapter file the value points to and follow it.
-This keeps `visual-plan-doc` and `visual-review-doc` identical across a GitHub team on
+This keeps `visual-plan` and `visual-review` identical across a GitHub team on
 Azure Boards and a team that lives entirely in GitHub Issues.
 
 ## The pattern
@@ -35,7 +35,7 @@ touches.
 
 Values: `azure-boards`, `github-issues`, `jira`, `none`.
 
-Read by both document skills to fetch a ticket, and by `visual-review-doc` to post the
+Read by both document skills to fetch a ticket, and by `visual-review` to post the
 QA report on approve. Each file has these headings:
 
 - **Fetch a ticket** - the command or API call that returns a ticket's title,
@@ -55,7 +55,7 @@ the ticket, and `qa.evidence` cannot be `work-item` when `tracker` is `none`.
 
 Values: `github`, `azure-repos`.
 
-Read by `visual-review-doc` to find the PR and by `start-ticket` to open one. Headings:
+Read by `visual-review` to find the PR and by `start-ticket` to open one. Headings:
 
 - **Find the PR and base** - the command that returns the PR's base branch, checks and
   merge state, including the stacked-PR case where the real base is not the default
@@ -74,7 +74,7 @@ Values: `clean`, `vertical`, `ddd-clean`, `modular-monolith`.
 
 Read by both document skills for section and slice naming. Headings:
 
-- **Plan sections** - the section list and word caps `visual-plan-doc` uses beyond
+- **Plan sections** - the section list and word caps `visual-plan` uses beyond
   the shared Context, Requirement, Specs, Tests, Decisions, Risks and rollout, and
   Open questions; for `clean` these are Domain, Application, Infrastructure, API, for
   `vertical` they are Slice, Persistence, Integration, Endpoint.
@@ -93,7 +93,7 @@ boundaries or module isolation, without overloading the `clean` file.
 
 Values: `qa-team`, `self`, `none`.
 
-Read by `visual-review-doc` to write the QA report and route the hand-off. Headings:
+Read by `visual-review` to write the QA report and route the hand-off. Headings:
 
 - **Who signs off** - who is expected to run QA and who has authority to approve.
 - **What the QA report must contain** - the scenario format, evidence expectations,

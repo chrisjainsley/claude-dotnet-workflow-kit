@@ -57,7 +57,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It dec
 9. **Rename the session** to the id and slug (for example `AB#1234 - fix-timeout-retry`,
    or just the slug with no tracker) using whatever session-rename mechanism the current
    surface exposes. If none is available, print the intended name instead of failing.
-10. **Hand off to `/dotnet-workflow-kit:visual-plan-doc`.** Do NOT enter Claude's own
+10. **Hand off to `/dotnet-workflow-kit:visual-plan`.** Do NOT enter Claude's own
     plan mode. Planning happens on the published plan page, not behind a plan-mode
     prompt. Pass along the item's title, description and any linked context gathered in
     step 2 so the plan skill does not have to re-fetch it.
