@@ -46,6 +46,9 @@ QUESTIONS = [
     ("stack.messaging", "Messaging", ENUMS["stack.messaging"]),
     ("stack.errors", "Error handling", ENUMS["stack.errors"]),
     ("stack.local_run", "How the system runs locally", ENUMS["stack.local_run"]),
+    ("pipeline.execute", "Command the pipeline runs for the Execute stage (blank: implement the plan by hand)", None),
+    ("pipeline.resolve_comments", "Command for the Resolve comments stage (blank: built-in scm adapter steps)", None),
+    ("pipeline.qa", "Command for the QA stage (blank: run the plan's Specs manually)", None),
     ("reviewers", "Extra mega-review reviewers, comma separated (" + ", ".join(OPTIONAL_REVIEWERS) + ")", None),
     ("artifacts", "Is the Claude Artifact tool available (yes/no)", None),
 ]

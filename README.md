@@ -30,35 +30,32 @@ instead.
 
 ## The workflow
 
-The kit walks one ticket through the same stages every time. Stages are grouped by
-which release they ship in: v0.1 has the two document skills and setup, v0.2 adds the
-ticket and QA-writing skills, v0.3 adds the reviewer sweep and the pipeline that drives
-all of it automatically. Do not try `/next` on v0.1: it does not exist yet, and the
-stages below have to be run one at a time by hand.
+The kit walks one ticket through the same stages every time. `/next` runs the stages
+below in order and stops at the review page for a decision.
 
-1. **Start the ticket** (v0.2). `start-ticket` creates a branch from `base_branch`
+1. **Start the ticket.** `start-ticket` creates a branch from `base_branch`
    using `branch_pattern`, assigns the ticket and moves it to active.
-2. **Plan page** (v0.1). `visual-plan-doc` publishes a plan Artifact ordered from the
+2. **Plan page.** `visual-plan-doc` publishes a plan Artifact ordered from the
    requirement outward through the architecture's layers, ending in an open-questions
    form. Answer the open questions directly on the page; each one is a title, context,
    and a set of recommended and alternative options. When you are done, tell the
    session "answered" and it reads the stored choices back and folds them into the plan
    as settled decisions.
 3. **Execute.** Implementation proceeds against the approved plan.
-4. **Mega-review** (v0.3). Runs the profile's reviewers, always `bug-hunt` and
+4. **Mega-review.** Runs the profile's reviewers, always `bug-hunt` and
    `conventions`, plus any optional ones the profile turns on, across the branch
    before a PR goes up.
 5. **Draft PR.** Opened against `base_branch` following `branch_pattern`.
 6. **QA.** Testing runs the way `qa.owner` and `qa.environment` describe; whatever
    evidence comes out of it feeds the review's QA report section.
-7. **Review page** (v0.1). `visual-review-doc` publishes one Artifact that is both the
+7. **Review page.** `visual-review-doc` publishes one Artifact that is both the
    code review and the QA report: verdict tiles, a plan-versus-delivered table, a
    diagram of the change, per-service change tables whose files link to their full
    diffs, a findings table, the QA report itself, a persistent rollout checklist, and
    an approve or request-changes decision form.
 8. **Hand-off.** On approve, the QA report section is posted wherever `qa.evidence`
-   says (a work item, a PR comment, or nowhere at all), and the pipeline (v0.3)
-   continues past the checkpoint.
+   says (a work item, a PR comment, or nowhere at all), and the pipeline continues
+   past the checkpoint.
 
 ## Skills
 
@@ -70,7 +67,7 @@ tracker adapter, the codebase read-only, and the architecture, stack and testing
 adapters for section wording. Produces `plans/<id>-<slug>/plan.md` and `plan.html`,
 published as a Claude Artifact (or left as local HTML when `artifacts` is false),
 with sections from Context through Open questions and an answerable open-questions
-form. **v0.1, shipped.**
+form. **Shipped in v0.1.**
 
 ### visual-review-doc
 
@@ -80,43 +77,82 @@ the PR and diff through the scm adapter, the approved plan and its stored answer
 mega-review findings from the session, and QA evidence gathered by the user or the
 session. Produces `review.md` and `review.html`: verdict tiles, plan versus delivered,
 a change diagram, per-service change tables linking every file to its diff, findings,
-a QA report, a rollout checklist and a decision form. **v0.1, shipped.**
+a QA report, a rollout checklist and a decision form. **Shipped in v0.1.**
 
 ### start-ticket
 
-Triggers on "start ticket" or `/start-ticket <id>`. Reads the profile's `tracker`,
-`scm` and `branch_pattern` fields. Produces a branch named from `branch_pattern`, the
-ticket assigned and moved to active, and entry into the Plan stage. **v0.2, planned.**
+Triggers on "start ticket", "start work on `<id>`", "pick up `<id>`", or
+`/start-ticket`. Reads the profile's `tracker` (which adapter parses and fetches the
+item), `tracker_project`, `base_branch`, `branch_pattern` and `user`, following
+`adapters/tracker/<tracker>.md` to fetch, assign and activate the item. Produces a
+branch named from `branch_pattern` off `base_branch`, the item assigned to `user` and
+moved to the tracker's active state, the session renamed to the id and slug, and a
+hand-off to `visual-plan-doc`. It does not write a pipeline state key itself; `next`
+records the `startTicket` stage when it drives this skill. **Shipped in v0.2.**
 
 ### qa-report
 
-Triggers on "qa report", "write up the testing" or "document what we tested" when
-used outside the review-page flow. Reads acceptance runs and manual verification from
-the session. Produces a standalone BDD-format QA report added to the work item.
-**v0.2, planned.**
+Triggers on "qa report", "write up the testing", or "document what we tested" when
+used outside the review-page flow. Reads the profile's `qa.evidence` (work item, PR
+comment, or none), `tracker` or `scm` for the matching adapter, `testing.acceptance`
+for naming the automated runner, and `artifacts` for whether to publish a page.
+Produces a BDD-format report: one Given/When/Then card per behaviour tagged
+Acceptance test or Manual test with Pass, Fail or Blocked and evidence, a summary
+table, and a Not covered list, posted to the work item or PR comment per
+`qa.evidence` after the user approves it. It has no scripts or templates of its own
+and writes no pipeline state key. **Shipped in v0.2.**
 
 ### qa-notes
 
-Triggers on "write test notes" or "qa notes". Reads the session's manual test
-activity. Produces a lighter QA note on the work item than a full QA report.
-**v0.2, planned.**
+Triggers on "qa notes", "test notes", "write test notes", or "notes for QA". Reads
+the approved plan's Specs section at `plans/<id>-<slug>/plan.md` when one exists,
+else `git diff <base>...HEAD`, plus the profile's `qa.owner`, `qa.evidence`,
+`tracker` and `scm` fields for who the notes are for and where they go. Produces
+notes covering what changed, how to test it per persona, test data and accounts,
+edge cases, out of scope, and environment or feature-flag setup, posted to the work
+item or PR comment when `qa.owner` is `qa-team`, printed otherwise. It writes no
+pipeline state key. **Shipped in v0.2.**
 
 ### mega-review
 
-Triggers on "mega review", "full review", "review everything" or "pre-PR check".
-Reads the branch diff, CLAUDE.md conventions, and the profile's reviewer list
-(`bug-hunt` and `conventions` always, plus any optional ones turned on). Produces a
-consolidated findings list that feeds the review page's Findings section.
-**v0.3, planned.**
+Triggers on "mega review", "full review", "review everything", or "pre-PR check".
+Reads the profile's `reviewers` list, `optional.dotnet-claude-kit`, `optional.codex`,
+`architecture` (for `adapters/architecture/<value>.md`), `scm`, `base_branch` and
+`testing.*`. Two reviewers are always on, `bug-hunt` and `conventions`; `reviewers`
+can add `kit` (`dotnet-claude-kit:code-review` and `80-20-review` in Phase 1,
+`de-sloppify` in Phase 2, `verification-loop` in Phase 3), `security-scan`,
+`convention-learner`, or `code-review-workflow` (only when `optional.roslyn-mcp` is
+true); `optional.codex` adds a codex second-opinion reviewer. A reviewer whose skill
+or plugin is missing is recorded as `skipped: <reason>` instead of failing the run.
+Produces a consolidated findings table, a cleanup summary, a verification result and
+a skipped list, and writes the pipeline state file's `megaReview` key as
+`{"done": true, "findings": [...], "skipped": [...]}`, which `visual-review-doc`
+reads instead of re-running a review. **Shipped in v0.3.**
 
 ### next
 
-Triggers on "next", "what's next", "keep going", "run the pipeline", or setting it as
-the session goal; `/next status` prints a status table only. Reads the profile and the
-branch or work item's current stage. Produces automatic progression through
-start-ticket, plan, execute, mega-review, draft PR and QA, stopping only at the review
-checkpoint or on a blocker, then posts the QA report and hands off on approval.
-**v0.3, planned.**
+Triggers on "next", "what's next", "keep going", or "run the pipeline"; `/next
+status` prints the table only. Reads the profile end to end: `tracker`, `scm`,
+`base_branch`, `branch_pattern`, `qa.owner`, `qa.evidence`, `qa.handoff_label`,
+`qa.deploy_label`, `qa.environment`, `testing.tdd`, `pipeline.execute`,
+`pipeline.resolve_comments`, `pipeline.qa`, `artifacts`, `reviewers` and
+`optional.*`. Produces the nine-stage pipeline run:
+
+0. Start ticket, via `start-ticket`.
+1. Plan, via `visual-plan-doc`.
+2. Execute, via `pipeline.execute` or by implementing the plan directly.
+3. Review, via `mega-review`.
+4. Draft PR, against `base_branch` or a stacked parent.
+5. Resolve comments, via `pipeline.resolve_comments` or the scm adapter.
+6. QA, via `pipeline.qa` or the plan's Specs run manually.
+7. Review page, via `visual-review-doc`.
+8. Publish and hand off, posting the QA report and moving the item to the tracker's
+   QA-ready state.
+
+It writes and reads stage completion at
+`~/.claude/dotnet-workflow-kit/pipeline/<slug>.json`, and at the checkpoint after
+stage 7 it reads the approve-or-changes decision from the review page rather than
+asking in chat. **Shipped in v0.3.**
 
 ## Profile reference
 
@@ -147,6 +183,9 @@ under their parent object (for example `testing.tdd` is `{"testing": {"tdd": ...
 | `stack.messaging` | `masstransit`, `wolverine`, `service-bus`, `none` | `none` | The messaging technology named in Infrastructure and Contracts. |
 | `stack.errors` | `result`, `exceptions` | `exceptions` | The error handling convention named in Application and API sections. |
 | `stack.local_run` | `aspire`, `docker`, `plain` | `plain` | How the QA stage describes starting the system locally. |
+| `pipeline.execute` | any command or slash command, or blank | blank | What `/next` runs at the Execute stage. Blank means it implements the plan directly, tests first when `testing.tdd` is `strict`. |
+| `pipeline.resolve_comments` | any command, or blank | blank | What `/next` runs to resolve PR review threads. Blank means the scm adapter's steps. |
+| `pipeline.qa` | any command, or blank | blank | What `/next` runs at the QA stage. Blank means the plan's Specs are run by hand per the QA adapter. |
 | `reviewers` | `bug-hunt`, `conventions` (always on), plus `kit`, `security-scan`, `convention-learner`, `code-review-workflow` | `[bug-hunt, conventions]` | Which reviewers mega-review runs beyond the two built-ins. |
 | `optional` | object with `dotnet-claude-kit`, `codex`, `roslyn-mcp`, each `true`/`false` | all `false` | Whether the companion kit, Codex and a Roslyn MCP server were detected or installed. |
 | `schema` | integer | `1` | Internal profile version; setup fills in defaults for anything an older file lacks. |
@@ -209,7 +248,9 @@ claude-dotnet-workflow-kit/
 ├── commands/         # setup.md, the /dotnet-workflow-kit:setup command
 ├── docs/             # this reference documentation
 ├── scripts/          # profile.py, setup.py
-├── skills/           # visual-plan-doc, visual-review-doc (v0.1); more from v0.2
+├── skills/           # start-ticket, visual-plan-doc, mega-review (see
+│                     # skills/mega-review/reviewers/), next, qa-report, qa-notes,
+│                     # visual-review-doc
 └── tests/            # pytest fixtures and skill tests
 ```
 

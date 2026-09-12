@@ -52,6 +52,7 @@ DEFAULTS = {
     "artifacts": True,
     "stack": {"data": "ef-core", "api": "minimal-api", "messaging": "none", "errors": "exceptions", "local_run": "plain"},
     "reviewers": list(BUILT_IN_REVIEWERS),
+    "pipeline": {"execute": "", "resolve_comments": "", "qa": ""},
     "optional": {"dotnet-claude-kit": False, "codex": False, "roslyn-mcp": False},
 }
 
