@@ -134,26 +134,25 @@ records the `startTicket` stage when it drives this skill. **Shipped in v0.2.**
 
 ### qa-report
 
-Triggers on "qa report", "write up the testing", or "document what we tested" when
-used outside the review-page flow. Reads the profile's `qa.evidence` (work item, PR
-comment, or none), `tracker` or `scm` for the matching adapter, `testing.acceptance`
-for naming the automated runner, and `artifacts` for whether to publish a page.
-Produces a BDD-format report: one Given/When/Then card per behaviour tagged
-Acceptance test or Manual test with Pass, Fail or Blocked and evidence, a summary
-table, and a Not covered list, posted to the work item or PR comment per
-`qa.evidence` after the user approves it. It has no scripts or templates of its own
-and writes no pipeline state key. **Shipped in v0.2.**
+Has two modes. Default mode triggers on "qa report", "write up the testing", or
+"document what we tested" when used outside the review-page flow. Reads the profile's
+`qa.evidence` (work item, PR comment, or none), `tracker` or `scm` for the matching
+adapter, `testing.acceptance` for naming the automated runner, and `artifacts` for
+whether to publish a page. Produces a BDD-format report: one Given/When/Then card per
+behaviour tagged Acceptance test or Manual test with Pass, Fail or Blocked and
+evidence, a summary table, and a Not covered list, posted to the work item or PR
+comment per `qa.evidence` after the user approves it.
 
-### qa-notes
+Notes mode triggers on "qa notes", "test notes", "notes for QA", or the argument
+`notes`. Reads the approved plan's Specs section at `plans/<id>-<slug>/plan.md` when
+one exists, else `git diff <base>...HEAD`, plus the profile's `qa.owner`,
+`qa.evidence`, `tracker` and `scm` fields for who the notes are for and where they go.
+Produces notes covering what changed, how to test it per persona, test data and
+accounts, edge cases, out of scope, and environment or feature-flag setup, posted to
+the work item or PR comment when `qa.owner` is `qa-team`, printed otherwise.
 
-Triggers on "qa notes", "test notes", "write test notes", or "notes for QA". Reads
-the approved plan's Specs section at `plans/<id>-<slug>/plan.md` when one exists,
-else `git diff <base>...HEAD`, plus the profile's `qa.owner`, `qa.evidence`,
-`tracker` and `scm` fields for who the notes are for and where they go. Produces
-notes covering what changed, how to test it per persona, test data and accounts,
-edge cases, out of scope, and environment or feature-flag setup, posted to the work
-item or PR comment when `qa.owner` is `qa-team`, printed otherwise. It writes no
-pipeline state key. **Shipped in v0.2.**
+Both modes post through the same adapter step; neither has scripts or templates of its
+own, and neither writes a pipeline state key. **Shipped in v0.2.**
 
 ### mega-review
 
@@ -214,11 +213,17 @@ under their parent object (for example `testing.tdd` is `{"testing": {"tdd": ...
 | `qa.handoff_label` | free text | `""` | The PR label that hands a PR to QA, named in Rollout. |
 | `qa.deploy_label` | free text | `""` | The PR label that deploys to the QA environment, named in Rollout. |
 | `qa.environment` | free text | `"local"` | The environment named throughout the QA report. |
-| `tracker` | `azure-boards`, `github-issues`, `jira`, `none` | `none` | How the ticket is fetched; loads `adapters/tracker/<value>.md`. |
+| `tracker` | `azure-boards`, `github-issues`, `jira`, `none` | `none` | How the ticket is fetched; loads `adapters/tracker/<value>.md`, or `adapters/tracker/<value>/README.md` when the adapter is a folder. |
 | `tracker_project` | free text | `""` | The project or org identifier passed to tracker commands. |
+| `tracker_states.active` | free text | `""` | The tracker state a ticket moves to when work starts. |
+| `tracker_states.qa_ready` | free text | `""` | The tracker state a ticket moves to for hand-off to QA. |
 | `scm` | `github`, `azure-repos` | `github` | How the PR, base and diff are found; loads `adapters/scm/<value>.md`. |
 | `base_branch` | free text | `"main"` | The branch PRs target and diffs compare against. |
 | `branch_pattern` | free text, must contain `{slug}` | `"{kind}/{id}-{slug}"` | The branch naming template `start-ticket` uses. |
+| `branch_kinds.feature` | any short prefix | `feat` | The `{kind}` value in `branch_pattern` for features. |
+| `branch_kinds.bug` | any short prefix | `bug` | The `{kind}` value in `branch_pattern` for bugs. |
+| `tracker_states.active` | a state name, or blank | blank | The tracker state start-ticket moves an item to. Blank keeps the adapter's default. |
+| `tracker_states.qa_ready` | a state or column name, or blank | blank | The state next moves an item to at hand-off. Blank keeps the adapter's default. |
 | `artifacts` | `true`, `false` | `true` | Whether pages publish as Claude Artifacts or open as local HTML with answers taken in chat. |
 | `stack.data` | `ef-core`, `dapper`, `cosmos`, `other` | `ef-core` | The data access named in Infrastructure and Contracts sections. |
 | `stack.api` | `minimal-api`, `controllers`, `graphql`, `grpc` | `minimal-api` | The API style named in the API and Contracts sections. |
@@ -286,13 +291,17 @@ until fixtures cover it.
 ```
 claude-dotnet-workflow-kit/
 ├── .claude-plugin/   # plugin.json and marketplace.json
-├── adapters/         # tracker, scm, architecture, qa, stack value files
+├── assets/           # page.html, the shared plan and review page shell
+├── adapters/         # tracker, scm, architecture, qa value files;
+│                     # stack/<field>.md holds every value as a section;
+│                     # tracker/azure-boards/ is a folder (README.md + fetch_context.py)
 ├── commands/         # setup.md, the /dotnet-workflow-kit:setup command
 ├── docs/             # this reference documentation
-├── scripts/          # profile.py, setup.py
+├── scripts/          # profile.py, setup.py, render.py and check.py (shared by the
+│                     # visual-plan and visual-review skills)
 ├── skills/           # start-ticket, visual-plan, mega-review (see
-│                     # skills/mega-review/reviewers/), next, qa-report, qa-notes,
-│                     # visual-review
+│                     # skills/mega-review/reviewers/), next, qa-report (report and
+│                     # notes modes), visual-review
 └── tests/            # pytest fixtures and skill tests
 ```
 

@@ -41,6 +41,10 @@ QUESTIONS = [
     ("scm", "Source control", ENUMS["scm"]),
     ("base_branch", "Base branch PRs target", None),
     ("branch_pattern", "Branch naming pattern, must contain {slug}", None),
+    ("branch_kinds.feature", "Branch kind prefix for features", None),
+    ("branch_kinds.bug", "Branch kind prefix for bugs", None),
+    ("tracker_states.active", "Tracker state name for work in progress (blank: adapter default)", None),
+    ("tracker_states.qa_ready", "Tracker state or column name for QA hand-off (blank: adapter default)", None),
     ("stack.data", "Data access", ENUMS["stack.data"]),
     ("stack.api", "API style", ENUMS["stack.api"]),
     ("stack.messaging", "Messaging", ENUMS["stack.messaging"]),
@@ -238,6 +242,9 @@ def main():
     existing.parent.mkdir(parents=True, exist_ok=True)
     existing.write_text(body, encoding="utf-8", newline="\n")
     print(f"wrote {existing}")
+    import doctor
+    print()
+    doctor.main(["--profile", str(existing), "--skip-fixtures"])
     missing = [s for s in needed_skills(profile) if not found.get(KIT_PLUGIN)]
     if missing:
         print(f"without {KIT_PLUGIN} these are reported as skipped: {', '.join(missing)}")

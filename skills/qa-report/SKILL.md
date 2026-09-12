@@ -1,13 +1,15 @@
 ---
 name: qa-report
-description: Generate a BDD-format QA report of what was tested this session, covering acceptance runs against a real environment and manual checks and never unit or integration suites, then post it where the profile's qa.evidence says. Use whenever the user says "qa report", "write up the testing", "document what we tested", or wants a test summary after running acceptance tests or manual verification.
+description: Generate a BDD-format QA report of what was tested this session, covering acceptance runs against a real environment and manual checks and never unit or integration suites, then post it where the profile's qa.evidence says. Use whenever the user says "qa report", "write up the testing", "document what we tested", or wants a test summary after running acceptance tests or manual verification. Also produces pre-hand-off QA notes, testing guidance written before anyone tests, covering what changed, how to test it per persona, test data and accounts, edge cases, out of scope, and environment or flag setup. Use notes mode whenever the user says "qa notes", "test notes", "notes for QA", or passes the literal argument "notes".
 ---
 
 # QA report
 
-This report says what was actually tested and what happened, not what should be tested
-next. It exists so a QA owner or a reviewer can trust a Pass without re-running it
-themselves, and so a Fail carries enough to decide whether it blocks anything.
+This skill has two modes. Default mode writes a report of what was actually tested and
+what happened, not what should be tested next; it exists so a QA owner or a reviewer
+can trust a Pass without re-running it themselves, and so a Fail carries enough to
+decide whether it blocks anything. Notes mode writes the opposite direction: testing
+guidance for someone who has not seen the change yet, written before testing happens.
 
 `SKILL_DIR` below means the base directory shown at the top of this skill. The plugin
 root is two levels above it; adapters live at `<plugin root>/adapters/`.
@@ -16,15 +18,19 @@ root is two levels above it; adapters live at `<plugin root>/adapters/`.
 
 Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It decides:
 
-- `qa.evidence`: where the report goes after approval: `work-item` (the tracker
-  adapter), `pr-comment` (the scm adapter), or `none` (print only, nowhere to send it).
+- `qa.evidence`: where the report or the notes go after approval: `work-item` (the
+  tracker adapter), `pr-comment` (the scm adapter), or `none` (print only, nowhere to
+  send it).
+- `qa.owner`: in notes mode, who the notes are for. `qa-team` posts them for someone
+  else to act on; `self` and `none` mean the author is the one testing, so the notes
+  are printed rather than handed off.
 - `tracker` / `scm`: which adapter's posting steps to follow.
   Read `adapters/tracker/<tracker>.md` or `adapters/scm/<scm>.md`.
 - `testing.acceptance`: the tool that produced any automated run (Reqnroll, SpecFlow,
   or none), named in the report's evidence lines where it matters.
 - `artifacts`: whether to publish a rendered page at all.
 
-## Workflow
+## Default mode: report
 
 1. **Check for an existing review page first.** If this session already produced a
    review artifact (the kit's review skill) that contains a QA section, copy that
@@ -77,12 +83,51 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It dec
    not add findings or soften an outcome that the markdown does not have.
 5. **Ask for approval.** Show the report text (and the artifact link if one exists) and
    ask whether to post it. Do not post before a clear yes.
-6. **Post per `qa.evidence`.** `work-item`: follow the tracker adapter's "Post the QA
-   report" section (for the Azure Boards form this is a markdown comment via the REST
-   API, never `--discussion`, since that stores plain text as escaped HTML). `pr-comment`:
-   post through the scm adapter as a plain PR comment (for the GitHub form,
-   `gh pr comment <number> --body-file report.md`). `none`: print only, nothing to send.
-   **Never change the work item's or PR's state from this report.**
+6. **Post per `qa.evidence`** the way the shared posting step below describes.
+
+## Notes mode: pre-hand-off testing notes
+
+Triggered by "qa notes", "test notes", "notes for QA", or the literal argument
+`notes`. These notes tell someone who did not write the code how to test it: what
+changed, what to click or call in what order, which accounts and data to use, and
+where the edges of the change are, written before testing happens.
+
+1. **Find the source material.** If an approved plan exists at
+   `plans/<id>-<slug>/plan.md` (the kit's plan skill), derive the notes from its Specs
+   section: the scenarios there are exactly the behaviours to test. With no plan,
+   derive the notes from the diff instead, using `git diff <base>...HEAD`, and read the
+   changed files well enough to describe user-facing behaviour, not implementation.
+2. **Write the notes** covering:
+   - **What changed**: a short bullet list in product terms, one line per user-facing
+     behaviour. No class names, no file paths, no architecture.
+   - **How to test it**: numbered steps per persona (for example "as an admin user",
+     "as a freemium member"), each step an action and an expected result.
+   - **Test data and accounts**: the concrete accounts, plans, or records needed to
+     reach each scenario, named specifically enough to reuse them without guessing.
+   - **Edge cases**: the boundary conditions the change introduces or touches (empty
+     states, limits, concurrent actions, already-in-progress flows).
+   - **Out of scope**: what looks related but was not changed, so QA does not spend
+     time re-verifying it or filing it as a gap.
+   - **Environment and feature flags**: which environment to test against and any flag
+     that must be on (or off) for the change to be reachable.
+3. **Ask before posting.** Show the notes in full and ask whether to add them. Do not
+   post before a clear yes.
+4. **Post per `qa.evidence`** the way the shared posting step below describes, in place
+   of the report text. With `qa.owner: self` or `qa.owner: none`, there is no one to
+   hand off to: print the notes and say plainly that they were not posted anywhere,
+   since the author is the one testing.
+5. **Confirm completion** with a link to wherever the notes landed, or, if nothing was
+   posted, a one-line note of where the notes are (printed above, or saved to a file the
+   user named).
+
+## Posting (both modes)
+
+Post per `qa.evidence`. `work-item`: follow the tracker adapter's "Post the QA report"
+section (for the Azure Boards form this is a markdown comment via the REST API, never
+`--discussion`, since that stores plain text as escaped HTML). `pr-comment`: post
+through the scm adapter as a plain PR comment (for the GitHub form, `gh pr comment
+<number> --body-file report.md`). `none`: print only, nothing to send. **Never change
+the work item's or PR's state from this skill, in either mode.**
 
 ## Traps
 
@@ -96,6 +141,13 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It dec
   it looks like coverage that never happened.
 - One scenario per behaviour, not per underlying check: a forty-test acceptance suite is
   one entry with the pass/fail count as evidence.
+- Notes mode is written for QA, not for developers: no class names, no mention of
+  aggregates or grains, no architecture. If a sentence needs an implementation detail
+  to make sense, rephrase it around the user-facing behaviour instead.
+- In notes mode, a plan's Specs section is the source of truth when one exists; do not
+  re-derive scenarios from the diff in that case, since the two can drift apart.
+- In notes mode, do not invent edge cases the change does not actually touch; "Out of
+  scope" exists so QA does not have to guess which ones matter.
 
 ## Files
 

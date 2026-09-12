@@ -49,6 +49,8 @@ DEFAULTS = {
     "scm": "github",
     "base_branch": "main",
     "branch_pattern": "{kind}/{id}-{slug}",
+    "branch_kinds": {"feature": "feat", "bug": "bug"},
+    "tracker_states": {"active": "", "qa_ready": ""},
     "artifacts": True,
     "stack": {"data": "ef-core", "api": "minimal-api", "messaging": "none", "errors": "exceptions", "local_run": "plain"},
     "reviewers": list(BUILT_IN_REVIEWERS),
@@ -168,6 +170,9 @@ def validate(profile):
         problems.append("artifacts must be true or false")
     if "{slug}" not in profile.get("branch_pattern", ""):
         problems.append("branch_pattern must contain {slug}")
+    kinds = profile.get("branch_kinds", {})
+    if not isinstance(kinds, dict) or not kinds.get("feature") or not kinds.get("bug"):
+        problems.append("branch_kinds needs non-empty feature and bug values")
     return problems
 
 

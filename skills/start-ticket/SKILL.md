@@ -15,8 +15,10 @@ root is two levels above it; adapters live at `<plugin root>/adapters/`.
 
 Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It decides:
 
-- `tracker`: how to parse the id and fetch the item. Read `adapters/tracker/<value>.md`.
-  With `tracker: none` there is no item, only the argument itself.
+- `tracker`: how to parse the id and fetch the item. Read `adapters/tracker/<value>.md`,
+  or `adapters/tracker/<value>/README.md` when the adapter is a folder (azure-boards
+  ships as a folder alongside its context-fetching script). With `tracker: none` there
+  is no item, only the argument itself.
 - `tracker_project`: passed to the tracker adapter's calls where it takes one.
 - `base_branch`: what the new branch forks from.
 - `branch_pattern`: the branch name template, with `{kind}`, `{id}` and `{slug}` tokens.
@@ -30,7 +32,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It dec
    `<KEY>-<number>`. With `tracker: none` the argument is not an id at all: it is a short
    slug, already the ticket, and there is nothing to fetch. If the tracker expects an id
    and none is found in the argument or the current branch name, ask for it.
-2. **Fetch the item** the way `adapters/tracker/<tracker>.md`'s "Fetch a ticket" section
+2. **Fetch the item** the way the tracker adapter's "Fetch a ticket" section
    says: title, description or repro steps, and the type (bug or not). Follow any
    parent or child link the same way when the item references them; use that context
    later for planning, not here.
@@ -41,15 +43,15 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It dec
    strip anything that is not alphanumeric or a hyphen, keep the first few meaningful
    words up to about 50 characters, and trim trailing hyphens. With `tracker: none` the
    argument is already the slug; kebab-case it the same way instead of inventing a title.
-5. **Choose the kind.** `bug` when the item's type or label marks it a bug, `feat`
-   otherwise. With `tracker: none`, default to `feat` unless the user's own description
+5. **Choose the kind.** The profile's `branch_kinds.bug` when the item's type or label
+   marks it a bug, `branch_kinds.feature` otherwise. With `tracker: none`, default to `feat` unless the user's own description
    names it a bug fix.
 6. **Create the branch in place**, no worktree. Render `branch_pattern` with `kind`,
    `id` (omit or blank where the tracker has none) and `slug`, then
    `git checkout -b <branch> --no-track origin/<base_branch>` and push with tracking so
    it exists on the remote from the start.
 7. **Assign and activate** via the same tracker adapter's "Start work" section: assign
-   to `user`, move to the team's active state. Both calls are safe to repeat. Skip this
+   to `user`, move to `tracker_states.active` when set, else the adapter's default active state. Both calls are safe to repeat. Skip this
    step entirely with `tracker: none`; there is no item to update.
 8. **Print a short summary:** item id and title (or the slug, with no tracker), the
    branch name, and whether the assignment and state change happened or were already

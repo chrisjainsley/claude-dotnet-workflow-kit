@@ -15,25 +15,37 @@ pytestmark = pytest.mark.skipif(
 )
 
 BOLD_ITEM_RE = re.compile(r"^-\s+\*\*(.+?)\*\*", re.M)
-LOCAL_RUN_MARKER = "is not about naming or contracts"
+
+NON_STACK_CONCERNS = ("architecture", "tracker", "scm", "qa.owner")
 
 
 def concern_dir(dotted):
     if dotted == "qa.owner":
         return ADAPTERS_DIR / "qa"
-    if dotted.startswith("stack."):
-        return ADAPTERS_DIR / "stack" / dotted.split(".", 1)[1]
     return ADAPTERS_DIR / dotted
 
 
-def adapter_cases():
+def adapter_file_or_readme(dotted, value):
+    """A non-stack adapter is either <concern>/<value>.md or <concern>/<value>/README.md."""
+    base = concern_dir(dotted)
+    plain = base / f"{value}.md"
+    if plain.exists():
+        return plain
+    return base / value / "README.md"
+
+
+def non_stack_cases():
     cases = []
     for dotted, values in profile_mod.ENUMS.items():
-        if dotted not in ("architecture", "tracker", "scm", "qa.owner") and not dotted.startswith("stack."):
+        if dotted not in NON_STACK_CONCERNS:
             continue
         for value in values:
             cases.append((dotted, value))
     return cases
+
+
+def stack_fields():
+    return [dotted.split(".", 1)[1] for dotted in profile_mod.ENUMS if dotted.startswith("stack.")]
 
 
 def parse_concern_blocks():
@@ -59,20 +71,12 @@ def required_headings(dotted, blocks):
         return BOLD_ITEM_RE.findall(blocks.get(dotted, ""))
     if dotted == "qa.owner":
         return BOLD_ITEM_RE.findall(blocks.get("qa", ""))
-    if dotted.startswith("stack."):
-        field = dotted.split(".", 1)[1]
-        block = blocks.get("stack", "")
-        idx = block.find(LOCAL_RUN_MARKER)
-        if idx == -1:
-            return BOLD_ITEM_RE.findall(block)
-        shared, local_run_part = block[:idx], block[idx:]
-        return BOLD_ITEM_RE.findall(local_run_part if field == "local_run" else shared)
     return None
 
 
-@pytest.mark.parametrize("dotted,value", adapter_cases())
+@pytest.mark.parametrize("dotted,value", non_stack_cases())
 def test_given_enum_value_then_adapter_file_exists_and_is_complete(dotted, value):
-    path = concern_dir(dotted) / f"{value}.md"
+    path = adapter_file_or_readme(dotted, value)
     assert path.exists(), f"missing adapter file for {dotted}={value}: {path}"
     text = path.read_text(encoding="utf-8")
 
@@ -84,3 +88,25 @@ def test_given_enum_value_then_adapter_file_exists_and_is_complete(dotted, value
         assert missing == [], f"{path} is missing required headings: {missing}"
     else:
         assert text.strip(), f"{path} is empty"
+
+
+@pytest.mark.parametrize("field", stack_fields())
+def test_given_stack_field_then_one_file_holds_every_value_as_a_section(field):
+    path = ADAPTERS_DIR / "stack" / f"{field}.md"
+    assert path.exists(), f"missing stack adapter file: {path}"
+    text = path.read_text(encoding="utf-8")
+    assert text.strip(), f"{path} is empty"
+
+    found_headings = re.findall(r"(?m)^##\s+(.+)$", text)
+    values = profile_mod.ENUMS[f"stack.{field}"]
+    missing = [value for value in values if value not in found_headings]
+    assert missing == [], f"{path} is missing '## <value>' sections: {missing}"
+
+
+def test_given_azure_boards_tracker_then_it_is_a_folder_with_its_script():
+    folder = ADAPTERS_DIR / "tracker" / "azure-boards"
+    assert (folder / "README.md").exists(), "azure-boards adapter must be a folder with README.md"
+    assert (folder / "fetch_context.py").exists(), "fetch_context.py must live under the azure-boards adapter"
+    assert not (ADAPTERS_DIR / "tracker" / "azure-boards.md").exists(), (
+        "azure-boards.md should have been replaced by the azure-boards/ folder"
+    )

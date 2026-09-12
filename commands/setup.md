@@ -24,7 +24,9 @@ skill reads; see the README's profile reference for each field.
      goes (work-item, pr-comment, none). Evidence `work-item` needs a tracker; if the
      answers conflict, ask again.
    - Group 4, details as free text via Other: first name for the prose, tracker project,
-     base branch, branch pattern (must contain `{slug}`), QA hand-off label, deploy
+     base branch, branch pattern (must contain `{slug}`), branch kind prefixes for
+     features and bugs, tracker state names for active and QA hand-off (blank keeps the
+     adapter default), QA hand-off label, deploy
      label, QA environment name, messaging (masstransit, wolverine, service-bus, none),
      error handling (result, exceptions), and the optional pipeline commands `/next` runs
      for Execute, Resolve comments and QA (blank means the built-in fallback).

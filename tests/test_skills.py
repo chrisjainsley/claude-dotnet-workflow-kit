@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILLS = ("visual-plan", "visual-review", "start-ticket", "qa-report", "qa-notes", "mega-review", "next")
+SKILLS = ("visual-plan", "visual-review", "start-ticket", "qa-report", "mega-review", "next")
 FRONT_MATTER = re.compile(r"^---\nname: (?P<name>[a-z0-9-]+)\ndescription: (?P<description>.+?)\n---\n", re.S)
 
 
@@ -54,6 +54,6 @@ def test_given_next_then_stage_table_names_kit_skills_only():
 
 
 def test_given_tracker_skills_then_they_defer_to_adapters():
-    for name in ("start-ticket", "qa-report", "qa-notes"):
+    for name in ("start-ticket", "qa-report"):
         text = skill_text(name)
         assert "adapters/tracker/" in text, f"{name}: tracker calls must go through adapters/tracker/<tracker>.md"

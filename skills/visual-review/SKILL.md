@@ -28,7 +28,8 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It dec
 - `architecture`: the slice names in the Changes tables (`scripts/profile.py` lists them;
   clean uses Domain, Application, Infrastructure, API, Tests).
 - `stack.*`: what belongs in Contracts and coordination (schema, events, migrations,
-  configuration). Read `adapters/stack/<field>/<value>.md` for the fields the diff touches.
+  configuration). Load `adapters/stack/<field>.md` and use the `<value>` section for
+  the fields the diff touches.
 - `qa.handoff_label`, `qa.deploy_label`, `qa.environment`: the labels and environment
   named in Rollout and the QA report.
 - `artifacts`: publish with the Artifact tool or open the HTML locally.
@@ -76,7 +77,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It dec
 7. **Cut pass** with the brief below, applied by a cheaper subagent or by you.
 8. **Build** from the repository root with the branch checked out and the base fetched:
    ```bash
-   python "SKILL_DIR/scripts/build_review.py" plans/<slug>/review.md --template "SKILL_DIR/assets/template.html" --out plans/<slug>/review.html
+   python "SKILL_DIR/scripts/build_review.py" plans/<slug>/review.md --out plans/<slug>/review.html
    ```
    The builder pulls each linked file's diff with git over `origin/<base>...HEAD`, or
    `<sha>^..<sha>` when `state: merged` and `commits` names the sha. Pass `--range` to
@@ -166,7 +167,7 @@ to reviews:
 ## Files
 
 - `assets/skeleton.md`: section skeleton with front matter.
-- `assets/template.html`: page shell with tiles, pills, collapsed hunks, linked file diffs, checklist and decision form.
-- `scripts/check_review.py`: budget and structure gate; exit 1 on any breach. Takes `--profile`.
-- `scripts/build_review.py`: markdown subset to HTML with the section-specific renderers; pulls per-file diffs from git.
+- `assets/page.html` (repository root): the shared page shell, carrying the tiles, pills, collapsed hunks, linked file diffs, checklist and decision form.
+- `scripts/check_review.py`: budget and structure gate; exit 1 on any breach. Takes `--profile`. Wraps `scripts/check.py` (repository root) in review mode.
+- `scripts/build_review.py`: markdown subset to HTML with the section-specific renderers; pulls per-file diffs from git. Wraps `scripts/render.py` (repository root) in review mode.
 - `references/exemplar.md`: a filled review for a real merged PR, identifiers scrubbed.

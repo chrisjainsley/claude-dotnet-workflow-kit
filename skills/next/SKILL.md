@@ -44,7 +44,7 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
 | 5 | Resolve comments | `pipeline.resolve_comments` when set, else the scm adapter's review-thread steps | 0 unresolved threads, checks green |
 | 6 | QA | `pipeline.qa` when set, else the plan's Specs run manually per `adapters/qa/<qa.owner>.md`; `qa.deploy_label` applied when set, to reach `qa.environment`; fix and re-run | Scenarios pass; state `qa.done` |
 | 7 | Review page | `/dotnet-workflow-kit:visual-review`, built after QA so it reflects the final diff; do not post to the tracker yet | State `review.artifactUrl` |
-| 8 | Publish and hand off | Once approved: post the QA report per `qa.evidence`, mark the PR ready, apply `qa.handoff_label` if not set, move the item to the tracker's QA-ready state; `qa.owner` self or none just marks it ready | State `review.decision`, `handoff.done` |
+| 8 | Publish and hand off | Once approved: post the QA report per `qa.evidence`, mark the PR ready, apply `qa.handoff_label` if not set, move the item to the tracker's `tracker_states.qa_ready` state (or the adapter's default when blank); `qa.owner` self or none just marks it ready | State `review.decision`, `handoff.done` |
 
 Bug-fixing for a mega-review finding or a QA failure is never its own row: the stage that found it stays not-done, with the finding or bug in its evidence column, and fixing it is the next action inside that stage.
 

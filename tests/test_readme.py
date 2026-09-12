@@ -14,7 +14,6 @@ SKILL_NAMES = (
     "visual-review",
     "start-ticket",
     "qa-report",
-    "qa-notes",
     "mega-review",
     "next",
 )
@@ -34,7 +33,7 @@ def test_given_profile_defaults_then_readme_lists_every_field():
     assert missing == [], f"README.md is missing these profile fields: {missing}"
 
 
-def test_given_seven_skills_then_readme_has_a_section_each():
+def test_given_six_skills_then_readme_has_a_section_each():
     text = readme_text()
     headings = re.findall(r"(?m)^###\s+(.+)$", text)
     missing = [name for name in SKILL_NAMES if not any(name in heading for heading in headings)]

@@ -11,18 +11,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 PROFILE_PY = SCRIPTS_DIR / "profile.py"
 SETUP_PY = SCRIPTS_DIR / "setup.py"
+RENDER_PY = SCRIPTS_DIR / "render.py"
+CHECK_PY = SCRIPTS_DIR / "check.py"
+PAGE_TEMPLATE = REPO_ROOT / "assets" / "page.html"
 
 PLAN_SKILL_DIR = REPO_ROOT / "skills" / "visual-plan"
 REVIEW_SKILL_DIR = REPO_ROOT / "skills" / "visual-review"
 
 CHECK_PLAN_PY = PLAN_SKILL_DIR / "scripts" / "check_plan.py"
 BUILD_PLAN_PY = PLAN_SKILL_DIR / "scripts" / "build_plan.py"
-PLAN_TEMPLATE = PLAN_SKILL_DIR / "assets" / "template.html"
 PLAN_EXEMPLAR = PLAN_SKILL_DIR / "references" / "exemplar.md"
 
 CHECK_REVIEW_PY = REVIEW_SKILL_DIR / "scripts" / "check_review.py"
 BUILD_REVIEW_PY = REVIEW_SKILL_DIR / "scripts" / "build_review.py"
-REVIEW_TEMPLATE = REVIEW_SKILL_DIR / "assets" / "template.html"
 REVIEW_EXEMPLAR = REVIEW_SKILL_DIR / "references" / "exemplar.md"
 
 README_PATH = REPO_ROOT / "README.md"

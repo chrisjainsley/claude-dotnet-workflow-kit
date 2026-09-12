@@ -8,7 +8,6 @@ from conftest import (
     BUILD_PLAN_PY,
     CHECK_PLAN_PY,
     FIXTURES_DIR,
-    PLAN_TEMPLATE,
     run_py,
 )
 
@@ -72,7 +71,7 @@ def test_given_fixture_then_build_writes_html_with_question_form(tmp_path, plan_
     plan_path.write_text(plan_fixture_text, encoding="utf-8")
     out_path = tmp_path / "plan.html"
 
-    code, out, err = run_py(BUILD_PLAN_PY, plan_path, "--template", PLAN_TEMPLATE, "--out", out_path)
+    code, out, err = run_py(BUILD_PLAN_PY, plan_path, "--out", out_path)
 
     assert code == 0, out + err
     assert out_path.exists()

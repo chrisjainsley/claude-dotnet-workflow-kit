@@ -30,20 +30,30 @@ a { color: var(--accent); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--muted); }
 .chip-key { text-transform: uppercase; letter-spacing: 0.08em; font-size: 10.5px; margin-right: 6px; color: var(--muted); }
 .chip code { font-size: 12px; }
-.layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 0 36px; max-width: 1240px; margin: 0 auto; padding: 28px 28px 80px; }
+.layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 0 36px; margin: 0 auto; padding: 28px 28px 80px; }
+.layout.kind-plan { max-width: 1180px; }
+.layout.kind-review { max-width: 1240px; }
 nav.rail { position: sticky; top: 24px; align-self: start; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 nav.rail a { color: var(--muted); text-decoration: none; padding: 5px 10px; border-left: 2px solid var(--line); }
 nav.rail a.active { color: var(--ink); border-left-color: var(--accent); font-weight: 600; }
 nav.rail a:hover { color: var(--ink); }
-main { max-width: 88ch; min-width: 0; }
+main { min-width: 0; }
+.kind-plan main { max-width: 78ch; }
+.kind-review main { max-width: 88ch; }
 .plan-section { padding: 22px 0 26px; border-bottom: 1px solid var(--line); }
 .plan-section:last-child { border-bottom: 0; }
-.section-head h2 { font-size: 17px; font-weight: 600; margin: 0 0 10px; letter-spacing: -0.005em; }
-h3 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; color: var(--ink); }
+.section-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.section-head h2 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: -0.005em; }
+.onion { width: 30px; height: 30px; flex: none; }
+.onion .ring { fill: none; stroke: var(--line); stroke-width: 2; }
+.onion .ring.active { fill: var(--accent-soft); stroke: var(--accent); }
+.kind-plan h3 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.kind-review h3 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; color: var(--ink); }
 h4 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; }
 p { margin: 0 0 10px; }
 ul, ol { margin: 0 0 10px; padding-left: 22px; }
 li { margin: 4px 0; }
+li > ul { margin-top: 4px; }
 code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
 pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; margin: 10px 0 14px; font-size: 12.5px; line-height: 1.5; }
 pre code { background: none; padding: 0; font-size: inherit; }
@@ -52,6 +62,55 @@ pre.mermaid { background: var(--card); text-align: center; }
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
 th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line); font-weight: 600; }
 td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.kind-plan td:first-child { white-space: nowrap; color: var(--muted); }
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 10px 0 14px; }
+.figures figure { margin: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--code-bg); }
+.figures img { display: block; width: 100%; height: auto; }
+.figures figcaption { font-size: 12px; color: var(--muted); padding: 6px 10px; border-top: 1px solid var(--line); }
+.figures figure.missing figcaption { color: var(--warn); border-top: 0; }
+.opt { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; border: 1px solid var(--line); border-radius: 6px; margin: 6px 0; cursor: pointer; }
+.kind-plan .opt { background: var(--card); }
+.kind-review .opt { background: var(--paper); }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.opt input[type="radio"] { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
+.opt-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.opt-label { font-weight: 600; font-size: 14px; }
+.opt-detail { color: var(--muted); font-size: 13px; }
+.qsub { color: var(--muted); font-size: 13.5px; margin: 0 0 10px; }
+.qfoot { display: flex; align-items: center; gap: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.qstatus { flex: 1; }
+.hint { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-selector-tag { color: var(--hl-kw); }
+.hljs-string, .hljs-attr, .hljs-symbol { color: var(--hl-str); }
+.hljs-comment, .hljs-meta { color: var(--hl-cm); }
+.hljs-title, .hljs-type, .hljs-class .hljs-title { color: var(--hl-ty); }
+.hljs-number { color: var(--hl-num); }
+
+/* plan page */
+details.context { border: 1px solid var(--line); border-radius: 6px; background: var(--card); padding: 0; }
+details.context summary { cursor: pointer; padding: 10px 14px; font-size: 13.5px; color: var(--muted); list-style: none; display: flex; align-items: center; gap: 8px; }
+details.context summary::-webkit-details-marker { display: none; }
+details.context summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); transition: transform 120ms; }
+details.context[open] summary::before { transform: rotate(45deg); }
+details.context[open] summary { border-bottom: 1px solid var(--line); color: var(--ink); }
+details.context > *:not(summary) { margin-left: 14px; margin-right: 14px; }
+details.context > p:first-of-type { margin-top: 12px; }
+details.context > *:last-child { margin-bottom: 14px; }
+.qform { display: flex; flex-direction: column; gap: 18px; }
+fieldset.q { border: 0; margin: 0; padding: 0 0 0 44px; position: relative; min-width: 0; }
+fieldset.q legend { padding: 0; font-weight: 600; font-size: 15px; display: block; margin-bottom: 4px; }
+.qnum { position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid var(--warn); color: var(--warn); font-family: var(--mono); font-size: 12px; display: flex; align-items: center; justify-content: center; }
+.badge { display: inline-block; margin-left: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; padding: 1px 6px; border: 1px solid var(--accent); color: var(--accent); border-radius: 3px; vertical-align: 2px; font-weight: 600; }
+.opt.other { align-items: center; }
+.other-text, .qform textarea { font: inherit; font-size: 14px; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; width: 100%; }
+.other-text { flex: 1; }
+.qform textarea { resize: vertical; }
+.other-text:focus, .qform textarea:focus, .qform button:focus-visible, .opt input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.qform button { font: inherit; font-weight: 600; font-size: 14px; color: var(--paper); background: var(--accent); border: 0; border-radius: 5px; padding: 8px 16px; cursor: pointer; }
+.qform button[disabled] { opacity: 0.6; cursor: default; }
+#decisions .section-body ul > li { padding-left: 4px; }
+
+/* review page */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 8px 0 14px; }
 .tile { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
 .tile-metric { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
@@ -80,20 +139,11 @@ details.filediff:target { outline: 2px solid var(--accent, var(--muted)); outlin
 .fnote { margin: 0; padding: 10px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
 .hljs-addition { color: var(--ok); background: var(--ok-soft); display: inline-block; width: 100%; }
 .hljs-deletion { color: var(--bad); background: var(--bad-soft); display: inline-block; width: 100%; }
-.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-selector-tag { color: var(--hl-kw); }
-.hljs-string, .hljs-attr, .hljs-symbol { color: var(--hl-str); }
-.hljs-comment, .hljs-meta { color: var(--hl-cm); }
-.hljs-title, .hljs-type, .hljs-class .hljs-title { color: var(--hl-ty); }
-.hljs-number { color: var(--hl-num); }
 .scenario-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 18px; padding-top: 12px; border-top: 1px dashed var(--line); }
 .scenario-title span:first-child { flex: 1; min-width: 200px; }
 .qa-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-right: 6px; }
 .qa-evidence, .qa-classification, .qa-not { font-size: 13.5px; }
 .qa-not { padding: 10px 14px; background: var(--warn-soft); border-left: 3px solid var(--warn); margin-top: 12px; }
-.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 10px 0 14px; }
-.figures figure { margin: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--code-bg); }
-.figures img { display: block; width: 100%; height: auto; }
-.figures figcaption { font-size: 12px; color: var(--muted); padding: 6px 10px; border-top: 1px solid var(--line); }
 .checklist { list-style: none; padding: 0; }
 .checklist li { margin: 0; border-bottom: 1px solid var(--line); }
 .checklist label { display: flex; gap: 12px; align-items: flex-start; padding: 9px 4px; cursor: pointer; }
@@ -102,22 +152,13 @@ details.filediff:target { outline: 2px solid var(--accent, var(--muted)); outlin
 .dform { display: flex; flex-direction: column; gap: 16px; margin-top: 12px; }
 fieldset.d { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px 14px; margin: 0; background: var(--card); }
 fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
-.qsub { color: var(--muted); font-size: 13.5px; margin: 0 0 10px; }
-.opt { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); margin: 6px 0; cursor: pointer; }
 .opt.inline { display: inline-flex; margin-right: 8px; padding: 7px 12px; align-items: center; }
-.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
-.opt input[type="radio"] { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
 .opt.inline input[type="radio"] { margin: 0; }
-.opt-body { display: flex; flex-direction: column; gap: 2px; }
-.opt-label { font-weight: 600; font-size: 14px; }
-.opt-detail { color: var(--muted); font-size: 13px; }
 .dform textarea { font: inherit; font-size: 14px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; width: 100%; resize: vertical; margin-top: 8px; }
-.qfoot { display: flex; align-items: center; gap: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
-.qstatus { flex: 1; }
 .dform button { font: inherit; font-weight: 600; font-size: 14px; color: var(--paper); background: var(--accent); border: 0; border-radius: 5px; padding: 8px 16px; cursor: pointer; }
 .dform button[disabled] { opacity: 0.6; cursor: default; }
 .dform textarea:focus, .dform button:focus-visible, .opt input:focus-visible, .checklist input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.hint { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; padding: 18px 16px 60px; }
   nav.rail { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
@@ -127,16 +168,16 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 </style>
 <header class="topbar">
-  <span class="kind">Review</span>
+  <span class="kind">{{KINDLABEL}}</span>
   <span class="ticket">{{TICKET}}</span>
   <h1>{{TITLE}}</h1>
   <div class="chips">{{CHIPS}}</div>
 </header>
-<div class="layout">
+<div class="layout kind-{{KIND}}">
   <nav class="rail" aria-label="Sections">{{NAV}}</nav>
   <main>
     {{SECTIONS}}
-    <p class="hint">Ticks and the decision sent from this page reach Claude on the next turn. The review is rebuilt and republished at this URL.</p>
+    <p class="hint">{{HINT}}</p>
   </main>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -174,60 +215,133 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
   window.addEventListener('hashchange', function () { openTarget(location.hash); });
 })();
 (async function () {
+  var qform = document.getElementById('qform');
+  var dform = document.getElementById('dform');
   var boxes = Array.prototype.slice.call(document.querySelectorAll('.checklist input[type="checkbox"]'));
-  var form = document.getElementById('dform');
-  var status = document.getElementById('dstatus');
-  var send = document.getElementById('dsend');
+  if (!qform && !dform && !boxes.length) { return; }
+  var qcount = document.getElementById('qcount');
+  var qstatus = document.getElementById('qstatus');
+  var qsend = document.getElementById('qsend');
+  var dstatus = document.getElementById('dstatus');
+  var dsend = document.getElementById('dsend');
+  var sets = qform ? Array.prototype.slice.call(qform.querySelectorAll('fieldset.q')) : [];
+  function answerOf(fs) {
+    var ta = fs.querySelector('textarea');
+    if (ta) { return ta.value.trim() ? { choice: null, text: ta.value.trim() } : null; }
+    var checked = fs.querySelector('input[type="radio"]:checked');
+    if (!checked) { return null; }
+    if (checked.value === '__other__') {
+      var t = fs.querySelector('.other-text').value.trim();
+      return t ? { choice: 'other', text: t } : null;
+    }
+    return { choice: checked.value, text: '' };
+  }
+  function refresh() {
+    if (!qcount) { return; }
+    qcount.textContent = sets.filter(answerOf).length + '/' + sets.length + ' answered';
+  }
+  function apply(fs, a) {
+    var ta = fs.querySelector('textarea');
+    if (ta) { ta.value = a.text || ''; return; }
+    var radios = Array.prototype.slice.call(fs.querySelectorAll('input[type="radio"]'));
+    var target = a.choice === 'other' ? '__other__' : a.choice;
+    radios.forEach(function (r) { r.checked = r.value === target; });
+    if (a.choice === 'other') { fs.querySelector('.other-text').value = a.text || ''; }
+  }
+  if (qform) {
+    qform.addEventListener('input', refresh);
+    qform.addEventListener('change', refresh);
+    sets.forEach(function (fs) {
+      var other = fs.querySelector('.other-text');
+      if (other) { other.addEventListener('focus', function () { fs.querySelector('input[value="__other__"]').checked = true; refresh(); }); }
+    });
+    refresh();
+  }
   var db = (window.claude && typeof window.claude.use === 'function') ? await window.claude.use('db') : null;
   if (!db) {
-    if (send) { send.hidden = true; }
-    if (status) { status.textContent = 'Decide in chat; this view cannot save.'; }
+    if (qsend) { qsend.hidden = true; }
+    if (qstatus) { qstatus.textContent = 'Answer in chat by question number.'; }
+    if (dsend) { dsend.hidden = true; }
+    if (dstatus) { dstatus.textContent = 'Decide in chat; this view cannot save.'; }
     return;
   }
+  if (qform) {
+    try {
+      var snap = await db.collection('answers').get();
+      snap.docs.forEach(function (d) {
+        var a = d.data();
+        var fs = sets.filter(function (f) { return f.dataset.qid === d.id; })[0];
+        if (fs && a) { apply(fs, a); }
+      });
+      refresh();
+      if (!snap.empty && qstatus) { qstatus.textContent = 'Answers on file.'; }
+    } catch (e) { if (qstatus) { qstatus.textContent = 'Saved answers could not be loaded.'; } }
+    qform.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      qsend.disabled = true;
+      qstatus.textContent = 'Sending...';
+      try {
+        for (var i = 0; i < sets.length; i++) {
+          var a = answerOf(sets[i]);
+          if (!a) { continue; }
+          await db.doc('answers/' + sets[i].dataset.qid).set({
+            question: sets[i].dataset.title, choice: a.choice, text: a.text, answeredAt: new Date().toISOString()
+          });
+        }
+        qstatus.textContent = 'Sent. Tell Claude "answered" to continue.';
+      } catch (err) { qstatus.textContent = 'Send failed: ' + ((err && err.message) || err); }
+      qsend.disabled = false;
+    });
+  }
+  if (!dform && !boxes.length) { return; }
   try {
-    var rollout = await db.collection('rollout').get();
-    rollout.docs.forEach(function (d) {
-      var box = boxes.filter(function (b) { return b.dataset.step === d.id; })[0];
-      if (box && d.data()) { box.checked = !!d.data().done; }
-    });
-    var review = await db.collection('review').get();
-    review.docs.forEach(function (d) {
-      var a = d.data() || {};
-      if (d.id === 'decision') {
-        var v = form.querySelector('input[name="verdict"][value="' + a.verdict + '"]');
-        if (v) { v.checked = true; }
-        form.querySelector('textarea[name="notes"]').value = a.notes || '';
-        status.textContent = 'Decision on file: ' + (a.verdict === 'approve' ? 'approved' : 'changes requested') + '.';
-      } else {
-        var r = form.querySelector('input[name="' + d.id + '"][value="' + a.action + '"]');
-        if (r) { r.checked = true; }
-      }
-    });
-  } catch (e) { if (status) { status.textContent = 'Saved state could not be loaded.'; } }
+    if (boxes.length) {
+      var rollout = await db.collection('rollout').get();
+      rollout.docs.forEach(function (d) {
+        var box = boxes.filter(function (b) { return b.dataset.step === d.id; })[0];
+        if (box && d.data()) { box.checked = !!d.data().done; }
+      });
+    }
+    if (dform) {
+      var review = await db.collection('review').get();
+      review.docs.forEach(function (d) {
+        var a = d.data() || {};
+        if (d.id === 'decision') {
+          var v = dform.querySelector('input[name="verdict"][value="' + a.verdict + '"]');
+          if (v) { v.checked = true; }
+          dform.querySelector('textarea[name="notes"]').value = a.notes || '';
+          if (dstatus) { dstatus.textContent = 'Decision on file: ' + (a.verdict === 'approve' ? 'approved' : 'changes requested') + '.'; }
+        } else {
+          var r = dform.querySelector('input[name="' + d.id + '"][value="' + a.action + '"]');
+          if (r) { r.checked = true; }
+        }
+      });
+    }
+  } catch (e) { if (dstatus) { dstatus.textContent = 'Saved state could not be loaded.'; } }
   boxes.forEach(function (box) {
     box.addEventListener('change', async function () {
       try { await db.doc('rollout/' + box.dataset.step).set({ done: box.checked, at: new Date().toISOString() }); }
       catch (e) { box.checked = !box.checked; }
     });
   });
-  if (!form) { return; }
-  form.addEventListener('submit', async function (e) {
+  if (!dform) { return; }
+  dform.addEventListener('submit', async function (e) {
     e.preventDefault();
-    var verdict = form.querySelector('input[name="verdict"]:checked');
-    if (!verdict) { status.textContent = 'Pick approve or request changes first.'; return; }
-    send.disabled = true;
-    status.textContent = 'Sending...';
+    var verdict = dform.querySelector('input[name="verdict"]:checked');
+    if (!verdict) { dstatus.textContent = 'Pick approve or request changes first.'; return; }
+    dsend.disabled = true;
+    dstatus.textContent = 'Sending...';
     try {
-      await db.doc('review/decision').set({ verdict: verdict.value, notes: form.querySelector('textarea[name="notes"]').value.trim(), decidedAt: new Date().toISOString() });
-      var findings = Array.prototype.slice.call(form.querySelectorAll('fieldset.finding'));
+      await db.doc('review/decision').set({ verdict: verdict.value, notes: dform.querySelector('textarea[name="notes"]').value.trim(), decidedAt: new Date().toISOString() });
+      var findings = Array.prototype.slice.call(dform.querySelectorAll('fieldset.finding'));
       for (var i = 0; i < findings.length; i++) {
         var fid = findings[i].dataset.fid;
         var picked = findings[i].querySelector('input:checked');
         if (picked) { await db.doc('review/' + fid).set({ finding: findings[i].querySelector('legend').textContent, action: picked.value, decidedAt: new Date().toISOString() }); }
       }
-      status.textContent = 'Sent. Tell Claude "decided" to continue.';
-    } catch (err) { status.textContent = 'Send failed: ' + ((err && err.message) || err); }
-    send.disabled = false;
+      dstatus.textContent = 'Sent. Tell Claude "decided" to continue.';
+    } catch (err) { dstatus.textContent = 'Send failed: ' + ((err && err.message) || err); }
+    dsend.disabled = false;
   });
 })();
 </script>

@@ -6,7 +6,8 @@ from conftest import (
     BUILD_REVIEW_PY,
     CHECK_REVIEW_PY,
     FIXTURES_DIR,
-    REVIEW_TEMPLATE,
+    PAGE_TEMPLATE,
+    RENDER_PY,
     import_module_from_path,
     run_py,
 )
@@ -44,7 +45,6 @@ def test_given_merged_state_then_build_renders_follow_up_form(tmp_path, review_f
     code, out, err = run_py(
         BUILD_REVIEW_PY,
         review_fixture_path,
-        "--template", REVIEW_TEMPLATE,
         "--out", out_path,
         "--range", "deadbeef^..deadbeef",
     )
@@ -57,7 +57,7 @@ def test_given_merged_state_then_build_renders_follow_up_form(tmp_path, review_f
 
 
 def test_given_secret_file_in_changes_table_then_not_embedded(review_fixture_text):
-    module = import_module_from_path("build_review_secret_test", BUILD_REVIEW_PY)
+    module = import_module_from_path("render_secret_test", RENDER_PY)
     text = review_fixture_text.replace(
         "| Tests | none | B2C policy XML has no test host in this repo |",
         "| Tests | none | B2C policy XML has no test host in this repo |\n"
@@ -71,7 +71,7 @@ def test_given_secret_file_in_changes_table_then_not_embedded(review_fixture_tex
     module.WARNINGS = []
 
     meta, sections, open_count = module.parse(text)
-    page = module.build(meta, sections, REVIEW_TEMPLATE.read_text(encoding="utf-8"), open_count)
+    page = module.build(meta, sections, PAGE_TEMPLATE.read_text(encoding="utf-8"), open_count)
 
     assert "appsettings.Production.json" in page
     assert "not embedded" in page.lower()

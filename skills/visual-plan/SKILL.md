@@ -27,8 +27,9 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
 
 - `architecture`: the section order and caps. Read `adapters/architecture/<value>.md`.
 - `tracker`: how to fetch the ticket and its context. Read `adapters/tracker/<value>.md`.
-- `stack.*`: what the Infrastructure, API and Application sections should name. Read
-  `adapters/stack/<field>/<value>.md` for each field the ticket touches.
+- `stack.*`: what the Infrastructure, API and Application sections should name. Load
+  `adapters/stack/<field>.md` and use the `<value>` section for each field the ticket
+  touches.
 - `testing.*`: what the Specs and Tests sections promise (BDD feature file or not,
   integration style, TDD wording).
 - `user`: the name used in prose; "you" when blank.
@@ -48,10 +49,11 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
    exist costs more trust than a plan that names nothing. When a source plan already
    exists, mine it for facts and drop its narrative.
 4. **Gather context** for the collapsed Context section. The tracker adapter says how;
-   for Azure Boards the skill ships `scripts/fetch_context.py`, which writes
-   `context/context.md` (parent, siblings, design links) and downloads image
-   attachments, rendering Figma frames when `FIGMA_TOKEN` is set. Fill the Area line from
-   your research and keep only designs that bear on this ticket.
+   for Azure Boards the adapter folder ships `fetch_context.py`
+   (`adapters/tracker/azure-boards/fetch_context.py`), which writes `context/context.md`
+   (parent, siblings, design links) and downloads image attachments, rendering Figma
+   frames when `FIGMA_TOKEN` is set. Fill the Area line from your research and keep only
+   designs that bear on this ticket.
 5. **Write `plans/<id>-<slug>/plan.md`** from `assets/skeleton.md`, with the section
    list from the architecture adapter. Gitignore `plans/` in the project if it is not
    already; the page is the deliverable, not the markdown. Read
@@ -67,7 +69,7 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
    directory. Apply its deletions and rerun the check.
 8. **Build the page:**
    ```bash
-   python "SKILL_DIR/scripts/build_plan.py" plans/<slug>/plan.md --template "SKILL_DIR/assets/template.html" --out plans/<slug>/plan.html
+   python "SKILL_DIR/scripts/build_plan.py" plans/<slug>/plan.md --out plans/<slug>/plan.html
    ```
    Never hand-edit `plan.html`; it is regenerated from `plan.md` every time.
 9. **Publish.** With `artifacts: true`, use the Artifact tool: `file_path` is `plan.html`,
@@ -185,8 +187,8 @@ default rather than a new paragraph.
 ## Files
 
 - `assets/skeleton.md`: the section skeleton with front matter; copy it to start.
-- `assets/template.html`: the page shell; `build_plan.py` fills it.
-- `scripts/check_plan.py`: budget and structure gate; exit 1 on any breach. Takes `--profile`.
-- `scripts/build_plan.py`: markdown subset to HTML, including the answer form and inline images.
-- `scripts/fetch_context.py`: parent, siblings, design links and images from Azure Boards (and Figma with `FIGMA_TOKEN`). Azure Boards only.
+- `assets/page.html` (repository root): the shared page shell for plans and reviews; `build_plan.py` fills it.
+- `scripts/check_plan.py`: budget and structure gate; exit 1 on any breach. Takes `--profile`. Wraps `scripts/check.py` (repository root) in plan mode.
+- `scripts/build_plan.py`: markdown subset to HTML, including the answer form and inline images. Wraps `scripts/render.py` (repository root) in plan mode.
+- `adapters/tracker/azure-boards/fetch_context.py`: parent, siblings, design links and images from Azure Boards (and Figma with `FIGMA_TOKEN`). Azure Boards only.
 - `references/exemplar.md`: a real plan re-cut from 3,373 to about 800 prose words, identifiers scrubbed.

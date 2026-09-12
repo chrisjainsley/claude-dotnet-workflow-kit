@@ -20,14 +20,22 @@ adapters/<concern>/<value>.md
 switching the profile to `"tracker": "github-issues"` switches every skill that reads
 the tracker adapter to `adapters/tracker/github-issues.md` with no other change.
 
+An adapter is a file by default, but it can be a folder instead when it needs more
+than one supporting file (a script, for example): `adapters/<concern>/<value>/README.md`
+stands in for `adapters/<concern>/<value>.md`. A skill resolving an adapter tries the
+file form first, then falls back to the folder's `README.md` when the adapter is a
+folder. `tracker: azure-boards` is the one adapter shipped as a folder today, because
+it carries `fetch_context.py` alongside its `README.md`.
+
 `stack` is one level deeper than the other four, because the profile itself nests it:
 `stack.data`, `stack.api`, `stack.messaging`, `stack.errors` and `stack.local_run` each
-pick their own value independently. Its adapter files live at
-`adapters/stack/<field>/<value>.md`, so `"stack.data": "ef-core"` reads
-`adapters/stack/data/ef-core.md`, and a ticket that touches both data access and
-messaging reads both `adapters/stack/data/<value>.md` and
-`adapters/stack/messaging/<value>.md`, one file per stack field the ticket actually
-touches.
+pick their own value independently. Instead of one file per value, each stack field
+gets a single file with one `## <value>` section per value it supports:
+`adapters/stack/<field>.md`. So `"stack.data": "ef-core"` reads the `## ef-core`
+section of `adapters/stack/data.md`, and a ticket that touches both data access and
+messaging reads the matching section of `adapters/stack/data.md` and the matching
+section of `adapters/stack/messaging.md`, one file per stack field the ticket
+actually touches.
 
 ## The five concerns
 
@@ -50,6 +58,10 @@ QA report on approve. Each file has these headings:
 
 `tracker: none` skips this adapter entirely; the user's own description stands in for
 the ticket, and `qa.evidence` cannot be `work-item` when `tracker` is `none`.
+
+`azure-boards` ships as a folder, `adapters/tracker/azure-boards/`, with the four
+headings above in its `README.md` plus `fetch_context.py`, the script `visual-plan`
+runs for the plan's Context section. The other tracker values are plain files.
 
 ### scm
 
@@ -140,7 +152,8 @@ heading set:
 
 1. Add the new value to the matching entry in `ENUMS` in `scripts/profile.py`, and to
    `PLAN_SECTIONS` or `REVIEW_SLICES` too if it is a new `architecture`.
-2. Write `adapters/<concern>/<value>.md` (or `adapters/stack/<field>/<value>.md`) with
+2. Write `adapters/<concern>/<value>.md` (a new `## <value>` section in
+   `adapters/stack/<field>.md` for a stack value) with
    every heading its concern requires, listed above.
 3. If dotnet-claude-kit has a skill that matches the new value, add a `NEEDS` entry in
    `scripts/profile.py` so setup recommends it; add a `NEEDS_MCP` entry too if that
