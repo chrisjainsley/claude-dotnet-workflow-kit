@@ -180,6 +180,12 @@ and choices, or with "approve" or "changes" and your finding decisions.
 Rollout checklist ticks do not persist; track rollout outside the kit.
 See [Running without the Artifact tool](docs/without-artifacts.md).
 
+## Branding
+
+The plan and review pages use the [Delivery Labs](https://deliverylabs.co/workflow-kit)
+colours and carry an attribution footer linking there. Set `branding` to `false` through
+setup, or in the profile file, to render the neutral palette with no footer.
+
 ## Profile reference
 
 Setup writes `.claude/dotnet-workflow-kit.json` in the project. Profile resolution
@@ -213,6 +219,7 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `tracker_states.active` | Free text | `""` | State when work starts; blank uses the adapter default. |
 | `tracker_states.qa_ready` | Free text | `""` | QA hand-off state; blank uses the adapter default. |
 | `artifacts` | `true`, `false` | `true` | Publish Artifacts, or build local HTML and take answers in chat. |
+| `branding` | `true`, `false` | `true` | Delivery Labs colours and an attribution footer on the plan and review pages; false renders the neutral palette with no footer. |
 | `stack.data` | `ef-core`, `dapper`, `cosmos`, `other` | `"ef-core"` | Data access conventions. |
 | `stack.api` | `minimal-api`, `controllers`, `graphql`, `grpc` | `"minimal-api"` | API contract style. |
 | `stack.messaging` | `masstransit`, `wolverine`, `service-bus`, `none` | `"none"` | Messaging conventions. |

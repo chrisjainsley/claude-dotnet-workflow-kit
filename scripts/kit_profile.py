@@ -52,6 +52,7 @@ DEFAULTS = {
     "branch_kinds": {"feature": "feat", "bug": "bug"},
     "tracker_states": {"active": "", "qa_ready": ""},
     "artifacts": True,
+    "branding": True,
     "stack": {"data": "ef-core", "api": "minimal-api", "messaging": "none", "errors": "exceptions", "local_run": "plain"},
     "reviewers": list(BUILT_IN_REVIEWERS),
     "pipeline": {"execute": "", "resolve_comments": "", "qa": ""},
@@ -168,6 +169,8 @@ def validate(profile):
             problems.append(f"reviewers must include the built-in {built_in!r}")
     if not isinstance(profile.get("artifacts"), bool):
         problems.append("artifacts must be true or false")
+    if not isinstance(profile.get("branding"), bool):
+        problems.append("branding must be true or false")
     if "{slug}" not in profile.get("branch_pattern", ""):
         problems.append("branch_pattern must contain {slug}")
     kinds = profile.get("branch_kinds", {})

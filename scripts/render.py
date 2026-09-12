@@ -8,6 +8,9 @@ Usage:
 `--kind plan|review` picks the document mode; without it the kind is inferred from
 the ## section names, then from the front matter. `--template` defaults to the
 repository's assets/page.html.
+`--profile` names the kit profile; by default the project then user file is read.
+Its `branding` flag (default true) adds the Delivery Labs colours and the attribution
+footer; false renders the neutral palette with no footer.
 
 The markdown subset is deliberately small: ## sections, ### and #### subheads,
 paragraphs, bullet and numbered lists (one nesting level), pipe tables, fenced code
@@ -49,6 +52,32 @@ except ImportError:  # Pillow is optional; images are inlined at their original 
     Image = None
 
 DEFAULT_TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "page.html"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kit_profile import add_profile_arg, resolve_profile  # noqa: E402
+
+# Delivery Labs branding: the profile's `branding` flag (default true) switches it off.
+# Colours follow deliverylabs.co: indigo accents on a gray-900 dark ground. Only the
+# accent tokens change; warn/bad/ok keep their meaning.
+BRAND_URL = "https://deliverylabs.co/workflow-kit"
+BRAND_NAME = "Delivery Labs"
+BRAND_LIGHT = "--accent: #4F46E5; --accent-soft: #EEF2FF; --hl-kw: #4F46E5; --hl-ty: #6D28D9;"
+BRAND_DARK = ("--paper: #111827; --card: #1F2937; --line: #374151; --muted: #9CA3AF; --ink: #F3F4F6; "
+              "--accent: #818CF8; --accent-soft: #1E1B4B; --code-bg: #0B1120; --hl-kw: #A5B4FC; --hl-ty: #C4B5FD;")
+BRAND_STYLE = "\n".join([
+    "<style>",
+    ":root { " + BRAND_LIGHT + " }",
+    '@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ' + BRAND_DARK + " } }",
+    ':root[data-theme="dark"] { ' + BRAND_DARK + " }",
+    "</style>",
+])
+BRAND_FOOTER = (
+    '<footer class="attribution">'
+    f'<a class="wordmark" href="{BRAND_URL}">{BRAND_NAME}</a>'
+    '<span class="sep" aria-hidden="true">|</span>'
+    f'<span>Built with the <a href="{BRAND_URL}">dotnet-workflow-kit</a>.</span>'
+    '</footer>'
+)
 
 SOURCE_DIR = Path(".")
 REPO_DIR = Path(".")
@@ -609,7 +638,7 @@ def layer_map(sections):
     return {name: idx for idx, name in enumerate(layers)}
 
 
-def build(meta, sections, template, count=0):
+def build(meta, sections, template, count=0, branded=True):
     nav, parts = [], []
     layers = layer_map(sections) if KIND == "plan" else {}
     for name, body in sections:
@@ -638,6 +667,8 @@ def build(meta, sections, template, count=0):
         "COUNT": str(len(sections)),
         "QUESTIONS": str(count if KIND == "plan" else 0),
         "OPEN": str(count if KIND == "review" else 0),
+        "BRAND_STYLE": BRAND_STYLE if branded else "",
+        "FOOTER": BRAND_FOOTER if branded else "",
     }.items():
         page = page.replace("{{" + key + "}}", value)
     return page
@@ -652,7 +683,9 @@ def main(kind=None, argv=None):
                     help="document mode; inferred from the sections and front matter when omitted")
     ap.add_argument("--range", help="review only: git diff range for per-file diffs; default origin/<base>...HEAD, or <sha>^..<sha> when state is merged")
     ap.add_argument("--repo", default=".", help="review only: repository root to run git in (default: current directory)")
+    add_profile_arg(ap)
     args = ap.parse_args(argv)
+    profile = resolve_profile(explicit=args.profile)
     global SOURCE_DIR, REPO_DIR, DIFF_RANGE
     SOURCE_DIR = Path(args.source).resolve().parent
     REPO_DIR = Path(args.repo).resolve()
@@ -664,7 +697,8 @@ def main(kind=None, argv=None):
         DIFF_RANGE = args.range or derive_range(META)
         load_file_stats()
     meta, sections, count = parse(text, document_kind)
-    page = build(meta, sections, Path(args.template).read_text(encoding="utf-8"), count)
+    page = build(meta, sections, Path(args.template).read_text(encoding="utf-8"), count,
+                 branded=bool(profile.get("branding", True)))
     Path(args.out).write_text(page, encoding="utf-8", newline="\n")
     if document_kind == "plan":
         print(f"wrote {args.out} ({len(page):,} bytes, {len(sections)} sections, {count} answerable questions)")

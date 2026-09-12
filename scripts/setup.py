@@ -55,6 +55,7 @@ QUESTIONS = [
     ("pipeline.qa", "Command for the QA stage (blank: run the plan's Specs manually)", None),
     ("reviewers", "Extra mega-review reviewers, comma separated (" + ", ".join(OPTIONAL_REVIEWERS) + ")", None),
     ("artifacts", "Is the Claude Artifact tool available (yes/no)", None),
+    ("branding", "Show Delivery Labs colours and attribution on the pages (yes/no)", None),
 ]
 
 
@@ -150,12 +151,12 @@ def interactive(base):
         current = get(base, key)
         if key == "reviewers":
             current = ", ".join(r for r in current if r not in BUILT_IN_REVIEWERS)
-        if key == "artifacts":
+        if key in ("artifacts", "branding"):
             current = "yes" if current else "no"
         value = ask(prompt, current, choices)
         if key == "reviewers":
             value = [r.strip() for r in str(value).split(",") if r.strip()]
-        if key == "artifacts":
+        if key in ("artifacts", "branding"):
             value = str(value).lower() in ("y", "yes", "true", "1")
         put(answers, key, value)
     return answers

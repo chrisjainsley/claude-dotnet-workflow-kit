@@ -80,6 +80,10 @@ td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: to
 .qfoot { display: flex; align-items: center; gap: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
 .qstatus { flex: 1; }
 .hint { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+.attribution { border-top: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: 12.5px; padding: 14px 28px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.attribution .wordmark { font-weight: 600; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+.attribution .wordmark:hover { color: var(--accent); }
+.attribution .sep { color: var(--line); }
 .hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-selector-tag { color: var(--hl-kw); }
 .hljs-string, .hljs-attr, .hljs-symbol { color: var(--hl-str); }
 .hljs-comment, .hljs-meta { color: var(--hl-cm); }
@@ -167,6 +171,7 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
 }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 </style>
+{{BRAND_STYLE}}
 <header class="topbar">
   <span class="kind">{{KINDLABEL}}</span>
   <span class="ticket">{{TICKET}}</span>
@@ -180,6 +185,7 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
     <p class="hint">{{HINT}}</p>
   </main>
 </div>
+{{FOOTER}}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/gherkin.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/graphql.min.js"></script>

@@ -28,6 +28,7 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
   integration style, TDD wording).
 - `user`: the name used in prose; "you" when blank.
 - `artifacts`: whether to publish with the Artifact tool or open the HTML locally.
+- `branding`: `build_plan.py` reads it and adds the Delivery Labs colours and attribution footer when true.
 
 ## Workflow
 
