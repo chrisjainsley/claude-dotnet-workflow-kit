@@ -1,6 +1,6 @@
 {
   "name": "dotnet-workflow-kit",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "A budgeted plan-to-review delivery workflow for .NET teams: seven skills from ticket start to QA hand-off, plan and review pages as Claude Artifacts, tailored by one profile file.",
   "author": {
     "name": "Chris Ainsley",

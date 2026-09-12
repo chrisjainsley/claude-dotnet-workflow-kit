@@ -28,6 +28,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 - `qa.handoff_label`, `qa.deploy_label`, `qa.environment`: the labels and environment
   named in Rollout and the QA report.
 - `artifacts`: publish with the Artifact tool or open the HTML locally.
+- `branding`: `build_review.py` reads it and adds the Delivery Labs colours and attribution footer when true.
 
 ## Workflow
 
