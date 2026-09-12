@@ -57,6 +57,48 @@ below in order and stops at the review page for a decision.
    says (a work item, a PR comment, or nowhere at all), and the pipeline continues
    past the checkpoint.
 
+## Running the pipeline unattended with /goal
+
+`/next` runs stage after stage without asking, but it stops at two points that need a
+human: the plan page (approve or answer the open questions) and the review page (approve
+or request changes). Claude Code's `/goal` command keeps a session working turn after
+turn until a condition is met, so the two together take a ticket from start to hand-off
+with only those two decisions from you.
+
+1. Start the ticket and set the goal in one go:
+   ```
+   /dotnet-workflow-kit:start-ticket 1234
+   /goal Run /next until it stops at the review checkpoint for ticket 1234 and has printed the review page link. Stop within 3 hours.
+   ```
+   `/next` then runs the plan, execute, mega-review, draft PR, comment and QA stages.
+   After each turn a small evaluator model checks the transcript against the condition
+   and starts the next turn until the review link appears, so keep the condition about
+   something that shows up in chat, not on the page.
+2. When `/next` publishes the plan page it prints the link and waits. Open the page,
+   answer the questions or leave the recommended defaults, press Send answers, then
+   type `answered`. `/next` reads the answers from the page and carries on; the goal
+   keeps it moving.
+3. At the review checkpoint the goal is met and clears itself. Open the review page,
+   tick the rollout items, choose Approve or Request changes, press Send decision, then
+   type `decided`. `/next` reads the decision. Approve runs the hand-off stage; request
+   changes returns to execute with your notes and per-finding fix or accept actions.
+4. If you want the hand-off to run unattended too, set a second goal after deciding:
+   ```
+   /goal Run /next until the hand-off stage reports done for ticket 1234.
+   ```
+
+Notes that keep this safe:
+
+- Run in auto permission mode for a hands-free session. In manual mode the goal still
+  runs, but every unapproved tool call waits for you, which is a slower checkpoint.
+- Always put a time or turn bound in the condition. A blocked stage (CI red for a reason
+  outside the branch, a merge conflict, a missing profile) makes `/next` stop and say
+  why; the bound stops the goal from re-prompting past that.
+- One goal per session. `/goal` on its own shows the current one and `/goal clear`
+  removes it. `/next status` prints the stage table without running anything.
+- With `artifacts` false in the profile there are no pages; answers and the decision are
+  given in chat, and the same two goals still apply.
+
 ## Skills
 
 ### visual-plan-doc
