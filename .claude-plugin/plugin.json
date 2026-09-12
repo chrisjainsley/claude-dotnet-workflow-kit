@@ -1,0 +1,13 @@
+{
+  "name": "dotnet-workflow-kit",
+  "version": "0.1.0",
+  "description": "A budgeted plan-to-review delivery workflow for .NET teams: plan and review pages as Claude Artifacts, tailored by one profile file.",
+  "author": {
+    "name": "Chris Ainsley",
+    "url": "https://github.com/chrisjainsley"
+  },
+  "homepage": "https://github.com/chrisjainsley/claude-dotnet-workflow-kit",
+  "repository": "https://github.com/chrisjainsley/claude-dotnet-workflow-kit",
+  "license": "MIT",
+  "keywords": ["dotnet", "csharp", "workflow", "planning", "code-review", "qa", "clean-architecture", "bdd"]
+}

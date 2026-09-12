@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+plans/
+.claude/settings.local.json
+*.html.tmp

@@ -1,0 +1,233 @@
+<title>{{TITLE}}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --paper: #F5F6F8; --card: #FFFFFF; --ink: #1C2330; --muted: #5C6774; --line: #D8DDE4;
+  --accent: #0E6F86; --accent-soft: #E0F0F4; --warn: #B4650E; --warn-soft: #FBF1E3; --bad: #B3261E; --bad-soft: #FBE7E5; --ok: #2E7D4F; --ok-soft: #E3F3E8;
+  --code-bg: #EEF1F4; --hl-kw: #0E6F86; --hl-str: #8A4A0B; --hl-cm: #7A8491; --hl-ty: #5B3E9E; --hl-num: #A0361F;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #131820; --card: #1A2029; --ink: #E4E8EE; --muted: #98A3B1; --line: #2A3341;
+    --accent: #52B7CF; --accent-soft: #16323A; --warn: #E09A4A; --warn-soft: #2E2416; --bad: #F08A80; --bad-soft: #3A1F1D; --ok: #6FCF97; --ok-soft: #1B3326;
+    --code-bg: #10151C; --hl-kw: #6CC9DE; --hl-str: #E0A66B; --hl-cm: #7B879A; --hl-ty: #B39DEB; --hl-num: #F08A6E;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #131820; --card: #1A2029; --ink: #E4E8EE; --muted: #98A3B1; --line: #2A3341;
+  --accent: #52B7CF; --accent-soft: #16323A; --warn: #E09A4A; --warn-soft: #2E2416; --bad: #F08A80; --bad-soft: #3A1F1D; --ok: #6FCF97; --ok-soft: #1B3326;
+  --code-bg: #10151C; --hl-kw: #6CC9DE; --hl-str: #E0A66B; --hl-cm: #7B879A; --hl-ty: #B39DEB; --hl-num: #F08A6E;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font: 15px/1.55 var(--sans); margin: 0; }
+a { color: var(--accent); }
+.topbar { border-bottom: 1px solid var(--line); background: var(--card); padding: 18px 28px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px; }
+.topbar h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.topbar .ticket { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+.topbar .kind { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--muted); }
+.chip-key { text-transform: uppercase; letter-spacing: 0.08em; font-size: 10.5px; margin-right: 6px; color: var(--muted); }
+.chip code { font-size: 12px; }
+.layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 0 36px; max-width: 1240px; margin: 0 auto; padding: 28px 28px 80px; }
+nav.rail { position: sticky; top: 24px; align-self: start; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+nav.rail a { color: var(--muted); text-decoration: none; padding: 5px 10px; border-left: 2px solid var(--line); }
+nav.rail a.active { color: var(--ink); border-left-color: var(--accent); font-weight: 600; }
+nav.rail a:hover { color: var(--ink); }
+main { max-width: 88ch; min-width: 0; }
+.plan-section { padding: 22px 0 26px; border-bottom: 1px solid var(--line); }
+.plan-section:last-child { border-bottom: 0; }
+.section-head h2 { font-size: 17px; font-weight: 600; margin: 0 0 10px; letter-spacing: -0.005em; }
+h3 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; color: var(--ink); }
+h4 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; }
+p { margin: 0 0 10px; }
+ul, ol { margin: 0 0 10px; padding-left: 22px; }
+li { margin: 4px 0; }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; margin: 10px 0 14px; font-size: 12.5px; line-height: 1.5; }
+pre code { background: none; padding: 0; font-size: inherit; }
+pre.mermaid { background: var(--card); text-align: center; }
+.table-wrap { overflow-x: auto; margin: 8px 0 14px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line); font-weight: 600; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 8px 0 14px; }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.tile-metric { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.tile-value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 2px 0; }
+.tile-note { font-size: 12px; color: var(--muted); }
+.pill { display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 7px; border-radius: 3px; border: 1px solid var(--line); color: var(--muted); background: var(--card); }
+.pill-done, .pill-fixed, .pill-pass, .pill-low, .pill-info { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+.pill-changed, .pill-accepted, .pill-medium, .pill-blocked { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+.pill-dropped, .pill-open, .pill-high, .pill-fail { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+details.hunk { border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 8px 0; }
+details.hunk summary { cursor: pointer; padding: 9px 14px; font-size: 13.5px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 8px; }
+details.hunk summary::-webkit-details-marker { display: none; }
+details.hunk summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); }
+details.hunk[open] summary::before { transform: rotate(45deg); }
+details.hunk pre { margin: 0; border: 0; border-top: 1px solid var(--line); border-radius: 0 0 6px 6px; }
+a.filelink { color: inherit; text-decoration: none; }
+a.filelink code { text-decoration: underline dotted; text-underline-offset: 2px; cursor: pointer; }
+a.filelink:hover code { background: var(--panel); }
+.filediffs { margin-top: 18px; }
+details.filediff summary code { background: none; padding: 0; font-weight: 600; font-size: 12.5px; word-break: break-all; }
+details.filediff summary .fstat { margin-left: auto; font-family: var(--mono); font-size: 12px; font-weight: 400; white-space: nowrap; }
+details.filediff summary .fadd { color: var(--ok); }
+details.filediff summary .fdel { color: var(--bad); }
+details.filediff summary a.gh { font-size: 12px; font-weight: 400; color: var(--muted); text-decoration: underline; white-space: nowrap; }
+details.filediff:target { outline: 2px solid var(--accent, var(--muted)); outline-offset: 2px; }
+.fnote { margin: 0; padding: 10px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+.hljs-addition { color: var(--ok); background: var(--ok-soft); display: inline-block; width: 100%; }
+.hljs-deletion { color: var(--bad); background: var(--bad-soft); display: inline-block; width: 100%; }
+.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-selector-tag { color: var(--hl-kw); }
+.hljs-string, .hljs-attr, .hljs-symbol { color: var(--hl-str); }
+.hljs-comment, .hljs-meta { color: var(--hl-cm); }
+.hljs-title, .hljs-type, .hljs-class .hljs-title { color: var(--hl-ty); }
+.hljs-number { color: var(--hl-num); }
+.scenario-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 18px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.scenario-title span:first-child { flex: 1; min-width: 200px; }
+.qa-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-right: 6px; }
+.qa-evidence, .qa-classification, .qa-not { font-size: 13.5px; }
+.qa-not { padding: 10px 14px; background: var(--warn-soft); border-left: 3px solid var(--warn); margin-top: 12px; }
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 10px 0 14px; }
+.figures figure { margin: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--code-bg); }
+.figures img { display: block; width: 100%; height: auto; }
+.figures figcaption { font-size: 12px; color: var(--muted); padding: 6px 10px; border-top: 1px solid var(--line); }
+.checklist { list-style: none; padding: 0; }
+.checklist li { margin: 0; border-bottom: 1px solid var(--line); }
+.checklist label { display: flex; gap: 12px; align-items: flex-start; padding: 9px 4px; cursor: pointer; }
+.checklist input { margin-top: 4px; accent-color: var(--accent); }
+.checklist input:checked + span { color: var(--muted); text-decoration: line-through; }
+.dform { display: flex; flex-direction: column; gap: 16px; margin-top: 12px; }
+fieldset.d { border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px 14px; margin: 0; background: var(--card); }
+fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
+.qsub { color: var(--muted); font-size: 13.5px; margin: 0 0 10px; }
+.opt { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); margin: 6px 0; cursor: pointer; }
+.opt.inline { display: inline-flex; margin-right: 8px; padding: 7px 12px; align-items: center; }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.opt input[type="radio"] { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
+.opt.inline input[type="radio"] { margin: 0; }
+.opt-body { display: flex; flex-direction: column; gap: 2px; }
+.opt-label { font-weight: 600; font-size: 14px; }
+.opt-detail { color: var(--muted); font-size: 13px; }
+.dform textarea { font: inherit; font-size: 14px; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; width: 100%; resize: vertical; margin-top: 8px; }
+.qfoot { display: flex; align-items: center; gap: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.qstatus { flex: 1; }
+.dform button { font: inherit; font-weight: 600; font-size: 14px; color: var(--paper); background: var(--accent); border: 0; border-radius: 5px; padding: 8px 16px; cursor: pointer; }
+.dform button[disabled] { opacity: 0.6; cursor: default; }
+.dform textarea:focus, .dform button:focus-visible, .opt input:focus-visible, .checklist input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hint { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; padding: 18px 16px 60px; }
+  nav.rail { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  nav.rail a { border-left: 0; border-bottom: 2px solid var(--line); padding: 4px 8px; }
+  nav.rail a.active { border-bottom-color: var(--accent); }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+<header class="topbar">
+  <span class="kind">Review</span>
+  <span class="ticket">{{TICKET}}</span>
+  <h1>{{TITLE}}</h1>
+  <div class="chips">{{CHIPS}}</div>
+</header>
+<div class="layout">
+  <nav class="rail" aria-label="Sections">{{NAV}}</nav>
+  <main>
+    {{SECTIONS}}
+    <p class="hint">Ticks and the decision sent from this page reach Claude on the next turn. The review is rebuilt and republished at this URL.</p>
+  </main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/gherkin.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/graphql.min.js"></script>
+<script>
+(function () {
+  if (window.hljs) { document.querySelectorAll('pre code[class*="language-"]').forEach(function (el) { hljs.highlightElement(el); }); }
+  var links = Array.prototype.slice.call(document.querySelectorAll('nav.rail a'));
+  var sections = Array.prototype.slice.call(document.querySelectorAll('.plan-section'));
+  function setActive(id) { links.forEach(function (a) { a.classList.toggle('active', a.dataset.target === id); }); }
+  if ('IntersectionObserver' in window) {
+    var visible = {};
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { visible[e.target.id] = e.isIntersecting ? e.boundingClientRect.top : null; });
+      var best = sections.filter(function (s) { return visible[s.id] !== null && visible[s.id] !== undefined; })
+        .sort(function (a, b) { return Math.abs(visible[a.id]) - Math.abs(visible[b.id]); })[0];
+      if (best) { setActive(best.id); }
+    }, { rootMargin: '-15% 0px -70% 0px', threshold: 0 });
+    sections.forEach(function (s) { io.observe(s); });
+  }
+  if (sections[0]) { setActive(sections[0].id); }
+  function openTarget(hash) {
+    if (!hash) { return; }
+    var el = document.getElementById(hash.replace(/^#/, ''));
+    if (el && el.tagName === 'DETAILS') { el.open = true; }
+  }
+  document.querySelectorAll('a.filelink').forEach(function (a) {
+    a.addEventListener('click', function () { openTarget(a.getAttribute('href')); });
+  });
+  document.querySelectorAll('details.filediff a.gh').forEach(function (a) {
+    a.addEventListener('click', function (e) { e.stopPropagation(); });
+  });
+  openTarget(location.hash);
+  window.addEventListener('hashchange', function () { openTarget(location.hash); });
+})();
+(async function () {
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('.checklist input[type="checkbox"]'));
+  var form = document.getElementById('dform');
+  var status = document.getElementById('dstatus');
+  var send = document.getElementById('dsend');
+  var db = (window.claude && typeof window.claude.use === 'function') ? await window.claude.use('db') : null;
+  if (!db) {
+    if (send) { send.hidden = true; }
+    if (status) { status.textContent = 'Decide in chat; this view cannot save.'; }
+    return;
+  }
+  try {
+    var rollout = await db.collection('rollout').get();
+    rollout.docs.forEach(function (d) {
+      var box = boxes.filter(function (b) { return b.dataset.step === d.id; })[0];
+      if (box && d.data()) { box.checked = !!d.data().done; }
+    });
+    var review = await db.collection('review').get();
+    review.docs.forEach(function (d) {
+      var a = d.data() || {};
+      if (d.id === 'decision') {
+        var v = form.querySelector('input[name="verdict"][value="' + a.verdict + '"]');
+        if (v) { v.checked = true; }
+        form.querySelector('textarea[name="notes"]').value = a.notes || '';
+        status.textContent = 'Decision on file: ' + (a.verdict === 'approve' ? 'approved' : 'changes requested') + '.';
+      } else {
+        var r = form.querySelector('input[name="' + d.id + '"][value="' + a.action + '"]');
+        if (r) { r.checked = true; }
+      }
+    });
+  } catch (e) { if (status) { status.textContent = 'Saved state could not be loaded.'; } }
+  boxes.forEach(function (box) {
+    box.addEventListener('change', async function () {
+      try { await db.doc('rollout/' + box.dataset.step).set({ done: box.checked, at: new Date().toISOString() }); }
+      catch (e) { box.checked = !box.checked; }
+    });
+  });
+  if (!form) { return; }
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var verdict = form.querySelector('input[name="verdict"]:checked');
+    if (!verdict) { status.textContent = 'Pick approve or request changes first.'; return; }
+    send.disabled = true;
+    status.textContent = 'Sending...';
+    try {
+      await db.doc('review/decision').set({ verdict: verdict.value, notes: form.querySelector('textarea[name="notes"]').value.trim(), decidedAt: new Date().toISOString() });
+      var findings = Array.prototype.slice.call(form.querySelectorAll('fieldset.finding'));
+      for (var i = 0; i < findings.length; i++) {
+        var fid = findings[i].dataset.fid;
+        var picked = findings[i].querySelector('input:checked');
+        if (picked) { await db.doc('review/' + fid).set({ finding: findings[i].querySelector('legend').textContent, action: picked.value, decidedAt: new Date().toISOString() }); }
+      }
+      status.textContent = 'Sent. Tell Claude "decided" to continue.';
+    } catch (err) { status.textContent = 'Send failed: ' + ((err && err.message) || err); }
+    send.disabled = false;
+  });
+})();
+</script>
