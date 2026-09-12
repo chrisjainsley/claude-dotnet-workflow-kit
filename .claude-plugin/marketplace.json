@@ -12,7 +12,7 @@
       "name": "dotnet-workflow-kit",
       "source": "./",
       "description": "Plan and review pages as Claude Artifacts, a profile-driven setup, ticket start, QA report and notes, a three-phase mega-review and the /next delivery pipeline",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "license": "MIT",
       "keywords": [
         "dotnet",
