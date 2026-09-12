@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -10,21 +11,31 @@ from conftest import SETUP_PY, run_py
 KIT_PLUGIN = "dotnet-claude-kit"
 
 
-def minimal_path_env():
-    """A PATH with the python interpreter and OS essentials, but no claude/az/gh."""
+def minimal_path_env(tmp_path):
+    """A PATH with the python interpreter and OS essentials, but no claude/az/gh.
+
+    On POSIX /usr/bin often carries az and gh (GitHub runners do), so instead of adding
+    it wholesale the test links only the tools setup needs into a private bin folder.
+    """
     python_dir = str(Path(sys.executable).resolve().parent)
     parts = [python_dir]
     if os.name == "nt":
         system_root = os.environ.get("SystemRoot", r"C:\Windows")
         parts += [os.path.join(system_root, "System32"), system_root]
     else:
-        parts += ["/usr/bin", "/bin"]
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        for tool in ("sh", "git", "env", "uname"):
+            found = shutil.which(tool)
+            if found and not (bin_dir / tool).exists():
+                (bin_dir / tool).symlink_to(found)
+        parts.append(str(bin_dir))
     return os.pathsep.join(parts)
 
 
 def run_setup(tmp_path, *args, home=None, cwd=None, input=None):
     env = {
-        "PATH": minimal_path_env(),
+        "PATH": minimal_path_env(tmp_path),
         "HOME": str(home or tmp_path),
         "USERPROFILE": str(home or tmp_path),
     }
