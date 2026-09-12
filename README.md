@@ -7,7 +7,7 @@ word budgets, so you can read the proposed work and the results before approving
 One project profile sets your architecture, tests, tracker and QA workflow. Use the
 six skills together or on their own, with or without a ticket tracker or the Artifact tool.
 
-[Install](#install) | [Workflow](#workflow) | [Skills](#skills) | [/goal](#running-with-goal) | [Profile reference](#profile-reference) | [dotnet-claude-kit](#dotnet-claude-kit) | [Contributing](#contributing)
+[Install](#install) | [Workflow](#workflow) | [Skills](#skills) | [/goal](#running-with-goal) | [Branding](#branding) | [Profile reference](#profile-reference) | [dotnet-claude-kit](#dotnet-claude-kit) | [Contributing](#contributing)
 
 ## Install
 
