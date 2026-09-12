@@ -7,7 +7,7 @@ Usage:
 
 `--kind plan|review` picks the rule set; without it the kind is inferred from the
 ## section names, then from the front matter. Plan sections and caps come from the
-profile's architecture (scripts/profile.py); review sections are the same for every
+profile's architecture (scripts/kit_profile.py); review sections are the same for every
 architecture, and --profile is accepted there so the command lines match.
 
 Exit 0 when every check passes, 1 otherwise. Prints one table so the author sees
@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from profile import add_profile_arg, plan_sections, resolve_profile  # noqa: E402
+from kit_profile import add_profile_arg, plan_sections, resolve_profile  # noqa: E402
 
 SIZE_MULTIPLIER = {"small": 0.6, "standard": 1.0, "large": 1.5}
 

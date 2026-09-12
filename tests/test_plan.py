@@ -91,3 +91,36 @@ def test_given_vertical_profile_then_check_expects_slice_sections(tmp_path, plan
 
     assert code == 1
     assert "Slice" in out
+
+
+VERTICAL_FIXTURE_PATH = FIXTURES_DIR / "plan-vertical.md"
+VERTICAL_PROFILE_PATH = FIXTURES_DIR / "profile-vertical.json"
+VERTICAL_SECTIONS = [
+    "Context", "Requirement", "Specs", "Slice", "Persistence", "Integration",
+    "Endpoint", "Tests", "Decisions", "Risks and rollout", "Open questions",
+]
+
+
+def test_given_vertical_fixture_then_check_passes():
+    code, out, err = run_py(CHECK_PLAN_PY, VERTICAL_FIXTURE_PATH, "--profile", VERTICAL_PROFILE_PATH)
+
+    assert code == 0, out + err
+    assert "OK" in out
+
+
+def test_given_vertical_fixture_then_build_renders_all_sections(tmp_path):
+    out_path = tmp_path / "plan-vertical.html"
+
+    code, out, err = run_py(BUILD_PLAN_PY, VERTICAL_FIXTURE_PATH, "--out", out_path)
+
+    assert code == 0, out + err
+    html = out_path.read_text(encoding="utf-8")
+    for name in VERTICAL_SECTIONS:
+        assert f"<h2>{name}</h2>" in html, name
+
+
+def test_given_vertical_fixture_with_clean_profile_then_check_fails():
+    code, out, err = run_py(CHECK_PLAN_PY, VERTICAL_FIXTURE_PATH)
+
+    assert code == 1
+    assert "sections must be exactly" in out

@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-import profile as profile_mod
+import kit_profile as profile_mod
 
 
 def fresh_defaults():

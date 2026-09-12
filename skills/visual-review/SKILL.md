@@ -10,22 +10,17 @@ was promised against what shipped, where the code moved, what a reviewer flagged
 QA proved, and what has to happen at rollout. One artifact, one link at the checkpoint,
 one decision form whose answer comes back to this session.
 
-The budget rules from `visual-plan` apply. A standard review is about 1,400 prose
-words, code excluded, with at most eight collapsed diff hunks. Every file named in the
-Changes tables opens its full diff on the page, so the reviewer never has to leave it;
-the hunks you write are the ones that carry a decision.
-
 `SKILL_DIR` below means the base directory shown at the top of this skill. The plugin
 root is two levels above it; adapters live at `<plugin root>/adapters/`.
 
 ## Profile
 
-Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It decides:
+Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It decides:
 
 - `scm`: how to find the PR, its base, checks and threads. Read `adapters/scm/<value>.md`.
 - `tracker` and `qa.evidence`: where the QA report goes on approve. Read
   `adapters/tracker/<value>.md` and `adapters/qa/<qa.owner>.md`.
-- `architecture`: the slice names in the Changes tables (`scripts/profile.py` lists them;
+- `architecture`: the slice names in the Changes tables (`scripts/kit_profile.py` lists them;
   clean uses Domain, Application, Infrastructure, API, Tests).
 - `stack.*`: what belongs in Contracts and coordination (schema, events, migrations,
   configuration). Load `adapters/stack/<field>.md` and use the `<value>` section for
@@ -74,7 +69,8 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It dec
    ```bash
    python "SKILL_DIR/scripts/check_review.py" plans/<slug>/review.md
    ```
-7. **Cut pass** with the brief below, applied by a cheaper subagent or by you.
+7. **Cut pass** with the review brief in `docs/writing-rules.md`, applied by a cheaper
+   subagent or by you.
 8. **Build** from the repository root with the branch checked out and the base fetched:
    ```bash
    python "SKILL_DIR/scripts/build_review.py" plans/<slug>/review.md --out plans/<slug>/review.html
@@ -123,29 +119,8 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It dec
 
 ## Writing rules
 
-The `visual-plan` rules carry over: code beats prose about code, each fact lives in
-one place, no containers except the generated ones, verified names only, the page
-stands alone, plain sentences under 25 words, no em dashes. Three rules are specific
-to reviews:
-
-- **Numbers agree.** A tile that says 11/11 while the QA table shows ten rows is worse
-  than no tile. When a tile counts underlying checks that the cards group into fewer
-  scenarios, say so in the tile note.
-- **Report what happened, not what should have.** A scenario that was not run is Not
-  covered, never Pass. A finding that was not fixed is open or accepted, never omitted.
-  If tests failed, the Verdict says not ready and why.
-- **Diffs carry a decision.** A hunk earns its place when the reviewer would decide
-  differently after reading it. Renames, moved usings and generated snapshots are
-  described in the file table, not shown.
-
-## Cut pass
-
-> Read this review as the person who has to decide whether the PR goes to QA today.
-> Delete every sentence whose removal would not change that decision or the QA team's
-> ability to re-test. Targets: narration of what a diff visibly does, restated plan
-> text, praise, a second statement of a fact, and any hunk that shows a rename or a
-> mechanical edit. Return the review with the deletions applied and a five-line list
-> of what you cut. Do not add content, reorder sections or soften a Fail.
+Follow `docs/writing-rules.md` in full, including the review-specific rules: numbers
+agree, report what happened rather than what should have, diffs carry a decision.
 
 ## Traps
 

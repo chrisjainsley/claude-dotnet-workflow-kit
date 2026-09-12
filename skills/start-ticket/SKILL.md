@@ -13,7 +13,7 @@ root is two levels above it; adapters live at `<plugin root>/adapters/`.
 
 ## Profile
 
-Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It decides:
+Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It decides:
 
 - `tracker`: how to parse the id and fetch the item. Read `adapters/tracker/<value>.md`,
   or `adapters/tracker/<value>/README.md` when the adapter is a folder (azure-boards

@@ -1,8 +1,8 @@
 # Vertical Slice
 
-Vertical slice architecture is defined in this kit but not yet exercised by the
-checker fixtures; treat the sections and slices below as the intended shape and expect
-rough edges until the fixtures catch up.
+Vertical slice architecture is defined in this kit and exercised by
+`tests/fixtures/plan-vertical.md`, which the checker and builder both run against in
+CI alongside the `clean` fixture.
 
 ## Plan sections
 

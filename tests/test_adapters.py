@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-import profile as profile_mod
+import kit_profile as profile_mod
 from conftest import ADAPTERS_DIR, REPO_ROOT
 
 DOCS_ADAPTERS = REPO_ROOT / "docs" / "adapters.md"

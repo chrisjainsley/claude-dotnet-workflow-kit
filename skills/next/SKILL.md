@@ -19,7 +19,7 @@ Every invocation:
 
 ## Profile
 
-Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It decides which adapter answers each stage:
+Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It decides which adapter answers each stage:
 
 - `tracker`, `tracker_project`: fetching, starting and updating the item; read `adapters/tracker/<value>.md`.
 - `scm`: finding, drafting, checking and threading the PR; read `adapters/scm/<value>.md`.

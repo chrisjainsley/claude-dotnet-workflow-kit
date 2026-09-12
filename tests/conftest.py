@@ -9,7 +9,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
-PROFILE_PY = SCRIPTS_DIR / "profile.py"
+PROFILE_PY = SCRIPTS_DIR / "kit_profile.py"
 SETUP_PY = SCRIPTS_DIR / "setup.py"
 RENDER_PY = SCRIPTS_DIR / "render.py"
 CHECK_PY = SCRIPTS_DIR / "check.py"

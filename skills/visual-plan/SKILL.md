@@ -5,22 +5,16 @@ description: Write a short, budgeted implementation plan for a work item and pub
 
 # Plan document
 
-The plan exists so the reviewer can approve or redirect in a five-minute read. Everything
-here serves that: a fixed section order that follows the dependency direction of the
-code, a word budget enforced by a script, and a cut pass before publishing.
-
-The budget is not decoration. Unbudgeted plans run 5,000 to 9,000 prose words, state
-each decision three times and list every test file in a tree. Nobody reads that before
-approving. A standard ticket gets about 1,100 prose words, code excluded. If the plan
-cannot fit, the ticket is too big or the plan carries material the implementer would
-never act on.
+The plan exists so the reviewer can approve or redirect in a five-minute read, using a
+fixed section order and a word budget enforced by a script, with a cut pass before
+publishing.
 
 `SKILL_DIR` below means the base directory shown at the top of this skill. The plugin
 root is two levels above it; adapters live at `<plugin root>/adapters/`.
 
 ## Profile
 
-Resolve the team's profile first: `python "SKILL_DIR/../../scripts/profile.py"` prints
+Resolve the team's profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"` prints
 it and where it came from (`.claude/dotnet-workflow-kit.json` in the project, then the
 user's `~/.claude`, then defaults). If it prints `source: defaults`, say so in the hand-off
 and suggest `/dotnet-workflow-kit:setup`. The profile decides:
@@ -64,8 +58,8 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
    ```
    Cut words; do not edit the script or raise caps. `size: large` only when the ticket
    changes three or more services; `size: small` for a bug or a one-file change.
-7. **Cut pass.** Spawn one subagent (a cheaper model is enough) with the brief in
-   "Cut pass" below. Name the source path read-only and give an absolute output
+7. **Cut pass.** Spawn one subagent (a cheaper model is enough) with the plan brief in
+   `docs/writing-rules.md`. Name the source path read-only and give an absolute output
    directory. Apply its deletions and rerun the check.
 8. **Build the page:**
    ```bash
@@ -97,7 +91,7 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
 Sections run from the requirement outward in the direction the code depends, so each
 layer names only what the layer inside it forced. The clean-architecture order is below;
 `adapters/architecture/vertical.md` gives the vertical-slice order (Slice, Persistence,
-Integration, Endpoint in place of the four middle rows) and `scripts/profile.py` holds
+Integration, Endpoint in place of the four middle rows) and `scripts/kit_profile.py` holds
 both lists. Tests, decisions, risks and questions come last because they cut across.
 
 | Section | Cap (standard) | What belongs |
@@ -136,37 +130,7 @@ stable across republishes or a stored answer no longer matches.
 
 ## Writing rules
 
-- **Code beats prose about code.** A signature, a contract diff or a Gherkin scenario
-  says more in fewer words than a paragraph describing it. Fenced code does not count
-  against the budget for exactly this reason.
-- **Each fact lives in one place.** A decision appears in Decisions, once. Rejected
-  alternatives get one clause, never their own comparison. No closing recap.
-- **No containers.** Paragraphs, bullets, tables and code are the whole vocabulary.
-- **Anchor to verified names.** Real file paths and symbols, one per sentence at most,
-  and only ones confirmed in step 3. Describe the rest in words.
-- **The plan stands alone.** No meeting dates, no "agreed with the FE team", no "unlike
-  the earlier draft". A reader with no chat history must understand the page.
-- **Do not restate the ticket.** The acceptance criteria are already on the work item;
-  Specs is their testable form, which is the useful translation.
-- **Plain sentences.** Under 25 words, active voice, no em dashes, no bold-lead
-  paragraphs, no "robust", "seamless", "leverage".
-- **Do not invent work to fill a layer.** "No change." is a complete section.
-
-## Cut pass
-
-Give the reviewer this brief and the plan text. Its job is deletion, not additions.
-
-> Read this implementation plan as the engineer who will build it tomorrow. Delete
-> every sentence whose removal would not change what you build, test, or ask about.
-> Targets: rationale for a decision nobody would question, restated ticket text, a
-> second statement of a fact already made, narration of what code visibly does,
-> adjectives, and any sentence that explains the plan rather than the change. Return
-> the plan with the deletions applied and a five-line list of what you cut and why.
-> Do not add content, reorder sections, or soften anything.
-
-Apply the deletions, then run the check again. If the reviewer also flags a missing
-decision that would change the build, add it as an Open question with a recommended
-default rather than a new paragraph.
+Follow `docs/writing-rules.md` in full: the budget philosophy and the writing rules.
 
 ## Traps
 

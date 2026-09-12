@@ -15,7 +15,7 @@ root is two levels above it; adapters live at `<plugin root>/adapters/`.
 
 ## Profile
 
-Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It decides:
+Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It decides:
 
 - `reviewers`: which Phase 1 reviewers run. The two built-ins, `bug-hunt` and
   `conventions`, are always present. `kit` adds `dotnet-claude-kit:code-review` and

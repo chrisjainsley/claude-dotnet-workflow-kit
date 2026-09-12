@@ -25,7 +25,7 @@ def test_given_skill_then_front_matter_names_it(name):
 def test_given_skill_then_it_resolves_the_profile(name):
     text = skill_text(name)
     assert "## Profile" in text, f"{name}: needs a Profile section"
-    assert "scripts/profile.py" in text, f"{name}: must resolve the profile through scripts/profile.py"
+    assert "scripts/kit_profile.py" in text, f"{name}: must resolve the profile through scripts/kit_profile.py"
 
 
 @pytest.mark.parametrize("name", SKILLS)

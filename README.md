@@ -281,10 +281,9 @@ The review page's verdict tiles, change diagram and decision form.
 
 `clean`, `ddd-clean` and `modular-monolith` all share the same plan section order and
 review slice names (Domain, Application, Infrastructure, API, Tests); the latter two
-describe different governance around that same structure. `vertical` is fully defined,
-with its own section order (Slice, Persistence, Integration, Endpoint, Tests), but it
-is not yet exercised by the test fixtures, so treat it as less proven than `clean`
-until fixtures cover it.
+describe different governance around that same structure. `vertical` has its own
+section order (Slice, Persistence, Integration, Endpoint, Tests) and is exercised by
+`tests/fixtures/plan-vertical.md` alongside the `clean` fixture.
 
 ## Repository layout
 
@@ -297,7 +296,7 @@ claude-dotnet-workflow-kit/
 │                     # tracker/azure-boards/ is a folder (README.md + fetch_context.py)
 ├── commands/         # setup.md, the /dotnet-workflow-kit:setup command
 ├── docs/             # this reference documentation
-├── scripts/          # profile.py, setup.py, render.py and check.py (shared by the
+├── scripts/          # kit_profile.py, setup.py, render.py and check.py (shared by the
 │                     # visual-plan and visual-review skills)
 ├── skills/           # start-ticket, visual-plan, mega-review (see
 │                     # skills/mega-review/reviewers/), next, qa-report (report and

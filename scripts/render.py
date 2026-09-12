@@ -62,9 +62,9 @@ FILE_STATS = {}
 USED_FILES = []
 WARNINGS = []
 
-LAYER_OF = {
-    "Requirement": 0, "Specs": 0, "Domain": 1, "Application": 2,
-    "Infrastructure": 3, "API": 4,
+NON_LAYER_SECTIONS = {
+    "Context", "Requirement", "Specs", "Tests", "Decisions",
+    "Risks and rollout", "Open questions",
 }
 SHORT = {
     "Risks and rollout": "Risks", "Open questions": "Questions",
@@ -580,9 +580,9 @@ def parse(text, kind=None):
     return meta, output, len(open_findings)
 
 
-def onion_svg(active):
+def onion_svg(active, total=5):
     rings = []
-    for idx in range(5):
+    for idx in range(total):
         r = 6 + idx * 6
         cls = "ring active" if active == idx else "ring"
         rings.append(f'<circle class="{cls}" cx="32" cy="32" r="{r}"/>')
@@ -598,13 +598,25 @@ def render_chip(key, value):
     return f'<span class="chip"><span class="chip-key">{key}</span>{rendered}</span>'
 
 
+def layer_map(sections):
+    """Assign onion-ring indices to the architecture-layer sections, in document order.
+
+    Any section not in NON_LAYER_SECTIONS is treated as a layer, so an architecture
+    profile can name its own middle sections (Domain/Application/... or
+    Slice/Persistence/...) without the renderer knowing their names in advance.
+    """
+    layers = [name for name, _ in sections if name not in NON_LAYER_SECTIONS]
+    return {name: idx for idx, name in enumerate(layers)}
+
+
 def build(meta, sections, template, count=0):
     nav, parts = [], []
+    layers = layer_map(sections) if KIND == "plan" else {}
     for name, body in sections:
         sid = slug(name)
-        layer = LAYER_OF.get(name) if KIND == "plan" else None
+        layer = layers.get(name) if KIND == "plan" else None
         layer_attr = "" if layer is None else f' data-layer="{layer}"'
-        marker = onion_svg(layer) if KIND == "plan" else ""
+        marker = onion_svg(layer, len(layers)) if KIND == "plan" else ""
         nav.append(f'<a href="#{sid}" data-target="{sid}">{html.escape(SHORT.get(name, name))}</a>')
         parts.append(
             f'<section class="plan-section" id="{sid}"{layer_attr}>'

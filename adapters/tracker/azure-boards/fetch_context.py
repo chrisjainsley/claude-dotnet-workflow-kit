@@ -149,7 +149,7 @@ def resolve_org_project(org, project):
     ORG = (org or ORG or defaults.get("organization", "")).rstrip("/")
     if not project and not PROJECT:
         sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
-        from profile import resolve_profile
+        from kit_profile import resolve_profile
         project = resolve_profile().get("tracker_project", "")
     PROJECT = project or PROJECT or defaults.get("project", "")
     if not ORG or not PROJECT:

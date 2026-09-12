@@ -16,7 +16,7 @@ root is two levels above it; adapters live at `<plugin root>/adapters/`.
 
 ## Profile
 
-Resolve the profile first: `python "SKILL_DIR/../../scripts/profile.py"`. It decides:
+Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It decides:
 
 - `qa.evidence`: where the report or the notes go after approval: `work-item` (the
   tracker adapter), `pr-comment` (the scm adapter), or `none` (print only, nowhere to

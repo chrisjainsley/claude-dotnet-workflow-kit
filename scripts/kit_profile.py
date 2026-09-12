@@ -5,10 +5,10 @@ A profile is JSON at `.claude/dotnet-workflow-kit.json` in the project (committe
 by the team) or at `~/.claude/dotnet-workflow-kit.json` (personal fallback). Setup writes
 it; skills and the check/build scripts only read it.
 
-    from profile import resolve_profile, plan_sections
+    from kit_profile import resolve_profile, plan_sections
     profile = resolve_profile(Path.cwd())
 
-Run directly to print the resolved profile:  python profile.py [--profile <file>]
+Run directly to print the resolved profile:  python kit_profile.py [--profile <file>]
 """
 import argparse
 import json

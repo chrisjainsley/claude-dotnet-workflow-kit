@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from profile import (  # noqa: E402
+from kit_profile import (  # noqa: E402
     BUILT_IN_REVIEWERS, ENUMS, NEEDS, NEEDS_MCP, add_profile_arg, get, resolve_profile, validate,
 )
 

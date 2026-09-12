@@ -97,7 +97,7 @@ Read by both document skills for section and slice naming. Headings:
   where domain logic is allowed to live, what counts as a layering violation).
 
 `ddd-clean` and `modular-monolith` reuse `clean`'s plan sections and review slices
-(`scripts/profile.py` aliases both onto the `clean` lists) but keep their own file so
+(`scripts/kit_profile.py` aliases both onto the `clean` lists) but keep their own file so
 "what the reviewer looks for" can describe their extra rules, such as aggregate
 boundaries or module isolation, without overloading the `clean` file.
 
@@ -150,13 +150,13 @@ heading set:
 
 ## Adding a new value
 
-1. Add the new value to the matching entry in `ENUMS` in `scripts/profile.py`, and to
+1. Add the new value to the matching entry in `ENUMS` in `scripts/kit_profile.py`, and to
    `PLAN_SECTIONS` or `REVIEW_SLICES` too if it is a new `architecture`.
 2. Write `adapters/<concern>/<value>.md` (a new `## <value>` section in
    `adapters/stack/<field>.md` for a stack value) with
    every heading its concern requires, listed above.
 3. If dotnet-claude-kit has a skill that matches the new value, add a `NEEDS` entry in
-   `scripts/profile.py` so setup recommends it; add a `NEEDS_MCP` entry too if that
+   `scripts/kit_profile.py` so setup recommends it; add a `NEEDS_MCP` entry too if that
    skill depends on an MCP server the kit does not ship itself.
 4. Add a fixture under `tests/` that resolves a profile carrying the new value and
    asserts the right adapter file loads, so a later refactor cannot silently drop it.
