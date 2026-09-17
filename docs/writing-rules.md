@@ -1,6 +1,6 @@
 # Writing rules
 
-Shared by `visual-plan` and `visual-review`. Both build a budgeted Artifact document,
+Shared by `plan` and `review`. Both build a budgeted Artifact document,
 and both enforce these rules with a cut pass before publishing.
 
 ## Budget philosophy

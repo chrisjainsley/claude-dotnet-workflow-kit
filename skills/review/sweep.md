@@ -1,21 +1,20 @@
----
-name: mega-review
-description: Comprehensive pre-PR review that runs every reviewer the profile enables against the current branch diff, using parallel sub-agents for the read-only pass. Always includes two built-in reviewers, bug-hunt and conventions, plus whatever optional reviewers the profile turns on. Use whenever the user says "mega review", "full review", "review everything", "pre-PR check", or when the kit's pipeline reaches the Review stage. Prefer this over invoking individual review skills one at a time when the user wants a broad sweep.
----
-
-# Mega review
+# The reviewer sweep
 
 A single pre-PR sweep that fans out across every reviewer the profile enables, then
 consolidates the results into one report. Read-only reviewers run in parallel
 sub-agents, mutating cleanup runs sequentially in the main agent afterward so two tools
 never fight over the same file, and verification runs last on the cleaned tree.
 
-`SKILL_DIR` below means the base directory shown at the top of this skill. The plugin
-root is two levels above it; adapters live at `<plugin root>/adapters/`.
+Two skills run it. `implement` runs it at the end of the Implement stage so findings are
+fixed before anything is tested. `review` runs it when the pipeline state holds no sweep
+newer than the branch's latest commit, so a branch nobody implemented in this session
+can still be reviewed cold. `SKILL_DIR` below means the base directory of the skill
+that is running the sweep; the reviewer briefs live at
+`<plugin root>/skills/review/reviewers/`, and adapters at `<plugin root>/adapters/`.
 
 ## Profile
 
-Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It decides:
+The profile decides:
 
 - `reviewers`: which Phase 1 reviewers run. The two built-ins, `bug-hunt` and
   `conventions`, are always present. `kit` adds `dotnet-claude-kit:code-review` and
@@ -36,7 +35,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 Any reviewer whose skill or plugin is missing is recorded as `skipped: <reason>` and the
 run continues.
 
-## Workflow
+## Steps
 
 1. **Resolve the base and confirm there is a diff.** Use the scm adapter:
    ```bash
@@ -45,9 +44,9 @@ run continues.
    git diff --stat "origin/$base...HEAD"
    ```
    If the diff is empty, stop and say so. If it is under 30 changed lines total, do not
-   fan out; tell the user the diff is too small for the orchestration overhead and
-   suggest a single targeted reviewer instead (`conventions` for a rules check,
-   `bug-hunt` for a defect pass).
+   fan out; tell the user the diff is too small for the orchestration overhead and run
+   a single targeted reviewer instead (`conventions` for a rules check, `bug-hunt` for
+   a defect pass).
 2. **Confirm the working tree is clean.** `git status --short`. If dirty, list the files
    and ask whether to stash and continue or abort. Do this before spawning any sub-agent
    so Phase 1 time is never wasted on a run the user then aborts.
@@ -84,10 +83,11 @@ run continues.
      `testing.acceptance`. A build failure stops here; do not run tests against code
      that does not compile.
 7. **Write the pipeline state.** Save the consolidated findings to
-   `~/.claude/dotnet-workflow-kit/pipeline/<slug>.json` under the key `megaReview`, as
-   `{"done": true, "findings": [...], "skipped": [...]}`, one entry per reviewer in each
-   list. The `visual-review` skill reads this key and copies it into its Findings
-   section instead of re-running a review.
+   `~/.claude/dotnet-workflow-kit/pipeline/<slug>.json` under the key `sweep`, as
+   `{"at": "<ISO time>", "commit": "<HEAD sha>", "findings": [...], "skipped": [...]}`,
+   one entry per reviewer in each list. The `review` skill reads this key and copies it
+   into its Findings section instead of re-running a review; a `commit` older than
+   HEAD means the sweep is stale and must run again.
 8. **Report** the consolidated report described below, in chat.
 
 ## Consolidated report
@@ -95,7 +95,7 @@ run continues.
 One report, one table, under 600 words total.
 
 ```
-# Mega-review report: <branch>
+# Sweep report: <branch>
 
 ## Verdict
 <READY FOR PR | NEEDS WORK | BLOCKED>
@@ -127,7 +127,7 @@ Status is `fixed` (Phase 2 addressed it), `accepted` (left as-is, with a reason)
 ## Guardrails
 
 - Do not run on a clean branch; no diff means nothing to review.
-- Do not push or open PRs. Mega-review only reports and cleans locally.
+- Do not push or open PRs. The sweep only reports and cleans locally.
 - Do not loop. If a phase fails twice, stop and surface the failure instead of retrying.
 - Before Phase 2, the tree must be clean of unrelated uncommitted edits, so the user's
   mid-flight work never gets bundled into a cleanup commit.

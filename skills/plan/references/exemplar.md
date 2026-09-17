@@ -1,6 +1,6 @@
 # Exemplar: AB#17444 re-cut to budget
 
-The original visual-plan output for this ticket ran 3,373 prose words with a flow
+The original plan-skill output for this ticket ran 3,373 prose words with a flow
 diagram, a data model, three annotated code tabs and a question form. This is the
 same plan at about 800 prose words. Nothing an implementer would act on differently was
 lost. Use it as the bar for density, section shape and tone; do not copy its content.

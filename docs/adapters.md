@@ -3,7 +3,7 @@
 An adapter is a markdown file that tells a skill how to do something in terms of the
 tool the team actually uses. Skills never branch on a profile value themselves; they
 resolve the profile, then read the adapter file the value points to and follow it.
-This keeps `visual-plan` and `visual-review` identical across a GitHub team on
+This keeps `plan` and `review` identical across a GitHub team on
 Azure Boards and a team that lives entirely in GitHub Issues.
 
 ## The pattern
@@ -43,12 +43,12 @@ actually touches.
 
 Values: `azure-boards`, `github-issues`, `jira`, `none`.
 
-Read by both document skills to fetch a ticket, and by `visual-review` to post the
+Read by both document skills to fetch a ticket, and by `review` to post the
 QA report on approve. Each file has these headings:
 
 - **Fetch a ticket** - the command or API call that returns a ticket's title,
   acceptance criteria and, for a bug, its repro steps.
-- **Start work** - how `start-ticket` assigns the ticket and moves it to an active
+- **Start work** - how `start` assigns the ticket and moves it to an active
   state.
 - **Context for the plan** - how to pull a parent feature, sibling stories and design
   links for the plan's collapsed Context section.
@@ -60,14 +60,14 @@ QA report on approve. Each file has these headings:
 the ticket, and `qa.evidence` cannot be `work-item` when `tracker` is `none`.
 
 `azure-boards` ships as a folder, `adapters/tracker/azure-boards/`, with the four
-headings above in its `README.md` plus `fetch_context.py`, the script `visual-plan`
+headings above in its `README.md` plus `fetch_context.py`, the script `plan`
 runs for the plan's Context section. The other tracker values are plain files.
 
 ### scm
 
 Values: `github`, `azure-repos`.
 
-Read by `visual-review` to find the PR and by `start-ticket` to open one. Headings:
+Read by `review` to find the PR and by `start` to open one. Headings:
 
 - **Find the PR and base** - the command that returns the PR's base branch, checks and
   merge state, including the stacked-PR case where the real base is not the default
@@ -86,13 +86,13 @@ Values: `clean`, `vertical`, `ddd-clean`, `modular-monolith`.
 
 Read by both document skills for section and slice naming. Headings:
 
-- **Plan sections** - the section list and word caps `visual-plan` uses beyond
+- **Plan sections** - the section list and word caps `plan` uses beyond
   the shared Context, Requirement, Specs, Tests, Decisions, Risks and rollout, and
   Open questions; for `clean` these are Domain, Application, Infrastructure, API, for
   `vertical` they are Slice, Persistence, Integration, Endpoint.
 - **Review slices** - the same layer names as they appear as Slice values in the
   review's per-service Changes tables.
-- **What the reviewer looks for** - the architectural rules `mega-review` and the
+- **What the reviewer looks for** - the architectural rules the reviewer sweep and the
   review's Findings section check for in this architecture (dependency direction,
   where domain logic is allowed to live, what counts as a layering violation).
 
@@ -105,7 +105,7 @@ boundaries or module isolation, without overloading the `clean` file.
 
 Values: `qa-team`, `self`, `none`.
 
-Read by `visual-review` to write the QA report and route the hand-off. Headings:
+Read by `review` to write the QA report and route the hand-off. Headings:
 
 - **Who signs off** - who is expected to run QA and who has authority to approve.
 - **What the QA report must contain** - the scenario format, evidence expectations,
@@ -132,7 +132,7 @@ those describes a piece of the system's shape:
 - **Review: contracts and coordination** - what this stack choice puts in the review's
   Contracts and coordination table (schema changes, event topics, migrations,
   configuration keys) and who else has to move for it.
-- **Common findings** - the mistakes `mega-review` and the review's Findings section
+- **Common findings** - the mistakes the reviewer sweep and the review's Findings section
   should flag for this choice (an N+1 query for `ef-core`, a missing idempotency key
   for `masstransit`, an unhandled `Result` for `result`-style errors).
 
