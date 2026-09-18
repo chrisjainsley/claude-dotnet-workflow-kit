@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILLS = ("visual-plan", "visual-review", "start-ticket", "qa-report", "mega-review", "next")
+SKILLS = ("start", "plan", "implement", "test", "review", "next")
+OLD_NAMES = ("start-ticket", "visual-plan", "mega-review", "qa-report", "visual-review")
 FRONT_MATTER = re.compile(r"^---\nname: (?P<name>[a-z0-9-]+)\ndescription: (?P<description>.+?)\n---\n", re.S)
 
 
@@ -36,24 +37,58 @@ def test_given_skill_then_no_owner_specifics(name):
         assert banned not in text, f"{name}: contains owner-specific text {banned!r}"
 
 
-def test_given_mega_review_then_built_in_reviewers_ship():
-    reviewers = REPO_ROOT / "skills" / "mega-review" / "reviewers"
+def test_given_review_then_built_in_reviewers_ship():
+    reviewers = REPO_ROOT / "skills" / "review" / "reviewers"
     for name in ("bug-hunt", "conventions"):
         path = reviewers / f"{name}.md"
         assert path.exists(), f"missing built-in reviewer {name}"
         assert len(path.read_text(encoding="utf-8").split()) >= 250
 
 
+def test_given_review_then_sweep_reference_ships():
+    sweep = REPO_ROOT / "skills" / "review" / "sweep.md"
+    assert sweep.exists(), "the reviewer sweep must live at skills/review/sweep.md"
+    text = sweep.read_text(encoding="utf-8")
+    for phase in ("Phase 1", "Phase 2", "Phase 3"):
+        assert phase in text
+    assert "reviewers/bug-hunt.md" in text and "reviewers/conventions.md" in text
+
+
+def test_given_implement_then_it_runs_the_sweep():
+    text = skill_text("implement")
+    assert "sweep.md" in text, "implement must run the reviewer sweep from skills/review/sweep.md"
+    assert "testing.tdd" in text
+    assert "pipeline.execute" in text
+
+
+def test_given_test_then_it_runs_scenarios_and_reports():
+    text = skill_text("test")
+    assert "adapters/qa/" in text
+    assert "qa.deploy_label" in text
+    assert "Unit and integration suites are never QA evidence" in text
+
+
 def test_given_next_then_stage_table_names_kit_skills_only():
     text = skill_text("next")
-    for kit_skill in ("start-ticket", "visual-plan", "mega-review", "visual-review"):
+    for kit_skill in ("start", "plan", "implement", "test", "review"):
         assert f"dotnet-workflow-kit:{kit_skill}" in text
     assert "dotnet-workflow-kit/pipeline" in text, "state file must live under ~/.claude/dotnet-workflow-kit/pipeline"
     for field in ("pipeline.execute", "pipeline.resolve_comments", "pipeline.qa"):
         assert field in text, f"next must read {field} from the profile"
+    for old_key in ("startTicket", "megaReview", "draftPr", "resolveComments"):
+        assert old_key in text, f"next must migrate the 0.5.0 state key {old_key}"
+
+
+@pytest.mark.parametrize("name", SKILLS)
+def test_given_skill_then_no_old_skill_name_in_prose(name):
+    """Old names survive only inside the description, as trigger phrases."""
+    text = skill_text(name)
+    body = FRONT_MATTER.sub("", text, count=1)
+    for old in OLD_NAMES:
+        assert old not in body, f"{name}: body still names the old skill {old!r}"
 
 
 def test_given_tracker_skills_then_they_defer_to_adapters():
-    for name in ("start-ticket", "qa-report"):
+    for name in ("start", "test"):
         text = skill_text(name)
         assert "adapters/tracker/" in text, f"{name}: tracker calls must go through adapters/tracker/<tracker>.md"

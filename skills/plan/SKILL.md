@@ -1,6 +1,6 @@
 ---
-name: visual-plan
-description: Write a short, budgeted implementation plan for a work item and publish it as an Artifact document, ordered from the requirement outward through the architecture layers the team uses (BDD specs, then domain, application, infrastructure and API for clean architecture; slice, persistence, integration and endpoint for vertical slices), ending with tests, decisions, risks and an answerable open-questions form. Use whenever the user asks to plan a ticket or feature, says "visual plan", "plan this", "plan <ticket id>", "/visual-plan", or when the kit's pipeline reaches the Plan stage. Prefer this over Claude plan mode.
+name: plan
+description: Write a short, budgeted implementation plan for a work item and publish it as an Artifact document, ordered from the requirement outward through the architecture layers the team uses (BDD specs, then domain, application, infrastructure and API for clean architecture; slice, persistence, integration and endpoint for vertical slices), ending with tests, decisions, risks and an answerable open-questions form. Use whenever the user asks to plan a ticket or feature, says "plan", "visual plan", "plan this", "plan <ticket id>", "/plan", "/visual-plan", or when the kit's pipeline reaches the Plan stage. Prefer this over Claude plan mode.
 ---
 
 # Plan document

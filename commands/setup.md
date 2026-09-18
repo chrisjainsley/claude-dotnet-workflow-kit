@@ -30,7 +30,7 @@ skill reads; see the README's profile reference for each field.
      label, QA environment name, messaging (masstransit, wolverine, service-bus, none),
      error handling (result, exceptions), and the optional pipeline commands `/next` runs
      for Execute, Resolve comments and QA (blank means the built-in fallback).
-   - Group 5, reviewers: a multi-select of extra mega-review reviewers (kit,
+   - Group 5, reviewers: a multi-select of extra reviewer-sweep reviewers (kit,
      security-scan, convention-learner, code-review-workflow). Say that
      code-review-workflow needs a Roslyn MCP server and whether one was detected. The two
      built-ins, bug-hunt and conventions, are always on.
@@ -48,7 +48,7 @@ skill reads; see the README's profile reference for each field.
    and the plugin is missing, recommend it and ask the user whether to install. On yes,
    rerun with `--yes` and without `--no-install`; it adds the marketplace and installs
    the plugin, which loads on the next Claude Code start. On no, the profile records
-   the gap and mega-review reports those reviewers as skipped.
+   the gap and the reviewer sweep reports those reviewers as skipped.
 
 5. **Confirm** by printing the written path and a short table of the profile. Suggest
    committing the project file so the team shares one workflow. If no `CLAUDE.md`

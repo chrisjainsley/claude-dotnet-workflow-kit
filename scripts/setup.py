@@ -53,7 +53,7 @@ QUESTIONS = [
     ("pipeline.execute", "Command the pipeline runs for the Execute stage (blank: implement the plan by hand)", None),
     ("pipeline.resolve_comments", "Command for the Resolve comments stage (blank: built-in scm adapter steps)", None),
     ("pipeline.qa", "Command for the QA stage (blank: run the plan's Specs manually)", None),
-    ("reviewers", "Extra mega-review reviewers, comma separated (" + ", ".join(OPTIONAL_REVIEWERS) + ")", None),
+    ("reviewers", "Extra reviewer-sweep reviewers, comma separated (" + ", ".join(OPTIONAL_REVIEWERS) + ")", None),
     ("artifacts", "Is the Claude Artifact tool available (yes/no)", None),
     ("branding", "Show Delivery Labs colours and attribution on the pages (yes/no)", None),
 ]

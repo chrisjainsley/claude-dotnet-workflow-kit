@@ -7,7 +7,7 @@ files instead of a published, interactive page.
 
 ## What still happens
 
-`visual-plan` and `visual-review` build the exact same `plan.html` and
+`plan` and `review` build the exact same `plan.html` and
 `review.html` either way. The section content, the word budgets, the mermaid diagram
 in the review, the per-file diff links, all of that comes from the same markdown and
 the same build scripts regardless of `artifacts`. The only thing that changes is the

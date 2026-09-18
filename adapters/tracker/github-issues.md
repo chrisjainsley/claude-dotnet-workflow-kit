@@ -36,7 +36,7 @@ Post the QA report section as an issue comment, never by closing or reopening th
 issue:
 
 ```bash
-gh issue comment <number> --repo example-org/example-repo --body-file qa-report.md
+gh issue comment <number> --repo example-org/example-repo --body-file report.md
 ```
 
 Keep the text plain ASCII, use `--` for dashes, and use no emoji. Do not reference a PR

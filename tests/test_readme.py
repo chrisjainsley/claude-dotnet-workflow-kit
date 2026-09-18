@@ -10,13 +10,14 @@ pytestmark = pytest.mark.skipif(
 )
 
 SKILL_NAMES = (
-    "visual-plan",
-    "visual-review",
-    "start-ticket",
-    "qa-report",
-    "mega-review",
+    "start",
+    "plan",
+    "implement",
+    "test",
+    "review",
     "next",
 )
+OLD_NAMES = ("start-ticket", "visual-plan", "mega-review", "qa-report", "visual-review")
 
 
 def readme_text():
@@ -36,8 +37,17 @@ def test_given_profile_defaults_then_readme_lists_every_field():
 def test_given_six_skills_then_readme_has_a_section_each():
     text = readme_text()
     headings = re.findall(r"(?m)^###\s+(.+)$", text)
-    missing = [name for name in SKILL_NAMES if not any(name in heading for heading in headings)]
+    missing = [name for name in SKILL_NAMES if not any(heading.strip() == name for heading in headings)]
     assert missing == [], f"README.md is missing an H3 section for: {missing}"
+
+
+def test_given_rename_then_readme_table_lists_every_old_name():
+    text = readme_text()
+    parts = text.split("## Renamed in 0.6.0", 1)
+    assert len(parts) == 2, "README.md needs a 'Renamed in 0.6.0' section"
+    table = parts[1].split("\n## ", 1)[0]
+    missing = [old for old in OLD_NAMES if f"`{old}`" not in table]
+    assert missing == [], f"rename table is missing: {missing}"
 
 
 def test_given_readme_then_install_commands_present():
