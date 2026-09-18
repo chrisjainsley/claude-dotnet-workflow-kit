@@ -89,7 +89,8 @@ On an Artifact page, choose answers and press **Send answers**, then tell the se
 Use to review a branch or PR. It combines the approved plan, actual diff,
 mega-review findings and QA evidence into `review.md` and `review.html`.
 
-The page includes verdict counts, plan versus delivered, a change diagram, file links
+The page includes verdict counts, plan versus delivered, a change diagram (click it
+to open full size), file links
 to full diffs, findings, the QA report and a rollout checklist. Choose **Approve** or
 **Request changes**, press **Send decision**, then tell the session "decided".
 The skill reads the decision and each open finding's fix or accept choice.

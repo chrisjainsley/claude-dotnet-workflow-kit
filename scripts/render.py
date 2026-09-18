@@ -356,7 +356,14 @@ def read_fence(lines, i):
 def render_code(lang, body):
     body = html.escape(body, quote=False)
     if lang == "mermaid":
-        return f'<pre class="mermaid">{body}</pre>'
+        # The Artifact runtime renders pre.mermaid natively; the figure wrapper survives that
+        # and is what the page script clicks to open the diagram full-size in a dialog.
+        return (
+            f'<figure class="diagram" title="Open full size">'
+            f'<pre class="mermaid">{body}</pre>'
+            f'<figcaption><button type="button" class="diagram-open">Open full size</button></figcaption>'
+            f"</figure>"
+        )
     cls = f' class="language-{lang}"' if lang else ""
     return f"<pre><code{cls}>{body}</code></pre>"
 
@@ -654,11 +661,16 @@ def build(meta, sections, template, count=0, branded=True):
         )
     chip_keys = PLAN_CHIP_KEYS if KIND == "plan" else REVIEW_CHIP_KEYS
     chips = [render_chip(key, meta[key]) for key in chip_keys if meta.get(key)]
+    label = "Plan" if KIND == "plan" else "Review"
+    title = meta.get("title", "")
     page = template
     for key, value in {
         "KIND": KIND,
-        "KINDLABEL": "Plan" if KIND == "plan" else "Review",
-        "TITLE": html.escape(meta.get("title", "Plan" if KIND == "plan" else "Review")),
+        "KINDLABEL": label,
+        # The <title> names the artifact in the gallery, where a plan and its review would
+        # otherwise share a name; the h1 stays bare because the topbar already shows the kind.
+        "PAGETITLE": html.escape(f"{label} - {title}" if title else label),
+        "TITLE": html.escape(title or label),
         "TICKET": html.escape(meta.get("ticket", "")),
         "CHIPS": "".join(chips),
         "NAV": "".join(nav),
