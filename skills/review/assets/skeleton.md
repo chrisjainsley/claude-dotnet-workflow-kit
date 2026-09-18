@@ -66,14 +66,14 @@ flowchart LR
 | Type-name collisions | checked against <services> | |
 
 ## Findings
-<!-- Code review findings from mega-review and the CLAUDE.md rules check. Status: fixed, accepted (with the reason in Note), or open. Open rows become accept/fix radios in the decision form. -->
+<!-- Code review findings from the reviewer sweep and the CLAUDE.md rules check. Status: fixed, accepted (with the reason in Note), or open. Open rows become accept/fix radios in the decision form. -->
 
 | Severity | Location | Finding | Status | Note |
 |---|---|---|---|---|
 | high | `<path>:<line>` | <one sentence> | fixed | |
 
 ## QA report
-<!-- Same structure the qa-report command posts to the work item. Environment and date line, then one #### per behaviour verified, tagged Acceptance test or Manual test with Pass, Fail or Blocked, a gherkin fence, an Evidence line, and a Classification line (regression | pre-existing bug | environment issue | not run) for anything but Pass. Unit and integration suites are not QA and do not appear. If nothing was run, open with **No QA run.** and put every criterion under Not covered instead of inventing a Blocked row. End with the summary table and Not covered. -->
+<!-- Same structure the test skill posts to the work item. Environment and date line, then one #### per behaviour verified, tagged Acceptance test or Manual test with Pass, Fail or Blocked, a gherkin fence, an Evidence line, and a Classification line (regression | pre-existing bug | environment issue | not run) for anything but Pass. Unit and integration suites are not QA and do not appear. If nothing was run, open with **No QA run.** and put every criterion under Not covered instead of inventing a Blocked row. End with the summary table and Not covered. -->
 
 **Environment:** <qa environment / local> | **Date:** <YYYY-MM-DD> | **Test users:** <emails>
 

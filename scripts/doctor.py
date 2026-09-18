@@ -4,7 +4,7 @@
     python doctor.py [--profile <file>] [--skip-fixtures]
 
 Reports: where the profile came from and whether it validates; the adapter file each
-profile value resolves to; which mega-review reviewers will run and which will be skipped
+profile value resolves to; which reviewer-sweep reviewers will run and which will be skipped
 and why; and, unless --skip-fixtures, that the plan and review checkers still pass on the
 shipped fixtures. Exit 1 on any problem. Needs only Python; never calls the claude CLI.
 """

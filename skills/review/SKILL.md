@@ -1,6 +1,6 @@
 ---
-name: visual-review
-description: Turn a finished branch or PR into one budgeted review Artifact that serves as the code review and the QA report together. Verdict tiles, plan versus delivered, a diagram of the change, changes grouped by service then slice with every file linked to its diff, contracts other teams must move for, review findings, the BDD QA report, a persistent rollout checklist and an approve / request-changes decision form. Use whenever the user says "review this", "recap", "visual recap", "qa report", "write up the review", "/visual-review", or when the kit's pipeline reaches the Review stage. Prefer this over posting a bare QA report.
+name: review
+description: Turn a finished branch or PR into one budgeted review Artifact that serves as the code review and the QA report together. Verdict tiles, plan versus delivered, a diagram of the change, changes grouped by service then slice with every file linked to its diff, contracts other teams must move for, review findings, the BDD QA report, a persistent rollout checklist and an approve / request-changes decision form. Runs the reviewer sweep first when none is fresh for the branch. Use whenever the user says "review", "review this", "recap", "visual recap", "write up the review", "mega review", "review everything", "/review", "/visual-review", "/mega-review", or when the kit's pipeline reaches the Review stage. Prefer this over posting a bare QA report.
 ---
 
 # Review document
@@ -46,10 +46,11 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    (Artifact `read_db`, collection `answers`). Every spec scenario and decision in it
    becomes a row in Plan versus delivered. No plan means the ticket's acceptance criteria
    are the rows instead; say so in the Verdict.
-3. **Collect findings.** Use the mega-review results from this session when they exist.
-   Otherwise run a conventions pass against the project's `CLAUDE.md` and a bug-hunting
-   pass over the diff. Every finding gets a status: fixed on the branch, accepted with a
-   reason, or open for the reviewer.
+3. **Collect findings.** Read `sweep` from the pipeline state file. When its `commit`
+   is HEAD, use its findings. Otherwise run the sweep in `sweep.md` first (the
+   `implement` skill normally ran it already); a sweep that changes files makes the
+   Test stage stale, so say so and rerun the scenarios before continuing. Every finding
+   gets a status: fixed on the branch, accepted with a reason, or open for the reviewer.
 4. **Collect QA evidence** from this session or from what the user describes: acceptance
    runs against a real environment and manual API, browser or payment-provider checks.
    Unit and integration suites are not QA and never appear. Name the environment, the
@@ -147,3 +148,5 @@ agree, report what happened rather than what should have, diffs carry a decision
 - `scripts/check_review.py`: budget and structure gate; exit 1 on any breach. Takes `--profile`. Wraps `scripts/check.py` (repository root) in review mode.
 - `scripts/build_review.py`: markdown subset to HTML with the section-specific renderers; pulls per-file diffs from git. Wraps `scripts/render.py` (repository root) in review mode.
 - `references/exemplar.md`: a filled review for a real merged PR, identifiers scrubbed.
+- `sweep.md`: the reviewer sweep, run here when no fresh sweep exists and by `implement` at the end of its stage.
+- `reviewers/bug-hunt.md`, `reviewers/conventions.md`: the two built-in reviewer briefs.
