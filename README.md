@@ -45,10 +45,12 @@ Start with a ticket ID, or a short slug when `tracker` is `none`:
 /dotnet-workflow-kit:start 1234
 ```
 
-Use the pipeline driver to continue:
+Use the pipeline driver to continue, or wrap it in a goal so it keeps going until
+the next gate:
 
 ```text
 /dotnet-workflow-kit:next
+/goal complete /next
 ```
 
 The driver checks the branch, PR and saved state, then runs the earliest unfinished
@@ -161,29 +163,22 @@ update any saved prompts or `/goal` text.
 
 ## Running with /goal
 
-If your Claude Code session supports the goal command, use it to keep the pipeline
-moving toward a stated checkpoint. Plan approval and the review decision still need
-your input.
-
-Start the ticket, then set a bounded goal:
+`/next` runs stage after stage inside one turn, but nothing restarts it if the turn
+ends early. To keep the pipeline moving until it reaches a gate, wrap it in a goal:
 
 ```text
 /dotnet-workflow-kit:start 1234
-/goal Run /next until it stops at the review checkpoint for ticket 1234 and has printed the review page link. Stop within 3 hours.
+/goal complete /next
 ```
 
-At the plan page, send your answers and tell the session "answered", or approve the
-plan. At the review page, send your decision and tell the session "decided".
-Pages cannot wake the session themselves.
+The goal re-invokes `/next` until it stops at the plan gate, the review checkpoint
+or a blocker. At the plan page, send your answers and tell the session "answered",
+or approve the plan. At the review page, send your decision and tell the session
+"decided". Pages cannot wake the session themselves. After each gate, set the same
+goal again to continue.
 
-After approving, you can set a goal for hand-off:
-
-```text
-/goal Run /next until the pull request stage reports done for ticket 1234. Stop within 1 hour.
-```
-
-Name an observable result and include a time bound. Tool permission prompts may
-still require input. When the pipeline reports a blocker, resolve it before continuing.
+Tool permission prompts may still require input. When the pipeline reports a
+blocker, resolve it before continuing.
 
 ## Without the Artifact tool
 
