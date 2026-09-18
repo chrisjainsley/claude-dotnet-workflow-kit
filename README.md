@@ -127,7 +127,8 @@ findings and QA evidence into `review.md` and `review.html`. When no sweep is fr
 for the branch, it runs one first, so a branch nobody implemented in this session can
 still be reviewed.
 
-The page includes verdict counts, plan versus delivered, a change diagram, file links
+The page includes verdict counts, plan versus delivered, a change diagram (click it
+to open full size), file links
 to full diffs, findings, the QA report and a rollout checklist. Choose **Approve** or
 **Request changes**, press **Send decision**, then tell the session "decided".
 The skill reads the decision and each open finding's fix or accept choice.

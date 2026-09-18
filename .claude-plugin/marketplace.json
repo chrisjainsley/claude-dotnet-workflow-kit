@@ -12,7 +12,7 @@
       "name": "dotnet-workflow-kit",
       "source": "./",
       "description": "Six skills from ticket start to pull request: start, plan, implement, test, review and the /next pipeline, with plan and review pages as Claude Artifacts and a profile-driven setup",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "license": "MIT",
       "keywords": [
         "dotnet",
