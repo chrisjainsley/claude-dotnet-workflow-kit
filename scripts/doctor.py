@@ -92,6 +92,18 @@ def reviewer_report(profile):
     return rows
 
 
+def jev_report(profile):
+    """One line on where the TypeSafe key comes from, never showing the value."""
+    from jev_checks import resolve_key
+    _key, source = resolve_key()
+    optional = profile.get("optional", {})
+    if source:
+        return f"key from {source}" + ("" if optional.get("jev") else "; optional.jev is false, so the kit will not use it")
+    if optional.get("jev"):
+        return "no key found; jev_checks.py will report skipped until TYPESAFE_API_KEY is set or the jev MCP is registered"
+    return "not configured"
+
+
 def fixture_report():
     """Run the shared checker on both fixtures; (kind, ok, last line)."""
     checker = ROOT / "scripts" / "check.py"
@@ -132,6 +144,7 @@ def main(argv=None):
     print("reviewers:")
     for name, status, reason in reviewer_report(profile):
         print(f"  {name:<22} {status:<8} {reason}")
+    print(f"jev: {jev_report(profile)}")
 
     if not args.skip_fixtures:
         print("fixtures:")

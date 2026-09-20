@@ -9,10 +9,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCTOR = REPO_ROOT / "scripts" / "doctor.py"
 
 
-def run_doctor(tmp_path, answers, *extra):
+def run_doctor(tmp_path, answers, *extra, key=None):
     profile = tmp_path / "profile.json"
     profile.write_text(json.dumps(answers), encoding="utf-8")
-    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1", HOME=str(tmp_path), USERPROFILE=str(tmp_path))
+    env.pop("TYPESAFE_API_KEY", None)
+    if key:
+        env["TYPESAFE_API_KEY"] = key
     run = subprocess.run([sys.executable, str(DOCTOR), "--profile", str(profile), *extra],
                          capture_output=True, text=True, encoding="utf-8", env=env, cwd=tmp_path)
     return run.returncode, run.stdout + run.stderr
@@ -74,3 +77,21 @@ def test_given_checks_with_jev_then_scored_by_jev(tmp_path):
     assert code == 0, out
     assert "2 rules scored by jev" in out
     assert "jev " in out and "via the jev MCP" in out
+
+
+def test_given_key_in_env_then_doctor_names_the_source_not_the_value(tmp_path):
+    code, out = run_doctor(tmp_path, {"optional": {"jev": True}}, "--skip-fixtures", key="placeholder-key-for-tests")
+    assert code == 0, out
+    assert "jev: key from env" in out
+    assert "placeholder-key-for-tests" not in out
+
+
+def test_given_jev_enabled_without_key_then_doctor_says_so(tmp_path):
+    code, out = run_doctor(tmp_path, {"optional": {"jev": True}}, "--skip-fixtures")
+    assert code == 0, out
+    assert "jev: no key found" in out
+
+
+def test_given_defaults_then_jev_not_configured(tmp_path):
+    code, out = run_doctor(tmp_path, {}, "--skip-fixtures")
+    assert "jev: not configured" in out

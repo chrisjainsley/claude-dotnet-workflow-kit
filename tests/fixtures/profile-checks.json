@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "architecture": "clean",
+  "optional": { "jev": true },
+  "jev": { "flag_at": 0.75, "review_at": 0.4 },
+  "checks": [
+    { "id": "cancellation", "rule": "Every new async method that performs I/O accepts and forwards a CancellationToken", "severity": "high", "files": "**/*.cs" },
+    { "id": "clock", "rule": "Use an injected clock, never DateTime.Now or DateTime.UtcNow", "severity": "medium", "files": "src/**/*.cs" },
+    { "id": "docs", "rule": "A behaviour change updates the README", "severity": "low" }
+  ]
+}
