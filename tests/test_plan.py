@@ -124,3 +124,65 @@ def test_given_vertical_fixture_with_clean_profile_then_check_fails():
 
     assert code == 1
     assert "sections must be exactly" in out
+
+
+DESIGNS_FIXTURE_PATH = FIXTURES_DIR / "plan-designs.md"
+BLAZOR_PROFILE_PATH = FIXTURES_DIR / "profile-blazor.json"
+
+
+def test_given_designs_after_specs_and_frontend_blazor_then_check_passes():
+    code, out, err = run_py(CHECK_PLAN_PY, DESIGNS_FIXTURE_PATH, "--profile", BLAZOR_PROFILE_PATH)
+
+    assert code == 0, out + err
+    assert "Designs" in out
+
+
+def test_given_designs_with_frontend_none_then_exit1():
+    code, out, err = run_py(CHECK_PLAN_PY, DESIGNS_FIXTURE_PATH)
+
+    assert code == 1
+    assert "stack.frontend" in out
+
+
+def test_given_designs_before_specs_then_exit1(tmp_path):
+    text = DESIGNS_FIXTURE_PATH.read_text(encoding="utf-8")
+    specs_at, designs_at = text.index("## Specs\n"), text.index("## Designs\n")
+    domain_at = text.index("## Domain\n")
+    swapped = text[:specs_at] + text[designs_at:domain_at] + text[specs_at:designs_at] + text[domain_at:]
+    path = tmp_path / "plan.md"
+    path.write_text(swapped, encoding="utf-8", newline="\n")
+
+    code, out, err = run_py(CHECK_PLAN_PY, path, "--profile", BLAZOR_PROFILE_PATH)
+
+    assert code == 1
+    assert "sections must be exactly" in out
+
+
+def test_given_dc_html_embed_then_build_emits_sandboxed_iframe_without_support_js(tmp_path):
+    out_path = tmp_path / "plan.html"
+
+    code, out, err = run_py(BUILD_PLAN_PY, DESIGNS_FIXTURE_PATH, "--out", out_path, "--profile", BLAZOR_PROFILE_PATH)
+
+    assert code == 0, out + err
+    html = out_path.read_text(encoding="utf-8")
+    assert "<h2>Designs</h2>" in html
+    figure = re.search(r'<figure class="design">.*?</figure>', html, re.S)
+    assert figure, "no design figure rendered"
+    assert 'sandbox=""' in figure.group(0)
+    assert 'width="960" height="540"' in figure.group(0)
+    assert "support.js" not in figure.group(0)
+    assert "Earned points" in figure.group(0)
+    # Designs is not an architecture layer, so it carries no onion ring index.
+    assert re.search(r'<section class="plan-section" id="designs">', html)
+
+
+def test_given_missing_dc_html_then_missing_figure(tmp_path):
+    text = DESIGNS_FIXTURE_PATH.read_text(encoding="utf-8").replace("design/project/Main.dc.html", "design/project/Gone.dc.html")
+    path = tmp_path / "plan.md"
+    path.write_text(text, encoding="utf-8", newline="\n")
+    out_path = tmp_path / "plan.html"
+
+    code, out, err = run_py(BUILD_PLAN_PY, path, "--out", out_path, "--profile", BLAZOR_PROFILE_PATH)
+
+    assert code == 0, out + err
+    assert "Missing artboard: design/project/Gone.dc.html" in out_path.read_text(encoding="utf-8")
