@@ -92,3 +92,51 @@ def test_given_tracker_skills_then_they_defer_to_adapters():
     for name in ("start", "test"):
         text = skill_text(name)
         assert "adapters/tracker/" in text, f"{name}: tracker calls must go through adapters/tracker/<tracker>.md"
+
+
+@pytest.mark.parametrize("name", SKILLS)
+def test_given_skill_then_jev_is_optional_and_documented_once(name):
+    text = skill_text(name)
+    assert "optional.jev" in text, f"{name}: must gate its Jev touchpoints on optional.jev"
+    assert "docs/jev.md" in text, f"{name}: must point at docs/jev.md rather than restate the call shapes"
+    assert "kipped" in text, f"{name}: must say Jev is skipped, never failed"
+
+
+def test_given_sweep_then_it_scores_checks_and_gates():
+    text = (REPO_ROOT / "skills" / "review" / "sweep.md").read_text(encoding="utf-8")
+    for needle in ("jev_checks.py", "jev_gate", "jev_compare", "sweep.checks", "## Jev", "secret patterns"):
+        assert needle in text, f"sweep.md must mention {needle}"
+    assert "pipeline/<slug>-checks.json" in text, "checks output must live beside the state file"
+
+
+def test_given_conventions_reviewer_then_it_reads_profile_checks():
+    text = (REPO_ROOT / "skills" / "review" / "reviewers" / "conventions.md").read_text(encoding="utf-8")
+    assert "`checks`" in text and "profile: <id>" in text
+    assert "## With Jev scores" in text
+
+
+def test_given_next_then_ci_and_thread_classes_named():
+    text = skill_text("next")
+    for needle in ("this_branch", "unrelated_infrastructure", "flaky", "needs_code_change", "already_addressed", "jev_screen"):
+        assert needle in text
+
+
+def test_given_test_skill_then_failure_buckets_named():
+    text = skill_text("test")
+    for needle in ("real_regression", "assertion_changed_by_refactor", "flaky_known", "environment"):
+        assert needle in text
+
+
+def test_given_plan_then_decide_escape_hatches_handled():
+    text = skill_text("plan")
+    for needle in ("jev_decide", "ask_user", "investigate", "Jev-assisted", "jev_rerank", "jev_screen"):
+        assert needle in text
+
+
+def test_given_jev_doc_then_every_tool_the_skills_call_is_described():
+    doc = (REPO_ROOT / "docs" / "jev.md").read_text(encoding="utf-8")
+    skills = "\n".join(skill_text(n) for n in SKILLS)
+    skills += (REPO_ROOT / "skills" / "review" / "sweep.md").read_text(encoding="utf-8")
+    for tool in sorted(set(re.findall(r"jev_[a-z]+", skills))):
+        assert tool in doc, f"docs/jev.md must describe {tool}"
+    assert "claude mcp add -s user jev" in doc

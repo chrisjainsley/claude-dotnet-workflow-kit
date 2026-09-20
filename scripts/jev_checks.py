@@ -369,9 +369,9 @@ def check_rules(rules, key=None, transport=None, dry_run=False, warn_below=0.5):
         "questions": {
             r["id"]: {
                 "type": "noul",
-                "instructions": f"Could a reader verify rule {r['id']} from one diff hunk alone, without running code?",
-                "criteria": {"true": "The rule names something visible in changed lines.",
-                             "false": "Verifying it needs runtime behaviour, other files, or intent."},
+                "instructions": f"Could a reader decide whether rule {r['id']} is broken by looking at one changed hunk of one file, with no other file, no test run and no knowledge of intent?",
+                "criteria": {"true": "The rule names a type, call, pattern or shape that is visible or absent in the changed lines themselves.",
+                             "false": "Deciding needs another file (a README, a test, a migration elsewhere), runtime behaviour, or the author's intent."},
             }
             for r in rules
         },

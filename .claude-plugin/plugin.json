@@ -1,6 +1,6 @@
 {
   "name": "dotnet-workflow-kit",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "A budgeted plan-to-review delivery workflow for .NET teams: start, plan, implement, test, review and next, with plan and review pages as Claude Artifacts, tailored by one profile file.",
   "author": {
     "name": "Chris Ainsley",
@@ -15,6 +15,7 @@
     "workflow",
     "planning",
     "code-review",
+    "jev",
     "qa",
     "clean-architecture",
     "bdd"

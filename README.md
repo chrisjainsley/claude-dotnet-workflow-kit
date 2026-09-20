@@ -8,7 +8,7 @@ One project profile sets your architecture, tests, tracker and QA workflow. Use 
 six skills, start, plan, implement, test, review and next, together or on their own,
 with or without a ticket tracker or the Artifact tool.
 
-[Install](#install) | [Workflow](#workflow) | [Skills](#skills) | [/goal](#running-with-goal) | [Branding](#branding) | [Profile reference](#profile-reference) | [dotnet-claude-kit](#dotnet-claude-kit) | [Contributing](#contributing)
+[Install](#install) | [Workflow](#workflow) | [Skills](#skills) | [/goal](#running-with-goal) | [Branding](#branding) | [Profile reference](#profile-reference) | [dotnet-claude-kit](#dotnet-claude-kit) | [Jev](#jev) | [Contributing](#contributing)
 
 ## Install
 
@@ -282,6 +282,45 @@ The workflow kit also runs without the companion. Built-in adapters still guide 
 pages; unavailable companion reviewers are recorded as skipped. The
 `code-review-workflow` reviewer also requires a Roslyn MCP server.
 
+## Jev
+
+[Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) is TypeSafe's
+System One model: a fast, calibrated judge that returns probabilities, never text. With
+`optional.jev` true the kit uses it wherever a skill would otherwise decide on gut feel,
+and every call is skipped, never failed, when it is absent. Setup detects a
+`TYPESAFE_API_KEY` or a `jev` MCP server. Register the MCP at user scope so it loads in
+every project:
+
+```bash
+claude mcp add -s user jev -e TYPESAFE_API_KEY=<your key> -- npx -y @jkudish/jev-mcp
+```
+
+Add your own review checks to the profile; the conventions reviewer enforces them on
+every sweep, and with Jev `scripts/jev_checks.py` scores every added hunk against them
+first:
+
+```json
+"checks": [
+  {"id": "cancellation", "rule": "Every new async method that performs I/O accepts and forwards a CancellationToken", "severity": "high", "files": "**/*.cs"},
+  {"id": "clock", "rule": "Use the injected IClock, never DateTime.Now", "severity": "medium", "files": "src/**/*.cs"}
+]
+```
+
+| Stage | What Jev does |
+|---|---|
+| start, plan | Screens ticket text and linked items for injected instructions; ranks linked items so only the relevant ones are read. |
+| plan | Settles open questions from the research facts, or preselects the recommended option and names the fact that would decide it. |
+| implement | Classifies open sweep findings as fixable in scope or scope-changing. |
+| sweep | Scores profile checks and the CLAUDE.md rubric per hunk; deduplicates findings; gates the verdict's claims against the diff and test output. |
+| test | Buckets failing tests as regression, refactor fallout, flaky or environment before fixing. |
+| review | Verifies Plan versus delivered rows, QA Pass evidence and Verdict tiles. |
+| next | Classifies red CI jobs; screens, classifies and ranks review threads. |
+
+Diff hunks, claims, test output and ticket text are sent to api.typesafe.ai when a
+touchpoint runs; files matching the secret patterns never are. Set `optional.jev` to
+`false` when policy forbids it. [docs/jev.md](docs/jev.md) has the call shapes, the
+skipped wording and the checks reference.
+
 ## Contributing
 
 | Path | Contents |
@@ -291,8 +330,8 @@ pages; unavailable companion reviewers are recorded as skipped. The
 | `skills/` | Six skills, the reviewer sweep and their supporting files. |
 | `adapters/` | Tracker, source control, architecture, QA and stack instructions. |
 | `assets/` | Shared page shell. |
-| `scripts/` | Profile, setup, checks and rendering. |
-| `docs/` | Usage guides, writing rules and screenshots. |
+| `scripts/` | Profile, setup, checks, rendering and the Jev checks scorer. |
+| `docs/` | Usage guides, writing rules, the Jev reference and screenshots. |
 | `tests/` | Fixtures and automated checks. |
 
 Run the tests and plugin validation from the repository root before opening a PR:
