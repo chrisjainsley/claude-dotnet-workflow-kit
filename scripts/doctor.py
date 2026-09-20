@@ -17,7 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit_profile import (  # noqa: E402
-    BUILT_IN_REVIEWERS, ENUMS, NEEDS, NEEDS_MCP, add_profile_arg, get, resolve_profile, validate,
+    BUILT_IN_REVIEWERS, ENUMS, NEEDS, NEEDS_MCP, add_profile_arg, enabled_checks, get, resolve_profile,
+    validate,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,6 +80,15 @@ def reviewer_report(profile):
             rows.append((name, "runs", ", ".join(needs)))
     if optional.get("codex"):
         rows.append(("codex", "runs", "second opinion via codex:rescue"))
+    checks = enabled_checks(profile)
+    if checks:
+        count = f"{len(checks)} rule{'s' if len(checks) != 1 else ''}"
+        if optional.get("jev"):
+            rows.append(("checks", "runs", f"{count} scored by jev, enforced by conventions"))
+        else:
+            rows.append(("checks", "runs", f"{count} enforced by conventions only (optional.jev is false)"))
+    if optional.get("jev"):
+        rows.append(("jev", "runs", "gate, decide, classify, rerank and screen via the jev MCP"))
     return rows
 
 

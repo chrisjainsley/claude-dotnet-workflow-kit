@@ -57,3 +57,20 @@ def test_given_fixtures_then_both_checkers_pass(tmp_path):
     code, out = run_doctor(tmp_path, {})
     assert code == 0, out
     assert "plan     ok" in out and "review   ok" in out
+
+
+def test_given_checks_without_jev_then_conventions_only(tmp_path):
+    answers = {"checks": [{"id": "ct", "rule": "Propagate CancellationToken", "severity": "high"}]}
+    code, out = run_doctor(tmp_path, answers, "--skip-fixtures")
+    assert code == 0, out
+    assert "checks" in out and "1 rule enforced by conventions only" in out
+
+
+def test_given_checks_with_jev_then_scored_by_jev(tmp_path):
+    answers = {"optional": {"jev": True}, "checks": [
+        {"id": "ct", "rule": "Propagate CancellationToken", "severity": "high"},
+        {"id": "now", "rule": "No DateTime.Now", "severity": "medium"}]}
+    code, out = run_doctor(tmp_path, answers, "--skip-fixtures")
+    assert code == 0, out
+    assert "2 rules scored by jev" in out
+    assert "jev " in out and "via the jev MCP" in out

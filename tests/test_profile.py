@@ -101,3 +101,61 @@ def test_given_kit_reviewer_then_needed_skills_include_four_kit_skills():
     assert len(expected) == 4
     for skill in expected:
         assert skill in skills
+
+
+def test_given_defaults_then_jev_and_checks_present():
+    prof = fresh_defaults()
+    assert prof["optional"]["jev"] is False
+    assert prof["jev"] == {"flag_at": 0.75, "review_at": 0.4}
+    assert prof["checks"] == []
+
+
+@pytest.mark.parametrize(
+    "check,fragment",
+    [
+        ({"id": "a", "rule": "x", "severity": "blocker"}, "severity must be one of"),
+        ({"id": "Bad Id", "rule": "x", "severity": "high"}, "id must match"),
+        ({"id": "a", "rule": "  ", "severity": "high"}, "rule must be non-empty"),
+        ({"id": "a", "rule": "x", "severity": "high", "glob": "*.cs"}, "unknown keys glob"),
+        ({"id": "a", "rule": "x", "severity": "high", "files": ""}, "files must be a glob"),
+        ("not an object", "must be an object"),
+    ],
+)
+def test_given_bad_check_then_rejected(check, fragment):
+    prof = fresh_defaults()
+    prof["checks"] = [check]
+    problems = profile_mod.validate(prof)
+    assert any(fragment in p for p in problems), problems
+
+
+def test_given_duplicate_check_ids_then_rejected():
+    prof = fresh_defaults()
+    prof["checks"] = [{"id": "a", "rule": "x", "severity": "high"}, {"id": "a", "rule": "y", "severity": "low"}]
+    assert any("duplicate id 'a'" in p for p in profile_mod.validate(prof))
+
+
+def test_given_valid_checks_then_enabled_checks_defaults_files():
+    prof = fresh_defaults()
+    prof["checks"] = [
+        {"id": "ct", "rule": " Propagate CancellationToken ", "severity": "high"},
+        {"id": "now", "rule": "No DateTime.Now", "severity": "medium", "files": "src/**/*.cs"},
+    ]
+    assert profile_mod.validate(prof) == []
+    checks = profile_mod.enabled_checks(prof)
+    assert checks[0] == {"id": "ct", "rule": "Propagate CancellationToken", "severity": "high", "files": "**/*"}
+    assert checks[1]["files"] == "src/**/*.cs"
+
+
+@pytest.mark.parametrize(
+    "jev,fragment",
+    [
+        ({"flag_at": 1.5, "review_at": 0.4}, "jev.flag_at must be a number"),
+        ({"flag_at": 0.5, "review_at": 0.6}, "review_at must not exceed"),
+        ({"flag_at": True, "review_at": 0.4}, "jev.flag_at must be a number"),
+        ("x", "jev must be an object"),
+    ],
+)
+def test_given_bad_jev_thresholds_then_rejected(jev, fragment):
+    prof = fresh_defaults()
+    prof["jev"] = jev
+    assert any(fragment in p for p in profile_mod.validate(prof))

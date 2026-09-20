@@ -243,6 +243,10 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `optional.dotnet-claude-kit` | `true`, `false` | `false` | Companion plugin availability. |
 | `optional.codex` | `true`, `false` | `false` | Enable the Codex second-opinion reviewer. |
 | `optional.roslyn-mcp` | `true`, `false` | `false` | Roslyn MCP availability for code-review-workflow. |
+| `optional.jev` | `true`, `false` | `false` | Jev availability: a `TYPESAFE_API_KEY` or a `jev` MCP server. Detected by setup. See [Jev](#jev). |
+| `jev.flag_at` | Number from 0 to 1 | `0.75` | Probability at or above which a scored check becomes a finding at the rule's severity. |
+| `jev.review_at` | Number from 0 to 1, at most `flag_at` | `0.4` | Probability at or above which a scored check is listed as low with "confirm by reading". |
+| `checks` | List of `{id, rule, severity, files}` | `[]` | Review checks the conventions reviewer enforces; `files` is an optional glob. Edited in the file, validated by `scripts/doctor.py`. |
 
 Validation requires a tracker when `qa.evidence` is `work-item`. Both `bug-hunt` and
 `conventions` remain in the reviewer list.

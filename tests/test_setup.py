@@ -127,8 +127,39 @@ def test_given_detect_then_prints_json(tmp_path):
     code, out, err = run_setup(tmp_path, "--detect")
     assert code == 0, err
     data = json.loads(out)
-    for key in ("scm", "az", "gh", "claude", "plugins", "codex", "roslyn-mcp", KIT_PLUGIN):
+    for key in ("scm", "az", "gh", "claude", "plugins", "codex", "roslyn-mcp", "jev", KIT_PLUGIN):
         assert key in data
+    assert data["jev"] is False
     assert data["az"] is False
     assert data["gh"] is False
     assert data["claude"] is False
+
+
+def test_given_key_in_env_then_detect_reports_jev(tmp_path):
+    env = {"PATH": minimal_path_env(tmp_path), "HOME": str(tmp_path), "USERPROFILE": str(tmp_path),
+           "TYPESAFE_API_KEY": "placeholder-for-test"}
+    code, out, err = run_py(SETUP_PY, "--detect", cwd=tmp_path, env=env)
+    assert code == 0, err
+    assert json.loads(out)["jev"] is True
+    assert "placeholder-for-test" not in out
+
+
+def test_given_rerun_then_existing_checks_survive(tmp_path):
+    first = write_answers(tmp_path, {"architecture": "clean", "checks": [
+        {"id": "ct", "rule": "Propagate CancellationToken", "severity": "high"}]}, "first.json")
+    code, out, err = run_setup(tmp_path, "--profile", str(first), "--no-install")
+    assert code == 0, err
+    second = write_answers(tmp_path, {"testing": {"tdd": "strict"}}, "second.json")
+    code, out, err = run_setup(tmp_path, "--profile", str(second), "--no-install")
+    assert code == 0, err
+    data = json.loads(project_profile_path(tmp_path).read_text(encoding="utf-8"))
+    assert data["testing"]["tdd"] == "strict"
+    assert data["checks"] == [{"id": "ct", "rule": "Propagate CancellationToken", "severity": "high"}]
+    assert data["optional"]["jev"] is False
+
+
+def test_given_bad_check_then_setup_exit1(tmp_path):
+    answers = write_answers(tmp_path, {"checks": [{"id": "ct", "rule": "x", "severity": "urgent"}]})
+    code, out, err = run_setup(tmp_path, "--profile", str(answers), "--no-install")
+    assert code == 1
+    assert "severity must be one of" in err
