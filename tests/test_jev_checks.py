@@ -1,6 +1,5 @@
 """jev_checks.py scores profile checks over diff hunks with a fake transport; no network."""
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -256,3 +255,81 @@ def test_given_extract_output_then_rules_flag_round_trips(monkeypatch, tmp_path,
     code = jev_checks.main(["--diff-file", str(DIFF), "--profile", str(PROFILE), "--rules", str(rules_out), "--dry-run"])
     assert code == 0
     assert "claude-1" in capsys.readouterr().out
+
+
+def test_given_quoted_non_ascii_secret_path_then_unquoted_and_never_sent():
+    diff = (
+        'diff --git "a/src/\\303\\234nterlagen/appsettings.Development.json" "b/src/\\303\\234nterlagen/appsettings.Development.json"\n'
+        "index 1111111..2222222 100644\n"
+        '--- "a/src/\\303\\234nterlagen/appsettings.Development.json"\n'
+        '+++ "b/src/\\303\\234nterlagen/appsettings.Development.json"\n'
+        "@@ -1,2 +1,3 @@\n {\n+  \"ApiKey\": \"not-a-real-key\",\n }\n"
+    )
+    parsed = jev_checks.parse_diff(diff)
+    assert parsed[0]["path"] == "src/\u00dcnterlagen/appsettings.Development.json"
+    safe, skipped = jev_checks.split_hunks(parsed)
+    assert safe == [] and len(skipped) == 1
+
+
+def test_given_mid_run_failure_then_earlier_findings_are_kept(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("TYPESAFE_API_KEY", PLACEHOLDER_KEY)
+    monkeypatch.setattr(jev_checks, "default_transport", FakeTransport(violates={"cancellation": 0.9}, statuses=[200, 503]))
+    out = tmp_path / "checks.json"
+    code = jev_checks.main(["--diff-file", str(DIFF), "--profile", str(PROFILE), "--out", str(out)])
+    assert code == 2
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["partial"].startswith("api responded 503 after 1 of the requests")
+    assert data["requests"] == 1 and data["findings"][0]["source"] == "checks:cancellation"
+    assert "partial: 1 requests answered" in capsys.readouterr().out
+
+
+def test_given_missing_rules_file_then_warned_and_profile_checks_still_scored(tmp_path):
+    code, stdout, stderr = run_py(SCRIPT, "--diff-file", DIFF, "--profile", PROFILE, "--rules", tmp_path / "absent.json", "--dry-run",
+                                  cwd=tmp_path, env=cli_env(tmp_path))
+    assert code == 0, stderr
+    assert "warning: rules file" in stderr and "not found" in stderr
+    assert "cancellation" in stdout
+
+
+def test_given_malformed_rules_file_then_exit_1_not_2(tmp_path):
+    bad = tmp_path / "rules.json"
+    bad.write_text(json.dumps([{"id": "x", "rule": "y"}]), encoding="utf-8")
+    code, stdout, stderr = run_py(SCRIPT, "--diff-file", DIFF, "--profile", PROFILE, "--rules", bad, "--dry-run", cwd=tmp_path, env=cli_env(tmp_path))
+    assert code == 1
+    assert "invalid: rules file" in stderr and "severity" in stderr
+
+
+def test_given_no_range_or_diff_then_usage_exit_1(tmp_path):
+    code, stdout, stderr = run_py(SCRIPT, "--profile", PROFILE, cwd=tmp_path, env=cli_env(tmp_path, key=PLACEHOLDER_KEY))
+    assert code == 1
+    assert "--range or --diff-file is required" in stderr
+
+
+def test_given_file_outside_cwd_then_id_carries_a_path_hash(tmp_path, monkeypatch):
+    work = tmp_path / "repo"
+    work.mkdir()
+    monkeypatch.chdir(work)
+    outside = tmp_path / "CLAUDE.md"
+    outside.write_text("- Never call DateTime.Now in domain code.\n", encoding="utf-8")
+    (work / "CLAUDE.md").write_text("- Prefer records for value objects.\n", encoding="utf-8")
+    prefix = jev_checks.rule_prefix(str(outside))
+    assert prefix.startswith("CLAUDE-") and len(prefix) == len("CLAUDE-") + 6
+    assert jev_checks.rule_prefix("CLAUDE.md") == "CLAUDE"
+    assert prefix != "CLAUDE"
+
+
+def test_given_split_hunk_then_each_chunk_reports_its_own_first_added_line():
+    lines = ["@@ -1,0 +1,300 @@"] + [f"+line {i} " + ("x" * 90) for i in range(1, 301)]
+    hunk = {"path": "a.cs", "line": 1, "start": 1, "text": "\n".join(lines)}
+    chunks = jev_checks.chunk_hunk(hunk, limit=12000)
+    assert len(chunks) == 3
+    expected, seen = [], 0
+    for chunk, first in chunks:
+        expected.append(seen + 1)
+        seen += sum(1 for line in chunk.splitlines() if line.startswith("+"))
+    assert [first for _, first in chunks] == expected
+
+
+def test_given_single_overlong_line_then_cut_hard():
+    chunks = jev_checks.chunk_text("+" + "x" * 30000, limit=12000)
+    assert len(chunks) == 3 and all(len(c) <= 12000 for c in chunks)

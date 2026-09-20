@@ -46,11 +46,11 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    the draft PR through the scm adapter if none exists and apply `qa.deploy_label`, then
    wait for the deployment before running. Fix failures on the branch and rerun until
    green, unless a fix would change the ticket's scope. With `optional.jev`, bucket the
-   failures first: load `jev_classify`, one item per failing test or scenario (name plus
-   the assertion message, under 2000 characters), `context` the plan's Requirement and
-   a one-line summary of the change, classes `real_regression` and
-   `assertion_changed_by_refactor` (fix), `flaky_known` (rerun once, then treat as a
-   regression), `environment` (follow `adapters/stack/local_run.md` "Common issues")
+   failures first. Load `jev_classify` with one item per failing test or scenario: the
+   name plus the assertion message, under 2000 characters. Pass the plan's Requirement
+   and a one-line summary of the change as `context`. The classes: `real_regression`
+   and `assertion_changed_by_refactor` (fix), `flaky_known` (rerun once, then treat as
+   a regression), `environment` (follow `adapters/stack/local_run.md` "Common issues")
    and `manual_review` (read it yourself). Write `test` to the pipeline
    state file as `{"done": true, "at": "<ISO time>", "note": "<n> scenarios pass"}`.
 2. **Check for an existing review page first.** If this session already produced a

@@ -62,9 +62,9 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
    does not change the ticket's scope and commit the fixes; a finding that would change
    scope is recorded as open for the reviewer. With `optional.jev`, load `jev_classify`
    and classify every finding in one call before fixing any, with the plan's
-   Requirement and Specs as `context`, into `fixable_in_scope` (fix and commit),
-   `changes_scope` (record open for the reviewer), `contradicts_acceptance` (the
-   blocker below) and `manual_review` (read it and decide yourself). Read the `review`
+   Requirement and Specs as `context`. The classes: `fixable_in_scope` (fix and
+   commit), `changes_scope` (record open for the reviewer), `contradicts_acceptance`
+   (the blocker below) and `manual_review` (read it and decide yourself). Read the `review`
    decisions yourself too; a classification is a hint about scope, not a verdict on
    the code.
 6. **Write the pipeline state.** In `~/.claude/dotnet-workflow-kit/pipeline/<slug>.json`

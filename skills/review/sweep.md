@@ -26,8 +26,8 @@ The profile decides:
 - `optional.codex`: when true, adds a codex second-opinion reviewer.
 - `optional.jev`, `jev.flag_at`, `jev.review_at`, `checks`: when `optional.jev` is true,
   `scripts/jev_checks.py` scores every profile check (and the rubric it extracts from
-  the CLAUDE.md files) against the diff before Phase 1, `jev_compare` deduplicates the
-  consolidated findings, and `jev_gate` checks the verdict's claims after Phase 3. With
+  the CLAUDE.md files) against the diff before Phase 1. `jev_compare` then deduplicates
+  the consolidated findings, and `jev_gate` checks the verdict's claims after Phase 3. With
   `optional.jev` false the checks still run inside the conventions reviewer. See
   `docs/jev.md` for the call shapes and the skipped wording.
 - `optional.dotnet-claude-kit`: when false, every `kit`-gated reviewer is recorded as

@@ -64,10 +64,11 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    test users and one line of evidence per scenario; classify every failure as
    regression, pre-existing bug or environment issue. With `qa.owner: none`, the QA
    section still exists and says what the author verified.
-   **Verify with Jev** before writing, when `optional.jev` is true: load `jev_verify`
+   **Verify with Jev** before writing, when `optional.jev` is true. Load `jev_verify`
    and send one claim per Plan versus delivered row marked done ("<scenario> is
-   implemented") with the slice's hunks as evidence, one claim per QA Pass row against
-   its Evidence line, and one claim per Verdict tile against the section it summarises.
+   implemented") with the slice's hunks as evidence. Send one claim per QA Pass row
+   against its Evidence line, and one per Verdict tile against the section it
+   summarises.
    An `unsupported` or `contradicted` delivered row becomes changed or dropped with the
    reason; a Pass row without evidence becomes not run; a tile that disagrees with its
    section is recounted. Say in the Verdict how many claims Jev verified. Without the

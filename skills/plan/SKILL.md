@@ -64,10 +64,10 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
    already; the page is the deliverable, not the markdown. Read
    `references/exemplar.md` once first for the density to aim at.
    **Decide with Jev** before the Decisions and Open questions sections are final, when
-   `optional.jev` is true: for each question whose options you can name, load
-   `jev_decide` and call it with the question as `decision`, the options as
-   `candidates` (lowercase ids, never `none`, `ask_user` or `investigate`), the facts
-   your research confirmed as `evidence`, the ticket's and profile's priorities as
+   `optional.jev` is true. For each question whose options you can name, load
+   `jev_decide`. Pass the question as `decision` and the options as `candidates`
+   (lowercase ids, never `none`, `ask_user` or `investigate`). Pass the facts your
+   research confirmed as `evidence`, the ticket's and profile's priorities as
    `priorities`, and up to three one-property `requirements`. Selected at confidence
    0.8 or more with no contradicted requirement: write it as a Decisions bullet, "Chose
    X over Y because Z (Jev-assisted, 0.9)", and drop the question. `ask_user`, or the

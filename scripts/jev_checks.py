@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from kit_profile import add_profile_arg, enabled_checks, get, resolve_profile, validate  # noqa: E402
+from kit_profile import CHECK_KEYS, add_profile_arg, enabled_checks, get, resolve_profile, validate, validate_checks  # noqa: E402
 from render import SECRET_PATTERNS  # noqa: E402
 
 API_URL = "https://api.typesafe.ai/v1/systemone"
@@ -63,7 +63,14 @@ EXTRACT_SEVERITY = {"rule_must": "high", "rule_prefer": "medium", "example": "lo
 
 
 class JevUnavailable(Exception):
-    """Raised when no key exists or the API cannot answer; the caller records a skip."""
+    """Raised when no key exists or the API cannot answer; the caller records a skip.
+
+    `partial` carries whatever a scoring run had produced before the failure, so the
+    findings already paid for are written out rather than lost."""
+
+    def __init__(self, reason, partial=None):
+        super().__init__(reason)
+        self.partial = partial
 
 
 # --- key -----------------------------------------------------------------------------
@@ -100,6 +107,26 @@ def require_key():
 # --- diff ----------------------------------------------------------------------------
 
 HUNK_HEADER = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+C_ESCAPE = re.compile(r"\\(?:([0-7]{1,3})|(.))")
+C_SIMPLE = {"n": "\n", "t": "\t", "r": "\r", "\\": "\\", '"': '"', "a": "\a", "b": "\b", "f": "\f", "v": "\v"}
+
+
+def unquote_path(target):
+    """git quotes non-ASCII paths as "b/\303\234..." unless core.quotePath is off; undo that."""
+    if not (len(target) >= 2 and target[0] == '"' and target[-1] == '"'):
+        return target
+    inner = target[1:-1]
+    out = bytearray()
+    pos = 0
+    for match in C_ESCAPE.finditer(inner):
+        out += inner[pos:match.start()].encode("utf-8")
+        if match.group(1):
+            out.append(int(match.group(1), 8))
+        else:
+            out += C_SIMPLE.get(match.group(2), match.group(2)).encode("utf-8")
+        pos = match.end()
+    out += inner[pos:].encode("utf-8")
+    return out.decode("utf-8", errors="replace")
 
 
 def parse_diff(text):
@@ -110,7 +137,8 @@ def parse_diff(text):
 
     def close():
         if current and current["added"]:
-            hunks.append({"path": current["path"], "line": current["line"], "text": "\n".join(current["lines"])})
+            hunks.append({"path": current["path"], "line": current["line"], "start": current["start"],
+                          "text": "\n".join(current["lines"])})
 
     for raw in text.splitlines():
         if raw.startswith("diff --git"):
@@ -119,7 +147,7 @@ def parse_diff(text):
             path = None
             continue
         if current is None and raw.startswith("+++ "):
-            target = raw[4:].strip()
+            target = unquote_path(raw[4:].strip())
             path = None if target == "/dev/null" else re.sub(r"^b/", "", target)
             continue
         if current is None and not HUNK_HEADER.match(raw):
@@ -127,7 +155,8 @@ def parse_diff(text):
         header = HUNK_HEADER.match(raw)
         if header:
             close()
-            current = {"path": path, "line": None, "lines": [raw], "added": 0, "new": int(header.group(1))} if path else None
+            start = int(header.group(1))
+            current = {"path": path, "line": None, "start": start, "lines": [raw], "added": 0, "new": start} if path else None
             continue
         if current is None:
             continue
@@ -143,19 +172,39 @@ def parse_diff(text):
 
 
 def chunk_text(text, limit=CHUNK_CHARS):
-    """Split on line boundaries so no chunk exceeds `limit` characters."""
+    """Split on line boundaries so no chunk exceeds `limit` characters; a single longer line is cut hard."""
     if len(text) <= limit:
         return [text]
     chunks, current, size = [], [], 0
     for line in text.splitlines():
-        if current and size + len(line) + 1 > limit:
-            chunks.append("\n".join(current))
-            current, size = [], 0
-        current.append(line)
-        size += len(line) + 1
+        pieces = [line[i:i + limit] for i in range(0, len(line), limit)] or [""]
+        for piece in pieces:
+            if current and size + len(piece) + 1 > limit:
+                chunks.append("\n".join(current))
+                current, size = [], 0
+            current.append(piece)
+            size += len(piece) + 1
     if current:
         chunks.append("\n".join(current))
     return chunks
+
+
+def chunk_hunk(hunk, limit=CHUNK_CHARS):
+    """(text, first added line) per chunk that still carries an added line."""
+    out = []
+    new_line = hunk["start"]
+    for chunk in chunk_text(hunk["text"], limit):
+        first = None
+        for line in chunk.splitlines():
+            if HUNK_HEADER.match(line):
+                continue
+            if line.startswith("+") and first is None:
+                first = new_line
+            if not line.startswith("-") and not line.startswith("\\"):
+                new_line += 1
+        if first is not None:
+            out.append((chunk, first))
+    return out
 
 
 def glob_to_regex(pattern):
@@ -261,12 +310,15 @@ def score_hunks(hunks, rules, thresholds, key=None, transport=None, dry_run=Fals
         applicable = [r for r in rules if path_matches(r["files"], hunk["path"])]
         if not applicable:
             continue
-        for chunk in chunk_text(hunk["text"]):
+        for chunk, first_line in chunk_hunk(hunk):
             body = build_request(hunk["path"], chunk, applicable)
             requests.append(body)
             if dry_run:
                 continue
-            answers = post(body, key, transport)
+            try:
+                answers = post(body, key, transport)
+            except JevUnavailable as error:
+                raise JevUnavailable(f"{error} after {len(requests) - 1} of the requests", (findings, requests[:-1])) from error
             for rule in applicable:
                 answer = answers.get(rule["id"]) or {}
                 probability = float((answer.get("probabilities") or {}).get("violates", 0.0))
@@ -275,7 +327,7 @@ def score_hunks(hunks, rules, thresholds, key=None, transport=None, dry_run=Fals
                     continue
                 findings.append({
                     "severity": rule["severity"] if which == "flag" else "low",
-                    "location": f"{hunk['path']}:{hunk['line']}",
+                    "location": f"{hunk['path']}:{first_line}",
                     "finding": rule["rule"],
                     "source": f"checks:{rule['id']}",
                     "probability": round(probability, 2),
@@ -324,12 +376,17 @@ def slug(text):
 
 
 def rule_prefix(path):
-    """The path relative to the working directory, minus the suffix, so two CLAUDE.md files never share ids."""
+    """The path relative to the working directory, minus the suffix, so two CLAUDE.md files never share ids.
+
+    A file outside the working directory (the user's ~/.claude/CLAUDE.md) gets its name plus a
+    short hash of its full path, so it cannot collide with a repo file of the same name."""
+    import hashlib
     resolved = Path(path).resolve()
     try:
         relative = resolved.relative_to(Path.cwd().resolve())
     except ValueError:
-        relative = Path(resolved.name)
+        digest = hashlib.sha1(resolved.as_posix().encode("utf-8")).hexdigest()[:6]
+        return f"{resolved.stem}-{digest}"
     return relative.with_suffix("").as_posix()
 
 
@@ -409,11 +466,23 @@ def markdown_table(findings):
 
 
 def load_rules_file(path):
-    """A bare list of checks, or the JSON `--extract --out` wrote (its rules live under `rules`)."""
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    """A bare list of checks, or the JSON `--extract --out` wrote (its rules live under `rules`).
+
+    Returns (rules, problems). A missing file is not an error: the sweep passes the path
+    `--extract` would have written even when extraction was skipped."""
+    file = Path(path)
+    if not file.exists():
+        return [], [f"rules file {path} not found; scoring the profile checks only"]
+    try:
+        data = json.loads(file.read_text(encoding="utf-8"))
+    except ValueError as error:
+        return [], [f"rules file {path} is not JSON: {error}"]
     if isinstance(data, dict):
         data = data.get("rules") or []
-    return enabled_checks({"checks": data})
+    # --extract output carries source and probability alongside the check keys; drop them before validating
+    data = [{k: v for k, v in c.items() if k in CHECK_KEYS} if isinstance(c, dict) else c for c in data]
+    problems = [f"rules file {path}: {problem}" for problem in validate_checks({"checks": data})]
+    return (enabled_checks({"checks": data}) if not problems else []), problems
 
 
 def main(argv=None):
@@ -437,9 +506,18 @@ def main(argv=None):
     thresholds = {"flag_at": get(profile, "jev.flag_at"), "review_at": get(profile, "jev.review_at")}
     rules = enabled_checks(profile)
     if args.rules:
-        rules += load_rules_file(args.rules)
+        extra, problems = load_rules_file(args.rules)
+        for problem in problems:
+            print(f"warning: {problem}" if extra or "not found" in problem else f"invalid: {problem}", file=sys.stderr)
+        if problems and "not found" not in problems[0]:
+            return 1
+        rules += extra
+    if not (args.extract or args.check_rules or args.range or args.diff_file):
+        print("usage: --range or --diff-file is required (or --extract / --check-rules)", file=sys.stderr)
+        return 1
 
     key, source = (None, "dry-run")
+    hunks, skipped, findings, requests, partial_error = [], [], [], [], ""
     try:
         if not args.dry_run:
             key, source = require_key()
@@ -466,14 +544,15 @@ def main(argv=None):
         if not rules:
             print("no checks in the profile and no --rules file; nothing to score")
             return 0
-        if not args.range and not args.diff_file:
-            ap.error("--range or --diff-file is required")
         diff = Path(args.diff_file).read_text(encoding="utf-8") if args.diff_file else git_diff(args.range, args.repo)
         hunks, skipped = split_hunks(parse_diff(diff))
         findings, requests = score_hunks(hunks, rules, thresholds, key, None, args.dry_run)
     except JevUnavailable as error:
         print(f"jev unavailable: {error}", file=sys.stderr)
-        return 2
+        if not error.partial:
+            return 2
+        findings, requests = error.partial
+        partial_error = str(error)
 
     result = {
         "at": now(),
@@ -486,9 +565,17 @@ def main(argv=None):
         "findings": findings,
         "skipped": skipped,
     }
+    if partial_error:
+        result["partial"] = partial_error
     if args.dry_run:
         result["dry_run"] = requests
     write_out(args.out, result)
+    if partial_error:
+        print(markdown_table(findings) if findings else "No findings before the failure.")
+        print(f"\npartial: {len(requests)} requests answered before the failure; results written, run again to finish")
+        for line in skipped:
+            print(f"skipped: {line}")
+        return 2
     if args.dry_run:
         print(f"dry run: {len(requests)} request{'s' if len(requests) != 1 else ''} for {len(hunks)} hunks, nothing sent")
         for body in requests:

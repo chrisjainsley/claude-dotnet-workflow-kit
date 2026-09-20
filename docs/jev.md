@@ -3,9 +3,9 @@
 Jev is TypeSafe's System One model: unstructured state in, typed probabilities out. It
 answers yes/no, choice and score questions in 70 to 500 ms with a calibrated
 confidence, and it never generates text. The kit uses it where a skill would otherwise
-make a judgment call on gut feel: is this claim backed by the diff, which option should
-the plan preselect, is this failing test a regression, does this comment need a code
-change. Jev decides between options the skill names; the skill still reads the code and
+make a judgment call on gut feel. Is this claim backed by the diff? Which option should
+the plan preselect? Is this failing test a regression? Does this comment need a code
+change? Jev decides between options the skill names; the skill still reads the code and
 writes the words.
 
 Every touchpoint is gated on `optional.jev` and is skipped, never failed, when Jev is
@@ -15,7 +15,7 @@ records nothing for a skipped call.
 
 ## Two surfaces
 
-**The `jev` MCP** answers in-conversation judgments. Register it at user scope so it
+The `jev` MCP answers in-conversation judgments. Register it at user scope so it
 loads in every project, with the key as an environment variable of the server:
 
 ```bash
@@ -28,7 +28,7 @@ and continue. The call shapes below were written against `@jkudish/jev-mcp` 0.5.
 third-party wrapper; confirm argument names from the `ToolSearch` result before the
 first call in a session, since the wrapper can change between releases.
 
-**The HTTP API** serves the scripts. `scripts/jev_checks.py` posts to
+The HTTP API serves the scripts. `scripts/jev_checks.py` posts to
 `https://api.typesafe.ai/v1/systemone` with `TYPESAFE_API_KEY` from the environment,
 or from the `jev` MCP entry in `~/.claude.json` when the variable is not set. Scripts
 never print the key. Doctor names the source it found: `python scripts/doctor.py`.
