@@ -145,15 +145,16 @@ def test_given_top_level_mcp_entry_then_found(tmp_path):
     assert jev_checks.resolve_key({}, claude_json) == ("top", "mcp config")
 
 
-def test_given_extract_then_rules_take_severity_from_the_class(tmp_path):
+def test_given_extract_then_rules_take_severity_from_the_class(tmp_path, monkeypatch):
     md = tmp_path / "CLAUDE.md"
     md.write_text(
         "# Rules\n\n- Never call DateTime.Now in domain code.\n- Prefer records for value objects.\n"
         "This project is a modular monolith.\n```csharp\nvar x = 1;\n```\n",
         encoding="utf-8",
     )
+    monkeypatch.chdir(tmp_path)
     transport = FakeTransport(extract={"claude-3": "rule_must", "claude-4": "rule_prefer", "claude-5": "prose"})
-    extracted, requests = jev_checks.extract_rules([str(md)], PLACEHOLDER_KEY, transport)
+    extracted, requests = jev_checks.extract_rules(["CLAUDE.md"], PLACEHOLDER_KEY, transport)
     assert len(requests) == 1
     assert [(r["id"], r["severity"]) for r in extracted] == [("claude-3", "high"), ("claude-4", "medium")]
     assert extracted[0]["rule"] == "Never call DateTime.Now in domain code."
@@ -169,10 +170,8 @@ def test_given_check_rules_then_doubtful_ones_are_named():
 
 
 def cli_env(tmp_path, key=None):
-    env = {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path)}
-    if key:
-        env["TYPESAFE_API_KEY"] = key
-    return env
+    # An empty value overrides any key exported in the developer's shell; resolve_key treats it as absent.
+    return {"HOME": str(tmp_path), "USERPROFILE": str(tmp_path), "TYPESAFE_API_KEY": key or ""}
 
 
 def test_given_dry_run_then_nothing_sent_and_json_written(tmp_path):
@@ -233,3 +232,27 @@ def test_given_rules_file_then_added_to_profile_checks(tmp_path):
                                   cwd=tmp_path, env=cli_env(tmp_path))
     assert code == 0, stderr
     assert "claude-3" in stdout
+
+
+def test_given_two_claude_files_then_extracted_ids_do_not_collide(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "CLAUDE.md").write_text("- Never call DateTime.Now in domain code.\n", encoding="utf-8")
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / "CLAUDE.md").write_text("- Prefer records for value objects.\n", encoding="utf-8")
+    transport = FakeTransport(extract={"claude-1": "rule_must", "claude-claude-1": "rule_prefer"})
+    extracted, _ = jev_checks.extract_rules(["CLAUDE.md", ".claude/CLAUDE.md"], PLACEHOLDER_KEY, transport)
+    assert sorted(r["id"] for r in extracted) == ["claude-1", "claude-claude-1"]
+
+
+def test_given_extract_output_then_rules_flag_round_trips(monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TYPESAFE_API_KEY", PLACEHOLDER_KEY)
+    (tmp_path / "CLAUDE.md").write_text("- Never call DateTime.Now in domain code.\n", encoding="utf-8")
+    monkeypatch.setattr(jev_checks, "default_transport", FakeTransport(extract={"claude-1": "rule_must"}))
+    rules_out = tmp_path / "rules.json"
+    assert jev_checks.main(["--extract", "CLAUDE.md", "--out", str(rules_out), "--profile", str(PROFILE)]) == 0
+    assert json.loads(rules_out.read_text(encoding="utf-8"))["rules"][0]["id"] == "claude-1"
+    capsys.readouterr()
+    code = jev_checks.main(["--diff-file", str(DIFF), "--profile", str(PROFILE), "--rules", str(rules_out), "--dry-run"])
+    assert code == 0
+    assert "claude-1" in capsys.readouterr().out

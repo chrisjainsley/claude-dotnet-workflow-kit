@@ -323,11 +323,21 @@ def slug(text):
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "rule"
 
 
+def rule_prefix(path):
+    """The path relative to the working directory, minus the suffix, so two CLAUDE.md files never share ids."""
+    resolved = Path(path).resolve()
+    try:
+        relative = resolved.relative_to(Path.cwd().resolve())
+    except ValueError:
+        relative = Path(resolved.name)
+    return relative.with_suffix("").as_posix()
+
+
 def extract_rules(paths, key=None, transport=None, dry_run=False, keep_at=0.5):
     rules, requests = [], []
     for path in paths:
         items = candidate_lines(path)
-        stem = slug(Path(path).stem)
+        stem = slug(rule_prefix(path))
         for start in range(0, len(items), EXTRACT_BATCH):
             batch = items[start:start + EXTRACT_BATCH]
             body = {
@@ -399,7 +409,10 @@ def markdown_table(findings):
 
 
 def load_rules_file(path):
+    """A bare list of checks, or the JSON `--extract --out` wrote (its rules live under `rules`)."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(data, dict):
+        data = data.get("rules") or []
     return enabled_checks({"checks": data})
 
 
