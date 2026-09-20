@@ -100,31 +100,44 @@ def has_roslyn_mcp():
 
 
 FRONTEND_DEPS = (("@angular/core", "angular"), ("react", "react"), ("vue", "vue"))
-SKIP_DIRS = {"node_modules", "bin", "obj", ".git", "dist", "lib", ".claude", "plans"}
+SKIP_DIRS = {"node_modules", "bin", "obj", ".git", "dist", ".claude", "plans"}
+
+
+def package_dependencies(path):
+    """Dependency names from a package.json, empty when the file is not a plain object."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    if not isinstance(data, dict):
+        return set()
+    names = set()
+    for key in ("dependencies", "devDependencies"):
+        block = data.get(key)
+        if isinstance(block, dict):
+            names.update(block)
+    return names
 
 
 def detect_frontend(root="."):
     """What kind of frontend the files under root suggest: blazor, then a framework named
-    in a package.json, then razor, then plain javascript under wwwroot/js, else none."""
-    razor_files = cshtml_files = 0
-    frameworks, package_jsons, script_files = [], 0, 0
+    in a package.json, then razor, then plain scripts under wwwroot/js, else none.
+    A package.json naming no framework is tooling, not a frontend."""
+    razor_files = cshtml_files = script_files = 0
+    frameworks = []
     for current, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-        for name in files:
+        here = Path(current)
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not (d == "lib" and here.name == "wwwroot"))
+        for name in sorted(files):
             lower = name.lower()
             if lower.endswith(".razor"):
                 razor_files += 1
             elif lower.endswith(".cshtml"):
                 cshtml_files += 1
             elif lower == "package.json":
-                package_jsons += 1
-                try:
-                    data = json.loads((Path(current) / name).read_text(encoding="utf-8"))
-                except (OSError, ValueError):
-                    data = {}
-                deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
+                deps = package_dependencies(here / name)
                 frameworks.extend(value for key, value in FRONTEND_DEPS if key in deps)
-            elif lower.endswith((".js", ".ts")) and Path(current).name == "js" and Path(current).parent.name == "wwwroot":
+            elif lower.endswith((".js", ".ts")) and here.name == "js" and here.parent.name == "wwwroot":
                 script_files += 1
     if razor_files:
         return "blazor"
@@ -132,7 +145,7 @@ def detect_frontend(root="."):
         return frameworks[0]
     if cshtml_files:
         return "razor"
-    if package_jsons or script_files:
+    if script_files:
         return "javascript"
     return "none"
 

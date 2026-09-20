@@ -137,8 +137,11 @@ def test_given_designs_after_specs_and_frontend_blazor_then_check_passes():
     assert "Designs" in out
 
 
-def test_given_designs_with_frontend_none_then_exit1():
-    code, out, err = run_py(CHECK_PLAN_PY, DESIGNS_FIXTURE_PATH)
+def test_given_designs_with_frontend_none_then_exit1(tmp_path):
+    profile_path = tmp_path / "none-profile.json"
+    profile_path.write_text(json.dumps({"stack": {"frontend": "none"}}), encoding="utf-8")
+
+    code, out, err = run_py(CHECK_PLAN_PY, DESIGNS_FIXTURE_PATH, "--profile", profile_path)
 
     assert code == 1
     assert "stack.frontend" in out

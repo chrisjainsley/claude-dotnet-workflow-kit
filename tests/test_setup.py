@@ -198,3 +198,26 @@ def test_given_no_frontend_then_none(tmp_path):
     (tmp_path / "src" / "Program.cs").write_text("", encoding="utf-8")
 
     assert setup_module_fresh().detect_frontend(tmp_path) == "none"
+
+
+def test_given_tooling_package_json_only_then_none(tmp_path):
+    (tmp_path / "package.json").write_text(json.dumps({"devDependencies": {"prettier": "^3"}}), encoding="utf-8")
+
+    assert setup_module_fresh().detect_frontend(tmp_path) == "none"
+
+
+def test_given_malformed_package_json_then_skipped(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "package.json").write_text(json.dumps({"dependencies": None}), encoding="utf-8")
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "package.json").write_text("[]", encoding="utf-8")
+    write_package_json(tmp_path, {"vue": "^3"})
+
+    assert setup_module_fresh().detect_frontend(tmp_path) == "vue"
+
+
+def test_given_razor_library_under_lib_then_detect_blazor(tmp_path):
+    (tmp_path / "src" / "lib" / "Ui").mkdir(parents=True)
+    (tmp_path / "src" / "lib" / "Ui" / "Card.razor").write_text("<div></div>", encoding="utf-8")
+
+    assert setup_module_fresh().detect_frontend(tmp_path) == "blazor"

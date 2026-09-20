@@ -21,8 +21,7 @@ skill reads; see the README's profile reference for each field.
    - Group 2, how you test and run: integration style (webapplicationfactory,
      testcontainers, none); data access (ef-core, dapper, cosmos, other); API style
      (minimal-api, controllers, graphql, grpc); frontend (none, blazor, razor, react,
-     angular, vue, javascript), with the detected value first. Anything but none lets
-     a plan carry a Designs section and draw screens when a ticket has none.
+     angular, vue, javascript), with the detected value first.
    - Group 3, how work flows: tracker (azure-boards, github-issues, jira, none); source
      control (github, azure-repos); who does QA (qa-team, self, none); where QA evidence
      goes (work-item, pr-comment, none). Evidence `work-item` needs a tracker; if the

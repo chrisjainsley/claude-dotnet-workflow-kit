@@ -246,8 +246,9 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
     document.querySelectorAll('figure.design .design-frame').forEach(function (frame) {
       var iframe = frame.querySelector('iframe');
       if (!iframe) { return; }
-      var w = parseInt(iframe.getAttribute('width'), 10) || 1280;
-      var h = parseInt(iframe.getAttribute('height'), 10) || 800;
+      var w = parseInt(iframe.getAttribute('width'), 10);
+      var h = parseInt(iframe.getAttribute('height'), 10);
+      if (!w || !h || !frame.clientWidth) { return; }
       var s = Math.min(1, frame.clientWidth / w);
       iframe.style.transform = 'scale(' + s + ')';
       frame.style.height = Math.round(h * s) + 'px';
@@ -255,6 +256,7 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
   }
   fitDesigns();
   window.addEventListener('resize', fitDesigns);
+  document.querySelectorAll('details').forEach(function (d) { d.addEventListener('toggle', fitDesigns); });
   var modal = document.getElementById('diagram-modal');
   var modalBody = document.getElementById('diagram-body');
   if (modal && modalBody && typeof modal.showModal === 'function') {

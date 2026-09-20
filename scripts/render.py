@@ -89,7 +89,7 @@ KIND = "plan"
 MAX_IMAGE_WIDTH = 1600
 MAX_DESIGN_BYTES = 2 * 1024 * 1024
 DESIGN_DEFAULT_SIZE = (1280, 800)
-SUPPORT_JS_RE = re.compile(r"^[ \t]*<script[^>]*support\.js[^>]*>\s*</script>[ \t]*\r?\n?", re.M | re.I)
+SUPPORT_JS_RE = re.compile(r"[ \t]*<script[^>]*support\.js[^>]*>\s*</script>[ \t]*(?:\r?\n)?", re.I)
 PREVIEW_RE = re.compile(r'"\$preview"\s*:\s*\{([^}]*)\}')
 MAX_FILE_DIFF_LINES = 400
 SECRET_PATTERNS = re.compile(r"(appsettings[^/]*\.json|local\.settings\.json|\.tfvars|\.env(\.|$)|secrets?\.(json|ya?ml)|\.pfx|\.pem)$", re.I)
@@ -185,11 +185,12 @@ def design_size(source):
 
 def render_design(alt, path):
     file = (SOURCE_DIR / path).resolve()
-    if not file.exists():
-        return f'<figure class="missing"><figcaption>Missing artboard: {html.escape(path)}</figcaption></figure>'
-    source = file.read_text(encoding="utf-8")
+    try:
+        source = file.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return f'<div class="figures"><figure class="missing"><figcaption>Missing artboard: {html.escape(path)}</figcaption></figure></div>'
     if len(source.encode("utf-8")) > MAX_DESIGN_BYTES:
-        WARNINGS.append(f"artboard {path} is over 2 MB; the page must stay under 16 MB")
+        WARNINGS.append(f"artboard {path} is over {MAX_DESIGN_BYTES // (1024 * 1024)} MB; the page must stay under 16 MB")
     source = SUPPORT_JS_RE.sub("", source)
     width, height = design_size(source)
     caption = html.escape(alt, quote=True)

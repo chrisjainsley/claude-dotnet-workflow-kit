@@ -242,7 +242,7 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `stack.messaging` | `masstransit`, `wolverine`, `service-bus`, `none` | `"none"` | Messaging conventions. |
 | `stack.errors` | `result`, `exceptions` | `"exceptions"` | Error handling conventions. |
 | `stack.local_run` | `aspire`, `docker`, `plain` | `"plain"` | How to start the system for local QA. |
-| `stack.frontend` | `none`, `blazor`, `razor`, `react`, `angular`, `vue`, `javascript` | `"none"` | Whether the repo has a frontend and which kind; anything but `none` lets a plan carry a Designs section and draw screens when a ticket has none. |
+| `stack.frontend` | `none`, `blazor`, `razor`, `react`, `angular`, `vue`, `javascript` | `"none"` | Whether the repo has a frontend and which kind; see the plan skill. |
 | `reviewers` | `bug-hunt`, `conventions`, `kit`, `security-scan`, `convention-learner`, `code-review-workflow` | `["bug-hunt", "conventions"]` | Reviewer sweep passes; the two built-ins always run. |
 | `pipeline.execute` | Free text | `""` | Execution command; blank implements the plan directly. |
 | `pipeline.resolve_comments` | Free text | `""` | Comment-resolution command; blank uses the SCM adapter. |

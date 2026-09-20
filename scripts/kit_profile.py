@@ -230,6 +230,13 @@ def optional_plan_sections(profile):
     return allowed
 
 
+def disallowed_plan_sections(profile, present):
+    """Optional sections the document carries that this profile does not allow, with why."""
+    allowed = optional_plan_sections(profile)
+    return [f"{name}: only allowed when the profile's stack.frontend is not none"
+            for name in OPTIONAL_PLAN_SECTIONS if name in present and name not in allowed]
+
+
 def expected_plan_sections(profile, present):
     """The section list a plan must match: the architecture's list plus any allowed
     optional section the document actually carries, each slotted after its anchor."""

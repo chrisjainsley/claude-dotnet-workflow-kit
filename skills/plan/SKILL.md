@@ -175,9 +175,7 @@ Follow `docs/writing-rules.md` in full: the budget philosophy and the writing ru
   screenshots are fine; a whole design file is not. The builder downscales to 1600px.
 - Artboards embed as sandboxed iframes without the canvas runtime: `{{holes}}` print
   literally, `<sc-for>`, `<sc-if>` and `<dc-import>` stay inert and `/_blob/` images
-  404. Keep kit-made artboards static. The builder warns above 2 MB per artboard.
-- The canvas is the live design; the plan shows a copy. Re-read the artboards before
-  every republish.
+  404. The builder warns above 2 MB per artboard.
 - Federated GraphQL: type names collide across services and the gateway renames one
   side non-deterministically. Grep the other schemas before proposing a new type name.
 

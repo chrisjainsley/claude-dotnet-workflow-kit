@@ -14,7 +14,7 @@ date: 2026-09-11
 
 **Area:** SubscriptionService, Loyalty Points bounded context. `LoyaltyPointsAccountGrain` and its ledger in `Acme.Data.ReadModels.Subscription`, the `SignupCampaignGrantIssuer` on the API wallet read, and the B2C `EnrichToken` connector in UserService for identity at signup.
 
-**Designs:** none. Backend-only story; the member sees no new UI.
+**Designs:** none attached to the item; the wallet page below was drawn for this plan.
 
 ## Requirement
 A new Free account created under the `signup-grant` campaign gets 1,000 Loyalty Points that expire after 30 days. Today the credit is per account, so a second account is another $10. This story makes it once per payer, where the payer is the email root: lowercased, plus-suffix removed, dots kept. A repeat payer signs up, gets the quests, earns normally, and never sees the credit. Nothing tells them.
