@@ -86,6 +86,12 @@ Use for an implementation plan. It reads the ticket and codebase, then writes
 with test scenarios, decisions, risks and open questions. A script checks section
 budgets before publication.
 
+When `stack.frontend` is set and a ticket changes a screen that came with no design,
+the skill draws the screens first, with Claude Code's `/design` command or the Design
+canvas Artifact type, and embeds the artboards in a Designs section of the plan page
+next to a link to the editable canvas. Designs supplied by the tracker are used as they
+are and no canvas is made.
+
 On an Artifact page, choose answers and press **Send answers**, then tell the session
 "answered". The skill reads the stored choices, updates the plan and republishes it.
 

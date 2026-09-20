@@ -36,7 +36,10 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
 1. **Load the approved plan** at `plans/<id>-<slug>/plan.md` and its stored answers
    (Artifact `read_db`, collection `answers`, when the plan was published). Every
    answer is a settled decision. With no plan, stop and hand off to
-   `/dotnet-workflow-kit:plan`; this skill does not design.
+   `/dotnet-workflow-kit:plan`; this skill does not design. When the plan has a Designs
+   section, open its artboards (`plans/<slug>/design/project/*.dc.html`, or the canvas
+   at the state file's `plan.designUrl`) before any frontend layer and build to them;
+   the tracker's design images under `context/` count the same way.
 2. **Confirm the branch and a clean tree.** The branch should match the profile's
    `branch_pattern`; `git status --short` should be empty. A dirty tree means someone is
    mid-edit: list the files and ask before continuing.
