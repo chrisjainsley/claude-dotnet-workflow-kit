@@ -256,7 +256,13 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
   }
   fitDesigns();
   window.addEventListener('resize', fitDesigns);
+  window.addEventListener('load', fitDesigns);
   document.querySelectorAll('details').forEach(function (d) { d.addEventListener('toggle', fitDesigns); });
+  if ('ResizeObserver' in window) {
+    // The column settles after fonts and the rail lay out; follow it rather than trust the first measure.
+    var ro = new ResizeObserver(fitDesigns);
+    document.querySelectorAll('figure.design .design-frame').forEach(function (frame) { ro.observe(frame); });
+  }
   var modal = document.getElementById('diagram-modal');
   var modalBody = document.getElementById('diagram-body');
   if (modal && modalBody && typeof modal.showModal === 'function') {
