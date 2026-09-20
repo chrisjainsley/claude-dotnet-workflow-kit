@@ -8,7 +8,9 @@ skill reads; see the README's profile reference for each field.
 
 1. **Detect first.** Run `python "${CLAUDE_PLUGIN_ROOT}/scripts/setup.py" --detect` and
    read the JSON: remote host, whether `az` and `gh` exist, installed plugins, whether
-   dotnet-claude-kit, codex and a Roslyn MCP server are present. Use these as defaults.
+   dotnet-claude-kit, codex and a Roslyn MCP server are present, and which frontend the
+   files suggest (`.razor`, a `package.json` framework, `.cshtml`, plain scripts). Use
+   these as defaults.
    If `$ARGUMENTS` names a `--profile` file, skip the questions and go to step 4 with it.
 
 2. **Ask in groups with the question tool**, at most four questions per call, four
@@ -18,7 +20,9 @@ skill reads; see the README's profile reference for each field.
      tests (reqnroll, specflow, none).
    - Group 2, how you test and run: integration style (webapplicationfactory,
      testcontainers, none); data access (ef-core, dapper, cosmos, other); API style
-     (minimal-api, controllers, graphql, grpc); local run (aspire, docker, plain).
+     (minimal-api, controllers, graphql, grpc); frontend (none, blazor, razor, react,
+     angular, vue, javascript), with the detected value first. Anything but none lets
+     a plan carry a Designs section and draw screens when a ticket has none.
    - Group 3, how work flows: tracker (azure-boards, github-issues, jira, none); source
      control (github, azure-repos); who does QA (qa-team, self, none); where QA evidence
      goes (work-item, pr-comment, none). Evidence `work-item` needs a tracker; if the
@@ -27,7 +31,8 @@ skill reads; see the README's profile reference for each field.
      base branch, branch pattern (must contain `{slug}`), branch kind prefixes for
      features and bugs, tracker state names for active and QA hand-off (blank keeps the
      adapter default), QA hand-off label, deploy
-     label, QA environment name, messaging (masstransit, wolverine, service-bus, none),
+     label, QA environment name, local run (aspire, docker, plain), messaging
+     (masstransit, wolverine, service-bus, none),
      error handling (result, exceptions), and the optional pipeline commands `/next` runs
      for Execute, Resolve comments and QA (blank means the built-in fallback).
    - Group 5, reviewers: a multi-select of extra reviewer-sweep reviewers (kit,

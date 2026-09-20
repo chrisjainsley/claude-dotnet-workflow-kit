@@ -11,6 +11,7 @@ default. The profile lands at .claude/dotnet-workflow-kit.json in the current pr
 """
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -50,6 +51,7 @@ QUESTIONS = [
     ("stack.messaging", "Messaging", ENUMS["stack.messaging"]),
     ("stack.errors", "Error handling", ENUMS["stack.errors"]),
     ("stack.local_run", "How the system runs locally", ENUMS["stack.local_run"]),
+    ("stack.frontend", "Frontend", ENUMS["stack.frontend"]),
     ("pipeline.execute", "Command the pipeline runs for the Execute stage (blank: implement the plan by hand)", None),
     ("pipeline.resolve_comments", "Command for the Resolve comments stage (blank: built-in scm adapter steps)", None),
     ("pipeline.qa", "Command for the QA stage (blank: run the plan's Specs manually)", None),
@@ -97,6 +99,44 @@ def has_roslyn_mcp():
     return bool(out and out.returncode == 0 and re.search(r"roslyn", out.stdout, re.I))
 
 
+FRONTEND_DEPS = (("@angular/core", "angular"), ("react", "react"), ("vue", "vue"))
+SKIP_DIRS = {"node_modules", "bin", "obj", ".git", "dist", "lib", ".claude", "plans"}
+
+
+def detect_frontend(root="."):
+    """What kind of frontend the files under root suggest: blazor, then a framework named
+    in a package.json, then razor, then plain javascript under wwwroot/js, else none."""
+    razor_files = cshtml_files = 0
+    frameworks, package_jsons, script_files = [], 0, 0
+    for current, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        for name in files:
+            lower = name.lower()
+            if lower.endswith(".razor"):
+                razor_files += 1
+            elif lower.endswith(".cshtml"):
+                cshtml_files += 1
+            elif lower == "package.json":
+                package_jsons += 1
+                try:
+                    data = json.loads((Path(current) / name).read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    data = {}
+                deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
+                frameworks.extend(value for key, value in FRONTEND_DEPS if key in deps)
+            elif lower.endswith((".js", ".ts")) and Path(current).name == "js" and Path(current).parent.name == "wwwroot":
+                script_files += 1
+    if razor_files:
+        return "blazor"
+    if frameworks:
+        return frameworks[0]
+    if cshtml_files:
+        return "razor"
+    if package_jsons or script_files:
+        return "javascript"
+    return "none"
+
+
 def git_remote_host():
     out = run("git", "remote", "get-url", "origin")
     if out is None or out.returncode != 0:
@@ -120,8 +160,9 @@ def detect():
         KIT_PLUGIN: plugins.get(KIT_PLUGIN, {}).get("enabled", False),
         "codex": any(name.startswith("codex") for name in plugins),
         "roslyn-mcp": has_roslyn_mcp(),
+        "frontend": detect_frontend(),
     }
-    guess = {}
+    guess = {"stack": {"frontend": found["frontend"]}}
     if found["scm"]:
         guess["scm"] = found["scm"]
     if found["az"] and not found["gh"]:
