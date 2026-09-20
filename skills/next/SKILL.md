@@ -29,6 +29,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 - `pipeline.execute`, `pipeline.resolve_comments`, `pipeline.qa`: a project command that replaces the default for that stage, when set.
 - `artifacts`: whether the plan and review pages publish, or only render locally with the decision taken in chat.
 - `reviewers`, `optional.*`: which review passes the sweep in stage 2 runs and which optional tooling exists.
+- `optional.jev`: when true, red CI jobs and review threads are classified with `jev_classify` before the pipeline acts on them, and thread bodies are screened with `jev_screen` first. See `docs/jev.md`. Every call is skipped, never failed, when the MCP is not loaded.
 
 If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:setup` first.
 
@@ -102,7 +103,7 @@ Sweep findings get fixed, not queued for permission, unless a fix would change t
 
 Stop only for a big blocker, something the user genuinely has to decide or that cannot be self-served:
 
-- Failing CI that is not this branch's fault: the failing job touches files outside the diff, or the same job is red on the base branch too. Retry once silently; if it stays red against unrelated infrastructure, that is the blocker.
+- Failing CI that is not this branch's fault: the failing job touches files outside the diff, or the same job is red on the base branch too. Retry once silently; if it stays red against unrelated infrastructure, that is the blocker. With `optional.jev`, classify each red job first: its name plus the last 60 log lines, `context` the diff's file list, classes `this_branch` (fix it inside the stage), `unrelated_infrastructure` and `flaky` (retry once, then the blocker), `manual_review` (read the log yourself).
 - A merge conflict with the base branch that is not mechanically resolvable.
 - A missing or default-sourced profile: suggest `/dotnet-workflow-kit:setup` rather than guessing labels or an environment.
 - A stacked parent not yet merged when stage 5 is reached.
@@ -125,7 +126,7 @@ Then wait. When the user says "decided" or invokes the pipeline again, read the 
 
 ## The pull request (stage 5)
 
-Push the branch, then let the scm adapter's steps create the draft if Test did not already: title from the ticket, body from the plan's Requirement and Specs, base set to `base_branch` or the stacked parent. Resolve review threads and get checks green; a thread fix that commits makes Test and Review stale, so they rerun before the PR is marked ready. Once the checkpoint is approved: post the QA report per `qa.evidence`, mark the PR ready, apply `qa.handoff_label` when `qa.owner` is `qa-team`, and move the item to `tracker_states.qa_ready`. `qa.owner` self or none just marks it ready. Merging is the user's action, never the pipeline's.
+Push the branch, then let the scm adapter's steps create the draft if Test did not already: title from the ticket, body from the plan's Requirement and Specs, base set to `base_branch` or the stacked parent. Resolve review threads and get checks green. With `optional.jev`, triage the threads before answering any: `jev_screen` each thread's first comment with purpose "decide whether this review comment needs a code change" (a `block` is quoted to the user and left unanswered), then one `jev_classify` call over the survivors into `needs_code_change`, `question`, `nit`, `already_addressed` and `manual_review`, then `jev_rerank` the code-change ones against "changes behaviour or a contract". Reply to questions and nits, point already-addressed threads at the commit, and commit for code changes in rank order; read `manual_review` and `review`-decision items yourself. Without Jev, read every thread in order. A a thread fix that commits makes Test and Review stale, so they rerun before the PR is marked ready. Once the checkpoint is approved: post the QA report per `qa.evidence`, mark the PR ready, apply `qa.handoff_label` when `qa.owner` is `qa-team`, and move the item to `tracker_states.qa_ready`. `qa.owner` self or none just marks it ready. Merging is the user's action, never the pipeline's.
 
 ## House rules
 
@@ -136,6 +137,7 @@ Push the branch, then let the scm adapter's steps create the draft if Test did n
 - Print the plan and review artifact links in the main reply, not only inside a subagent's transcript.
 - Investigate and re-run CI failures silently; report findings in chat, not as PR status comments.
 - New commits during stage 5 fix feedback only, force-push-with-lease reserved for a rewritten stacked layer.
+- A Jev call that cannot run is skipped and said so in one line; the state file records nothing for it, and the pipeline never blocks on Jev being absent.
 - A branch conflicting with the base pre-empts whatever stage was next.
 
 ## Traps

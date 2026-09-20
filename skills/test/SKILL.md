@@ -33,6 +33,9 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 - `qa.environment`, `qa.deploy_label`, `scm`: where the scenarios run and how the
   branch gets there. Read `adapters/qa/<qa.owner>.md` and `adapters/scm/<scm>.md`.
 - `stack.local_run`: how to start the system when `qa.environment` is `local`.
+- `optional.jev`: when true, failing tests are bucketed with `jev_classify` before any
+  fixing, and the QA report's Classification column comes from the same call. See
+  `docs/jev.md`. Skipped, never failed, when the MCP is not loaded.
 
 ## Default mode: run and report
 
@@ -42,7 +45,13 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    `pipeline.qa` when set. When `qa.environment` is not `local`, push the branch, open
    the draft PR through the scm adapter if none exists and apply `qa.deploy_label`, then
    wait for the deployment before running. Fix failures on the branch and rerun until
-   green, unless a fix would change the ticket's scope. Write `test` to the pipeline
+   green, unless a fix would change the ticket's scope. With `optional.jev`, bucket the
+   failures first: load `jev_classify`, one item per failing test or scenario (name plus
+   the assertion message, under 2000 characters), `context` the plan's Requirement and
+   a one-line summary of the change, classes `real_regression` and
+   `assertion_changed_by_refactor` (fix), `flaky_known` (rerun once, then treat as a
+   regression), `environment` (follow `adapters/stack/local_run.md` "Common issues")
+   and `manual_review` (read it yourself). Write `test` to the pipeline
    state file as `{"done": true, "at": "<ISO time>", "note": "<n> scenarios pass"}`.
 2. **Check for an existing review page first.** If this session already produced a
    review artifact (the kit's review skill) that contains a QA section, copy that
@@ -55,7 +64,11 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    browser steps, or direct inspection of a provider or data store); the environment;
    the outcome,
    Pass, Fail or Blocked, with one line of evidence; and, for anything but Pass, whether
-   it is a regression, a pre-existing bug, an environment issue, or simply not run.
+   it is a regression, a pre-existing bug, an environment issue, or simply not run. The
+   Jev buckets from step 1 map straight onto that column: `real_regression` and
+   `assertion_changed_by_refactor` are a regression, `flaky_known` that failed twice
+   is a regression, `environment` is an environment issue; `manual_review` means you
+   decide and say so in the Evidence line.
    **Unit and integration suites are never QA evidence.** If the only verification
    performed was an in-process test suite, say so and stop: there is nothing to report.
 4. **Write the report** with this exact structure:

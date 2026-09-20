@@ -28,6 +28,9 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
   `adapters/stack/<field>.md` for the fields the plan touches.
 - `reviewers`, `optional.*`, `scm`, `base_branch`: what the sweep runs, and against
   which base. See `../review/sweep.md`.
+- `optional.jev`: when true, the sweep scores the profile's `checks` with Jev and gates
+  its verdict, and step 5 classifies open findings with `jev_classify`. See
+  `docs/jev.md`. Skipped, never failed, when the MCP is not loaded.
 
 If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:setup`.
 
@@ -57,7 +60,13 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
 5. **Run the reviewer sweep** from `../review/sweep.md`: parallel read-only reviewers,
    sequential cleanup, then verification on the cleaned tree. Fix every finding that
    does not change the ticket's scope and commit the fixes; a finding that would change
-   scope is recorded as open for the reviewer.
+   scope is recorded as open for the reviewer. With `optional.jev`, load `jev_classify`
+   and classify every finding in one call before fixing any, with the plan's
+   Requirement and Specs as `context`, into `fixable_in_scope` (fix and commit),
+   `changes_scope` (record open for the reviewer), `contradicts_acceptance` (the
+   blocker below) and `manual_review` (read it and decide yourself). Read the `review`
+   decisions yourself too; a classification is a hint about scope, not a verdict on
+   the code.
 6. **Write the pipeline state.** In `~/.claude/dotnet-workflow-kit/pipeline/<slug>.json`
    set `implement` to `{"done": true, "at": "<ISO time>", "commits": <n>}`; the sweep
    step has already written `sweep`.
