@@ -29,6 +29,10 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
   named in Rollout and the QA report.
 - `artifacts`: publish with the Artifact tool or open the HTML locally.
 - `branding`: `build_review.py` reads it and adds the Delivery Labs colours and attribution footer when true.
+- `optional.jev`: when true, `jev_verify` checks the Plan versus delivered rows, the QA
+  Pass rows and the Verdict tiles against evidence before the page is built, and the
+  sweep's `gate` result is a Verdict fact. See `docs/jev.md`. Skipped, never failed,
+  when the MCP is not loaded.
 
 ## Workflow
 
@@ -51,12 +55,24 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    `implement` skill normally ran it already); a sweep that changes files makes the
    Test stage stale, so say so and rerun the scenarios before continuing. Every finding
    gets a status: fixed on the branch, accepted with a reason, or open for the reviewer.
+   A `checks:<id>` finding keeps its Jev probability in the Note column. When
+   `sweep.gate` is `escalate`, the Verdict says so and names the claim that failed; the
+   page cannot be Ready for QA on an escalated gate.
 4. **Collect QA evidence** from this session or from what the user describes: acceptance
    runs against a real environment and manual API, browser or payment-provider checks.
    Unit and integration suites are not QA and never appear. Name the environment, the
    test users and one line of evidence per scenario; classify every failure as
    regression, pre-existing bug or environment issue. With `qa.owner: none`, the QA
    section still exists and says what the author verified.
+   **Verify with Jev** before writing, when `optional.jev` is true. Load `jev_verify`
+   and send one claim per Plan versus delivered row marked done ("<scenario> is
+   implemented") with the slice's hunks as evidence. Send one claim per QA Pass row
+   against its Evidence line, and one per Verdict tile against the section it
+   summarises.
+   An `unsupported` or `contradicted` delivered row becomes changed or dropped with the
+   reason; a Pass row without evidence becomes not run; a tile that disagrees with its
+   section is recounted. Say in the Verdict how many claims Jev verified. Without the
+   MCP, note `skipped: jev MCP not loaded` in chat and verify by reading.
 5. **Write `plans/<slug>/review.md`** from `assets/skeleton.md`. Read
    `references/exemplar.md` once for the density. Anything outside the five slices takes
    the nearest one (identity policies, infrastructure as code, workflows and
@@ -137,7 +153,8 @@ agree, report what happened rather than what should have, diffs carry a decision
 - Stacked PRs: merging a layer merges every layer below it. Say which parent PRs must be
   signed off first in Rollout.
 - Stat tiles and the summary table are computed by you, not the page. Recount before
-  publishing.
+  publishing; `jev_verify` catches a tile that disagrees with its section, it does not
+  fix it.
 - The page cannot wake this session. The user says "decided" or the pipeline reads the
   store.
 

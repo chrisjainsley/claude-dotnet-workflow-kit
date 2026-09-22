@@ -127,11 +127,43 @@ def test_given_detect_then_prints_json(tmp_path):
     code, out, err = run_setup(tmp_path, "--detect")
     assert code == 0, err
     data = json.loads(out)
-    for key in ("scm", "az", "gh", "claude", "plugins", "codex", "roslyn-mcp", KIT_PLUGIN):
+    for key in ("scm", "az", "gh", "claude", "plugins", "codex", "roslyn-mcp", "jev", KIT_PLUGIN):
         assert key in data
+    assert data["jev"] is False
     assert data["az"] is False
     assert data["gh"] is False
     assert data["claude"] is False
+
+
+def test_given_key_in_env_then_detect_reports_jev(tmp_path):
+    env = {"PATH": minimal_path_env(tmp_path), "HOME": str(tmp_path), "USERPROFILE": str(tmp_path),
+           "TYPESAFE_API_KEY": "placeholder-for-test"}
+    code, out, err = run_py(SETUP_PY, "--detect", cwd=tmp_path, env=env)
+    assert code == 0, err
+    assert json.loads(out)["jev"] is True
+    assert "placeholder-for-test" not in out
+
+
+def test_given_rerun_then_existing_checks_survive(tmp_path):
+    first = write_answers(tmp_path, {"architecture": "clean", "checks": [
+        {"id": "ct", "rule": "Propagate CancellationToken", "severity": "high"}]}, "first.json")
+    code, out, err = run_setup(tmp_path, "--profile", str(first), "--no-install")
+    assert code == 0, err
+    second = write_answers(tmp_path, {"testing": {"tdd": "strict"}}, "second.json")
+    code, out, err = run_setup(tmp_path, "--profile", str(second), "--no-install")
+    assert code == 0, err
+    data = json.loads(project_profile_path(tmp_path).read_text(encoding="utf-8"))
+    assert data["testing"]["tdd"] == "strict"
+    assert data["checks"] == [{"id": "ct", "rule": "Propagate CancellationToken", "severity": "high"}]
+    assert data["optional"]["jev"] is False
+
+
+def test_given_bad_check_then_setup_exit1(tmp_path):
+    answers = write_answers(tmp_path, {"checks": [{"id": "ct", "rule": "x", "severity": "urgent"}]})
+    code, out, err = run_setup(tmp_path, "--profile", str(answers), "--no-install")
+    assert code == 1
+    assert "severity must be one of" in err
+
 
 def setup_module_fresh():
     return import_module_from_path("setup_under_test", SETUP_PY)
@@ -221,3 +253,27 @@ def test_given_razor_library_under_lib_then_detect_blazor(tmp_path):
     (tmp_path / "src" / "lib" / "Ui" / "Card.razor").write_text("<div></div>", encoding="utf-8")
 
     assert setup_module_fresh().detect_frontend(tmp_path) == "blazor"
+
+
+@pytest.mark.parametrize(
+    "listing,expected",
+    [("jev: npx -y @jkudish/jev-mcp - Connected", True),
+     ("jev-local: node server.js - Connected", True),
+     ("roslyn: dotnet run - Connected", False),
+     ("mcp-jevons: node x.js - Connected", False)],
+)
+def test_given_mcp_listing_then_has_jev_matches_whole_word(monkeypatch, listing, expected):
+    setup = setup_module_fresh()
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.setattr(setup, "run", lambda *cmd, **kw: type("R", (), {"returncode": 0, "stdout": listing})())
+    assert setup.has_jev() is expected
+
+
+def test_given_rerun_then_existing_stage_checks_survive(tmp_path):
+    stage = {"test": [{"id": "green", "prompt": "Did every suite pass?"}]}
+    first = write_answers(tmp_path, {"stage_checks": stage}, "first.json")
+    assert run_setup(tmp_path, "--profile", str(first), "--no-install")[0] == 0
+    second = write_answers(tmp_path, {"testing": {"tdd": "strict"}}, "second.json")
+    assert run_setup(tmp_path, "--profile", str(second), "--no-install")[0] == 0
+    data = json.loads(project_profile_path(tmp_path).read_text(encoding="utf-8"))
+    assert data["stage_checks"] == stage

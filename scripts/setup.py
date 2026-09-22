@@ -99,6 +99,14 @@ def has_roslyn_mcp():
     return bool(out and out.returncode == 0 and re.search(r"roslyn", out.stdout, re.I))
 
 
+def has_jev():
+    """A TypeSafe key in the environment, or a jev MCP server registered with claude."""
+    if os.environ.get("TYPESAFE_API_KEY"):
+        return True
+    out = run("claude", "mcp", "list")
+    return bool(out and out.returncode == 0 and re.search(r"\bjev\b", out.stdout, re.I))
+
+
 FRONTEND_DEPS = (("@angular/core", "angular"), ("react", "react"), ("vue", "vue"))
 SKIP_DIRS = {"node_modules", "bin", "obj", ".git", "dist", ".claude", "plans"}
 
@@ -173,6 +181,7 @@ def detect():
         KIT_PLUGIN: plugins.get(KIT_PLUGIN, {}).get("enabled", False),
         "codex": any(name.startswith("codex") for name in plugins),
         "roslyn-mcp": has_roslyn_mcp(),
+        "jev": has_jev(),
         "frontend": detect_frontend(),
     }
     guess = {"stack": {"frontend": found["frontend"]}}
@@ -182,7 +191,8 @@ def detect():
         guess["tracker"] = "azure-boards"
     elif found["gh"] and found["scm"] == "github":
         guess["tracker"] = "github-issues"
-    guess["optional"] = {KIT_PLUGIN: found[KIT_PLUGIN], "codex": found["codex"], "roslyn-mcp": found["roslyn-mcp"]}
+    guess["optional"] = {KIT_PLUGIN: found[KIT_PLUGIN], "codex": found["codex"],
+                         "roslyn-mcp": found["roslyn-mcp"], "jev": found["jev"]}
     return found, guess
 
 

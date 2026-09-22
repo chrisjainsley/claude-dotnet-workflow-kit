@@ -92,7 +92,11 @@ DESIGN_DEFAULT_SIZE = (1280, 800)
 SUPPORT_JS_RE = re.compile(r"[ \t]*<script[^>]*support\.js[^>]*>\s*</script>[ \t]*(?:\r?\n)?", re.I)
 PREVIEW_RE = re.compile(r'"\$preview"\s*:\s*\{([^}]*)\}')
 MAX_FILE_DIFF_LINES = 400
-SECRET_PATTERNS = re.compile(r"(appsettings[^/]*\.json|local\.settings\.json|\.tfvars|\.env(\.|$)|secrets?\.(json|ya?ml)|\.pfx|\.pem)$", re.I)
+SECRET_PATTERNS = re.compile(
+    r"(appsettings[^/]*\.json|local\.settings\.json|\.tfvars|(^|/)\.env(\.[^/]*)?|secrets?\.(json|ya?ml)"
+    r"|\.pfx|\.pem|\.p12|\.key|(^|/)id_(rsa|dsa|ecdsa|ed25519)|(^|/)\.npmrc|(^|/)\.pypirc|(^|/)credentials(\.[^/]*)?)$",
+    re.I,
+)
 META = {}
 DIFF_RANGE = None
 FILE_STATS = {}

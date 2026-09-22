@@ -12,6 +12,7 @@ Run directly to print the resolved profile:  python kit_profile.py [--profile <f
 """
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -39,6 +40,18 @@ ENUMS = {
 BUILT_IN_REVIEWERS = ("bug-hunt", "conventions")
 OPTIONAL_REVIEWERS = ("kit", "security-scan", "convention-learner", "code-review-workflow")
 
+# Developer-defined review checks: plain-English rules the conventions reviewer enforces
+# and, with optional.jev, scripts/jev_checks.py pre-scores against every added hunk.
+CHECK_SEVERITIES = ("high", "medium", "low")
+CHECK_ID = re.compile(r"^[a-z][a-z0-9_-]*$")
+CHECK_KEYS = ("id", "rule", "severity", "files")
+CHECK_FILES_DEFAULT = "**/*"
+
+# Stage checks: yes/no prompts a stage of /next must pass before it is marked done.
+STAGES = ("start", "plan", "implement", "test", "review", "pull_request")
+STAGE_CHECK_KEYS = ("id", "prompt", "on_fail")
+STAGE_ON_FAIL = ("fix", "stop")
+
 DEFAULTS = {
     "schema": SCHEMA,
     "user": "",
@@ -57,7 +70,10 @@ DEFAULTS = {
     "stack": {"data": "ef-core", "api": "minimal-api", "messaging": "none", "errors": "exceptions", "local_run": "plain", "frontend": "none"},
     "reviewers": list(BUILT_IN_REVIEWERS),
     "pipeline": {"execute": "", "resolve_comments": "", "qa": ""},
-    "optional": {"dotnet-claude-kit": False, "codex": False, "roslyn-mcp": False},
+    "optional": {"dotnet-claude-kit": False, "codex": False, "roslyn-mcp": False, "jev": False},
+    "jev": {"flag_at": 0.75, "review_at": 0.4},
+    "checks": [],
+    "stage_checks": {},
 }
 
 # Which dotnet-claude-kit skills an answer needs. Setup offers the install when any is missing.
@@ -184,7 +200,114 @@ def validate(profile):
     kinds = profile.get("branch_kinds", {})
     if not isinstance(kinds, dict) or not kinds.get("feature") or not kinds.get("bug"):
         problems.append("branch_kinds needs non-empty feature and bug values")
+    problems += validate_jev(profile)
+    problems += validate_checks(profile)
+    problems += validate_stage_checks(profile)
     return problems
+
+
+def validate_jev(profile):
+    problems = []
+    jev = profile.get("jev")
+    if not isinstance(jev, dict):
+        return ["jev must be an object with flag_at and review_at"]
+    for key in ("flag_at", "review_at"):
+        value = jev.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
+            problems.append(f"jev.{key} must be a number between 0 and 1; got {value!r}")
+    if not problems and jev["review_at"] > jev["flag_at"]:
+        problems.append("jev.review_at must not exceed jev.flag_at")
+    return problems
+
+
+def validate_checks(profile):
+    problems = []
+    checks = profile.get("checks")
+    if not isinstance(checks, list):
+        return ["checks must be a list"]
+    seen = set()
+    for index, check in enumerate(checks):
+        label = f"checks[{index}]"
+        if not isinstance(check, dict):
+            problems.append(f"{label} must be an object")
+            continue
+        unknown = sorted(k for k in check if k not in CHECK_KEYS)
+        if unknown:
+            problems.append(f"{label}: unknown keys {', '.join(unknown)}; allowed: {', '.join(CHECK_KEYS)}")
+        check_id = check.get("id")
+        if not isinstance(check_id, str) or not CHECK_ID.match(check_id):
+            problems.append(f"{label}: id must match {CHECK_ID.pattern}; got {check_id!r}")
+        elif check_id in seen:
+            problems.append(f"{label}: duplicate id {check_id!r}")
+        else:
+            seen.add(check_id)
+        if not isinstance(check.get("rule"), str) or not check["rule"].strip():
+            problems.append(f"{label}: rule must be non-empty text")
+        if check.get("severity") not in CHECK_SEVERITIES:
+            problems.append(f"{label}: severity must be one of {', '.join(CHECK_SEVERITIES)}; got {check.get('severity')!r}")
+        files = check.get("files", CHECK_FILES_DEFAULT)
+        if not isinstance(files, str) or not files.strip():
+            problems.append(f"{label}: files must be a glob string when present")
+    return problems
+
+
+def validate_stage_checks(profile):
+    problems = []
+    stages = profile.get("stage_checks")
+    if not isinstance(stages, dict):
+        return ["stage_checks must be an object keyed by stage"]
+    for stage, checks in stages.items():
+        if stage not in STAGES:
+            problems.append(f"stage_checks: unknown stage {stage!r}; allowed: {', '.join(STAGES)}")
+            continue
+        if not isinstance(checks, list):
+            problems.append(f"stage_checks.{stage} must be a list")
+            continue
+        seen = set()
+        for index, check in enumerate(checks):
+            label = f"stage_checks.{stage}[{index}]"
+            if not isinstance(check, dict):
+                problems.append(f"{label} must be an object")
+                continue
+            unknown = sorted(k for k in check if k not in STAGE_CHECK_KEYS)
+            if unknown:
+                problems.append(f"{label}: unknown keys {', '.join(unknown)}; allowed: {', '.join(STAGE_CHECK_KEYS)}")
+            check_id = check.get("id")
+            if not isinstance(check_id, str) or not CHECK_ID.match(check_id):
+                problems.append(f"{label}: id must match {CHECK_ID.pattern}; got {check_id!r}")
+            elif check_id in seen:
+                problems.append(f"{label}: duplicate id {check_id!r}")
+            else:
+                seen.add(check_id)
+            if not isinstance(check.get("prompt"), str) or not check["prompt"].strip():
+                problems.append(f"{label}: prompt must be a non-empty yes/no question")
+            if check.get("on_fail", "fix") not in STAGE_ON_FAIL:
+                problems.append(f"{label}: on_fail must be one of {', '.join(STAGE_ON_FAIL)}; got {check.get('on_fail')!r}")
+    return problems
+
+
+def stage_checks(profile, stage):
+    """The profile's yes/no checks for one stage, with on_fail defaulted to fix. Malformed
+    entries are skipped here; validate() is what reports them."""
+    stages = profile.get("stage_checks")
+    checks = stages.get(stage) if isinstance(stages, dict) else None
+    return [
+        {"id": c["id"], "prompt": c["prompt"].strip(), "on_fail": c.get("on_fail") or "fix"}
+        for c in (checks if isinstance(checks, list) else [])
+        if isinstance(c, dict) and isinstance(c.get("id"), str) and isinstance(c.get("prompt"), str)
+    ]
+
+
+def enabled_checks(profile):
+    """The profile's checks with files defaulted, in file order."""
+    checks = profile.get("checks")
+    return [
+        {"id": c["id"], "rule": c["rule"].strip(), "severity": c["severity"],
+         "files": c.get("files") or CHECK_FILES_DEFAULT}
+        for c in (checks if isinstance(checks, list) else [])
+        if isinstance(c, dict) and isinstance(c.get("id"), str) and isinstance(c.get("rule"), str)
+        and isinstance(c.get("severity"), str)
+    ]
 
 
 def needed_skills(profile):

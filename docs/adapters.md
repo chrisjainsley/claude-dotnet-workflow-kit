@@ -153,6 +153,13 @@ heading set:
   reviewers should not mistake for a regression (a stale container, a port already in
   use, a missing local secret).
 
+## Jev is not an adapter
+
+Jev touchpoints live in the skills and the sweep, described once in `docs/jev.md`, and
+switch on `optional.jev` rather than on an adapter value. An adapter says how to talk to
+a tool the team chose; Jev is a judge the skills consult on any tool's output, so it
+never gets a file here.
+
 ## Adding a new value
 
 1. Add the new value to the matching entry in `ENUMS` in `scripts/kit_profile.py`, and to

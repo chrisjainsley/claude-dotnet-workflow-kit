@@ -1,0 +1,42 @@
+diff --git a/src/Orders/Application/CancelOrderHandler.cs b/src/Orders/Application/CancelOrderHandler.cs
+index 1111111..2222222 100644
+--- a/src/Orders/Application/CancelOrderHandler.cs
++++ b/src/Orders/Application/CancelOrderHandler.cs
+@@ -10,6 +10,14 @@ public sealed class CancelOrderHandler
+     public CancelOrderHandler(IOrderRepository orders) => _orders = orders;
+ 
++    public async Task<Result> HandleAsync(CancelOrder command)
++    {
++        var order = await _orders.GetAsync(command.OrderId);
++        order.Cancel(DateTime.Now);
++        await _orders.SaveAsync(order);
++        return Result.Ok();
++    }
++
+     private readonly IOrderRepository _orders;
+ }
+diff --git a/src/Orders/Api/appsettings.Development.json b/src/Orders/Api/appsettings.Development.json
+index 3333333..4444444 100644
+--- a/src/Orders/Api/appsettings.Development.json
++++ b/src/Orders/Api/appsettings.Development.json
+@@ -1,3 +1,4 @@
+ {
++  "Payments": { "ApiKey": "not-a-real-key" },
+   "Logging": { "LogLevel": { "Default": "Information" } }
+ }
+diff --git a/README.md b/README.md
+index 5555555..6666666 100644
+--- a/README.md
++++ b/README.md
+@@ -1,2 +1,3 @@
+ # Orders
++Cancelling an order records the cancellation time.
+ 
+diff --git a/src/Orders/Domain/Old.cs b/src/Orders/Domain/Old.cs
+deleted file mode 100644
+index 7777777..0000000
+--- a/src/Orders/Domain/Old.cs
++++ /dev/null
+@@ -1,2 +0,0 @@
+-public class Old
+-{ }

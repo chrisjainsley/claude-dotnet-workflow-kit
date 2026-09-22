@@ -17,7 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit_profile import (  # noqa: E402
-    BUILT_IN_REVIEWERS, ENUMS, NEEDS, NEEDS_MCP, add_profile_arg, get, resolve_profile, validate,
+    BUILT_IN_REVIEWERS, ENUMS, NEEDS, NEEDS_MCP, STAGES, add_profile_arg, enabled_checks, get, resolve_profile,
+    stage_checks, validate,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,7 +80,28 @@ def reviewer_report(profile):
             rows.append((name, "runs", ", ".join(needs)))
     if optional.get("codex"):
         rows.append(("codex", "runs", "second opinion via codex:rescue"))
+    checks = enabled_checks(profile)
+    if checks:
+        count = f"{len(checks)} rule{'s' if len(checks) != 1 else ''}"
+        if optional.get("jev"):
+            rows.append(("checks", "runs", f"{count} scored by jev, enforced by conventions"))
+        else:
+            rows.append(("checks", "runs", f"{count} enforced by conventions only (optional.jev is false)"))
+    if optional.get("jev"):
+        rows.append(("jev", "runs", "gate, decide, classify, rerank and screen via the jev MCP"))
     return rows
+
+
+def jev_report(profile):
+    """One line on where the TypeSafe key comes from, never showing the value."""
+    from jev_checks import resolve_key
+    _key, source = resolve_key()
+    optional = profile.get("optional", {})
+    if source:
+        return f"key from {source}" + ("" if optional.get("jev") else "; optional.jev is false, so the kit will not use it")
+    if optional.get("jev"):
+        return "no key found; jev_checks.py will report skipped until TYPESAFE_API_KEY is set or the jev MCP is registered"
+    return "not configured"
 
 
 def fixture_report():
@@ -122,6 +144,14 @@ def main(argv=None):
     print("reviewers:")
     for name, status, reason in reviewer_report(profile):
         print(f"  {name:<22} {status:<8} {reason}")
+    print(f"jev: {jev_report(profile)}")
+    gated = [(stage, stage_checks(profile, stage)) for stage in STAGES if stage_checks(profile, stage)]
+    if gated:
+        judge = "scored by jev, then confirmed" if profile.get("optional", {}).get("jev") else "answered by Claude"
+        print(f"stage checks ({judge}):")
+        for stage, checks in gated:
+            stops = sum(c["on_fail"] == "stop" for c in checks)
+            print(f"  {stage:<14} {len(checks)} check{'s' if len(checks) != 1 else ''}" + (f", {stops} stop on fail" if stops else ""))
 
     if not args.skip_fixtures:
         print("fixtures:")
