@@ -20,6 +20,9 @@ open it yourself.
 Open the `.html` file directly from disk. Every section renders: Context, Requirement,
 Specs and the rest of the plan; Verdict, Changes, Findings and the rest of the review.
 The page looks the same as the published version because it is the same template.
+A plan's Designs section renders its artboards from the copies under
+`plans/<slug>/design/`, so they show locally too; only the canvas link needs an
+account.
 
 ## What cannot send
 

@@ -38,7 +38,7 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
 | # | Stage | How it's done | Done when |
 |---|-------|----------------|-----------|
 | 0 | Start | `/dotnet-workflow-kit:start` | Branch matching `branch_pattern` exists, item active per the tracker adapter; with `tracker: none`, the branch alone is enough |
-| 1 | Plan | `/dotnet-workflow-kit:plan` | Plan page produced and the user has answered or approved it; state `plan.artifactUrl`. **Gate: the user answers or approves.** |
+| 1 | Plan | `/dotnet-workflow-kit:plan` | Plan page produced and the user has answered or approved it; state `plan.artifactUrl`, plus `plan.designUrl` when the plan made a Design canvas. **Gate: the user answers or approves.** |
 | 2 | Implement | `/dotnet-workflow-kit:implement`, or `pipeline.execute` when set followed by the sweep | Commits exist on the branch beyond the base; state `sweep.commit` is HEAD with findings fixed or accepted |
 | 3 | Test | `/dotnet-workflow-kit:test`, or `pipeline.qa` when set; the draft PR is opened and `qa.deploy_label` applied when `qa.environment` needs a deployment | Suites green, the plan's scenarios pass; state `test.done` |
 | 4 | Review | `/dotnet-workflow-kit:review`, built after Test so it reflects the final diff; do not post to the tracker yet | State `review.artifactUrl` and `review.decision`. **Gate: the checkpoint.** |
@@ -62,7 +62,7 @@ Key by the ticket id when the branch carries one, else the sanitized branch name
   "branch": "feat/PROJ-1234-add-thing",
   "stages": {
     "start": { "done": true, "at": "2026-09-01T10:00:00Z" },
-    "plan": { "done": true, "at": "2026-09-01T12:30:00Z", "artifactUrl": "" },
+    "plan": { "done": true, "at": "2026-09-01T12:30:00Z", "artifactUrl": "", "designUrl": "" },
     "implement": { "done": true, "at": "2026-09-01T16:00:00Z", "commits": 4 },
     "sweep": { "at": "2026-09-01T16:20:00Z", "commit": "<sha>", "findings": [], "skipped": [] },
     "test": { "done": false, "at": "", "note": "" },

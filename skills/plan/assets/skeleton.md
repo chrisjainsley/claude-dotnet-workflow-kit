@@ -25,6 +25,9 @@ Feature: <name>
     Then ...
 ```
 
+## Designs
+<!-- Optional; only when the ticket changes a screen and the profile's stack.frontend is not none, otherwise delete this section. One line linking the Design canvas (or the tracker's design links), then one embed per artboard: ![caption](design/project/<Name>.dc.html), or the tracker's ![caption](context/<file>.png). -->
+
 ## Domain
 <!-- Aggregates, value objects, events, enums that change, as type signatures in a ```csharp fence. Prose only for an invariant the signature cannot show. "No change." if untouched. -->
 

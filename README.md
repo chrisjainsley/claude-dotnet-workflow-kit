@@ -86,6 +86,12 @@ Use for an implementation plan. It reads the ticket and codebase, then writes
 with test scenarios, decisions, risks and open questions. A script checks section
 budgets before publication.
 
+When `stack.frontend` is set and a ticket changes a screen that came with no design,
+the skill draws the screens first, with Claude Code's `/design` command or the Design
+canvas Artifact type, and embeds the artboards in a Designs section of the plan page
+next to a link to the editable canvas. Designs supplied by the tracker are used as they
+are and no canvas is made.
+
 On an Artifact page, choose answers and press **Send answers**, then tell the session
 "answered". The skill reads the stored choices, updates the plan and republishes it.
 
@@ -236,6 +242,7 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `stack.messaging` | `masstransit`, `wolverine`, `service-bus`, `none` | `"none"` | Messaging conventions. |
 | `stack.errors` | `result`, `exceptions` | `"exceptions"` | Error handling conventions. |
 | `stack.local_run` | `aspire`, `docker`, `plain` | `"plain"` | How to start the system for local QA. |
+| `stack.frontend` | `none`, `blazor`, `razor`, `react`, `angular`, `vue`, `javascript` | `"none"` | Whether the repo has a frontend and which kind; see the plan skill. |
 | `reviewers` | `bug-hunt`, `conventions`, `kit`, `security-scan`, `convention-learner`, `code-review-workflow` | `["bug-hunt", "conventions"]` | Reviewer sweep passes; the two built-ins always run. |
 | `pipeline.execute` | Free text | `""` | Execution command; blank implements the plan directly. |
 | `pipeline.resolve_comments` | Free text | `""` | Comment-resolution command; blank uses the SCM adapter. |

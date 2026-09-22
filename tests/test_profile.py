@@ -159,3 +159,24 @@ def test_given_bad_jev_thresholds_then_rejected(jev, fragment):
     prof = fresh_defaults()
     prof["jev"] = jev
     assert any(fragment in p for p in profile_mod.validate(prof))
+
+
+def test_given_frontend_none_then_no_optional_sections():
+    prof = fresh_defaults()
+    assert profile_mod.optional_plan_sections(prof) == []
+    names = [n for n, _, _ in profile_mod.expected_plan_sections(prof, ["Designs"])]
+    assert "Designs" not in names
+
+
+def test_given_frontend_blazor_and_designs_present_then_slotted_after_specs():
+    prof = fresh_defaults()
+    prof["stack"]["frontend"] = "blazor"
+    names = [n for n, _, _ in profile_mod.expected_plan_sections(prof, ["Specs", "Designs"])]
+    assert names.index("Designs") == names.index("Specs") + 1
+    assert names[-1] == "Open questions"
+
+
+def test_given_frontend_blazor_and_designs_absent_then_sections_unchanged():
+    prof = fresh_defaults()
+    prof["stack"]["frontend"] = "blazor"
+    assert profile_mod.expected_plan_sections(prof, ["Specs"]) == list(profile_mod.plan_sections(prof))
