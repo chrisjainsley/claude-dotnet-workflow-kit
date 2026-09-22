@@ -333,3 +333,86 @@ def test_given_split_hunk_then_each_chunk_reports_its_own_first_added_line():
 def test_given_single_overlong_line_then_cut_hard():
     chunks = jev_checks.chunk_text("+" + "x" * 30000, limit=12000)
     assert len(chunks) == 3 and all(len(c) <= 12000 for c in chunks)
+
+
+class NoulTransport(FakeTransport):
+    def __init__(self, yes):
+        super().__init__(noul=yes)
+
+
+def test_given_stage_evidence_then_each_prompt_is_a_noul_question(tmp_path):
+    out = tmp_path / "test-output.txt"
+    out.write_text("Passed! 214 tests\n", encoding="utf-8")
+    checks = jev_checks.stage_checks(profile(), "test")
+    evidence, truncated = jev_checks.load_evidence([str(out)])
+    transport = NoulTransport({"suite-green": 0.93, "scenarios-run": 0.5})
+    results, requests = jev_checks.score_stage("test", checks, evidence, {"flag_at": 0.75, "review_at": 0.4},
+                                               truncated, PLACEHOLDER_KEY, transport)
+    body = transport.requests[0][0]
+    assert body["state"]["stage"] == "test" and body["state"]["evidence"][0]["id"] == "test-output.txt"
+    assert {q["type"] for q in body["questions"].values()} == {"noul"}
+    assert [(r["id"], r["verdict"]) for r in results] == [("suite-green", "pass"), ("scenarios-run", "confirm")]
+    assert jev_checks.gate_of(results) == "confirm"
+
+
+@pytest.mark.parametrize(
+    "yes,gate",
+    [({"suite-green": 0.9, "scenarios-run": 0.9}, "pass"),
+     ({"suite-green": 0.9, "scenarios-run": 0.1}, "fix"),
+     ({"suite-green": 0.1, "scenarios-run": 0.9}, "stop")],
+)
+def test_given_verdicts_then_gate_follows_on_fail(tmp_path, yes, gate):
+    out = tmp_path / "o.txt"
+    out.write_text("x", encoding="utf-8")
+    evidence, _ = jev_checks.load_evidence([str(out)])
+    results, _ = jev_checks.score_stage("test", jev_checks.stage_checks(profile(), "test"), evidence,
+                                        {"flag_at": 0.75, "review_at": 0.4}, False, PLACEHOLDER_KEY, NoulTransport(yes))
+    assert jev_checks.gate_of(results) == gate
+
+
+def test_given_truncated_evidence_then_a_yes_only_confirms(tmp_path):
+    big = tmp_path / "big.txt"
+    big.write_text("y" * 70000, encoding="utf-8")
+    evidence, truncated = jev_checks.load_evidence([str(big)])
+    assert truncated and len(evidence[0]["text"]) == jev_checks.EVIDENCE_CHARS
+    results, _ = jev_checks.score_stage("test", jev_checks.stage_checks(profile(), "test"), evidence,
+                                        {"flag_at": 0.75, "review_at": 0.4}, truncated, PLACEHOLDER_KEY,
+                                        NoulTransport({"suite-green": 0.99, "scenarios-run": 0.99}))
+    assert {r["verdict"] for r in results} == {"confirm"}
+
+
+def test_given_secret_evidence_file_then_refused(tmp_path):
+    secret = tmp_path / "appsettings.Production.json"
+    secret.write_text("{}", encoding="utf-8")
+    with pytest.raises(SystemExit, match="secret-pattern"):
+        jev_checks.load_evidence([str(secret)])
+
+
+def test_given_stage_cli_then_table_gate_and_json(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("TYPESAFE_API_KEY", PLACEHOLDER_KEY)
+    monkeypatch.setattr(jev_checks, "default_transport", NoulTransport({"has-tests": 0.2}))
+    out = tmp_path / "implement.json"
+    code = jev_checks.main(["--stage", "implement", "--diff-file", str(DIFF), "--profile", str(PROFILE), "--out", str(out)])
+    assert code == 0
+    printed = capsys.readouterr().out
+    assert "| has-tests | fail | 0.20 | fix |" in printed and "gate: fix" in printed
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert data["gate"] == "fix" and data["evidence"] == ["diff"]
+    assert "appsettings" not in json.dumps(data)
+
+
+def test_given_stage_without_checks_then_pass_without_calling(tmp_path):
+    code, stdout, stderr = run_py(SCRIPT, "--stage", "review", "--profile", PROFILE, cwd=tmp_path, env=cli_env(tmp_path))
+    assert code == 0 and "no stage_checks for review; gate: pass" in stdout
+
+
+def test_given_big_diff_then_every_file_survives_the_trim():
+    parts = []
+    for name in ('a/one.py', 'b/two.py', 'tests/test_last.py'):
+        body = chr(10).join('+' + 'x' * 99 for _ in range(400))
+        parts.append(f'diff --git a/{name} b/{name}' + chr(10) + f'--- a/{name}' + chr(10) + f'+++ b/{name}' + chr(10) + '@@ -0,0 +1,400 @@' + chr(10) + body)
+    evidence, truncated = jev_checks.load_evidence([], chr(10).join(parts) + chr(10), limit=6000)
+    text = evidence[0]['text']
+    assert truncated and len(text) <= 6000
+    assert text.startswith('Changed files:')
+    assert text.count('tests/test_last.py') == 2

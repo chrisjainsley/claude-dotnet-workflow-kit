@@ -267,3 +267,13 @@ def test_given_mcp_listing_then_has_jev_matches_whole_word(monkeypatch, listing,
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     monkeypatch.setattr(setup, "run", lambda *cmd, **kw: type("R", (), {"returncode": 0, "stdout": listing})())
     assert setup.has_jev() is expected
+
+
+def test_given_rerun_then_existing_stage_checks_survive(tmp_path):
+    stage = {"test": [{"id": "green", "prompt": "Did every suite pass?"}]}
+    first = write_answers(tmp_path, {"stage_checks": stage}, "first.json")
+    assert run_setup(tmp_path, "--profile", str(first), "--no-install")[0] == 0
+    second = write_answers(tmp_path, {"testing": {"tdd": "strict"}}, "second.json")
+    assert run_setup(tmp_path, "--profile", str(second), "--no-install")[0] == 0
+    data = json.loads(project_profile_path(tmp_path).read_text(encoding="utf-8"))
+    assert data["stage_checks"] == stage

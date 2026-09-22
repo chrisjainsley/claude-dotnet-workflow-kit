@@ -77,6 +77,16 @@ python "<plugin root>/scripts/jev_checks.py" --extract CLAUDE.md .claude/CLAUDE.
 Output goes next to the pipeline state file, never into the checkout, so the sweep's
 clean-tree rule holds. Exit 2 means Jev was unavailable; record `skipped` and carry on.
 
+## Stage checks
+
+`stage_checks` in the profile gives each `/next` stage extra yes/no conditions to pass
+before it counts as done. `jev_checks.py --stage <stage> --evidence <files>` asks every
+prompt for that stage in one request, as `noul` questions over the stage's evidence, and
+bands the yes probability with the same `flag_at` and `review_at` thresholds. Evidence is
+capped at 60,000 characters; a trimmed run never passes outright and drops to confirm.
+Without Jev, Claude answers the same prompts from the same evidence. `skills/next/SKILL.md`
+lists the evidence per stage.
+
 ## Call shapes
 
 Arguments the kit's prose relies on. Read the rest of each tool's schema from

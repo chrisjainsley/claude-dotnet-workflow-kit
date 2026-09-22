@@ -29,6 +29,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 - `pipeline.execute`, `pipeline.resolve_comments`, `pipeline.qa`: a project command that replaces the default for that stage, when set.
 - `artifacts`: whether the plan and review pages publish, or only render locally with the decision taken in chat.
 - `reviewers`, `optional.*`: which review passes the sweep in stage 2 runs and which optional tooling exists.
+- `stage_checks`: the team's own yes/no checks a stage must pass before it is marked done. See "Stage checks" below.
 - `optional.jev`: when true, red CI jobs and review threads are classified with `jev_classify` before the pipeline acts on them, and thread bodies are screened with `jev_screen` first. See `docs/jev.md`. Every call is skipped, never failed, when the MCP is not loaded.
 
 If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:setup` first.
@@ -45,6 +46,31 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
 | 5 | Pull request | Scm adapter: open the draft if Test did not, resolve threads (`pipeline.resolve_comments` when set), then once approved post the QA report per `qa.evidence`, mark the PR ready, apply `qa.handoff_label`, move the item to `tracker_states.qa_ready` (or the adapter's default) | 0 unresolved threads, checks green, PR ready; state `pullRequest.done`. A person merges. |
 
 Bug-fixing for a sweep finding or a Test failure is never its own row: the stage that found it stays not-done, with the finding or bug in its evidence column, and fixing it is the next action inside that stage.
+
+## Stage checks
+
+The profile's `stage_checks` add the team's own conditions to the Done-when column. Each stage key (`start`, `plan`, `implement`, `test`, `review`, `pull_request`) holds a list of `{id, prompt, on_fail}`, where `prompt` is a yes/no question a yes answer satisfies. Run them when the built-in rule for a stage is met and before marking it done. For the plan and review stages, run them before presenting the page, never in place of the user's decision.
+
+The evidence each stage is judged on:
+
+| Stage | Evidence |
+|---|---|
+| start | the fetched ticket text and the branch name |
+| plan | `plan.md` and the stored answers |
+| implement | the diff (`--range origin/<base>...HEAD`) and the sweep report |
+| test | the raw build and test runner output and the QA report |
+| review | `review.md` |
+| pull_request | the PR body, `gh pr checks` output and the unresolved thread count |
+
+Write the evidence that is not already a file to files beside the state file (`<slug>-<stage>-evidence.txt`), never into the checkout. With `optional.jev`, score them in one call:
+
+```bash
+python "<plugin root>/scripts/jev_checks.py" --stage <stage> --evidence <files> [--range "origin/$base...HEAD"] --out ~/.claude/dotnet-workflow-kit/pipeline/<slug>-<stage>-checks.json
+```
+
+A yes at or above `jev.flag_at` passes, between `jev.review_at` and `jev.flag_at` needs you to read the evidence and decide, and below `jev.review_at` fails. Exit 2 means Jev was unavailable. Then, and whenever `optional.jev` is false, answer each prompt yourself from the same evidence: yes only when you can quote the line that shows it, otherwise no.
+
+A failed check with `on_fail: fix` (the default) keeps the stage in progress with the check's id in the evidence column, and fixing it is the next action inside that stage. A failed check with `on_fail: stop` is a blocker. Record the results as `stages.<stage>.checks` in the state file, one `{id, verdict, p_yes}` per check (`p_yes` blank when you answered without Jev). A result older than the branch's latest commit is stale, like any other marker.
 
 ## State file
 
@@ -85,7 +111,7 @@ PROJ-1234 - Add thing (feat/PROJ-1234-add-thing)
 |---|-------|--------|----------|
 | 0 | Start | done | branch + active |
 | 1 | Plan | done | plan approved 1 Sep |
-| 2 | Implement | done | 4 commits ahead of base, sweep clean |
+| 2 | Implement | done | 4 commits ahead of base, sweep clean, checks 2/2 |
 | 3 | Test | in progress | 5/6 scenarios pass |
 | 4 | Review | todo | |
 | 5 | Pull request | todo | #42 draft, checks green |

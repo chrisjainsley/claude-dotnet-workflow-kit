@@ -5,6 +5,7 @@
     python jev_checks.py --diff-file <patch> [--rules <rules.json>] [--dry-run]
     python jev_checks.py --extract CLAUDE.md AGENTS.md [--out <rules.json>]
     python jev_checks.py --check-rules
+    python jev_checks.py --stage test --evidence test-output.txt plans/x/plan.md [--range a...b]
 
 Every added hunk of the diff becomes one request carrying one choice question per
 applicable rule (violates / follows / not_applicable). The probability of `violates`
@@ -12,6 +13,11 @@ lands in a band from the profile's jev thresholds: at or above flag_at it is a f
 the rule's severity, between review_at and flag_at it is a low finding to confirm by
 reading, below that it is silent. Files matching the review builder's secret patterns
 never leave the machine.
+
+`--stage` answers the profile's stage_checks for one /next stage: each yes/no prompt is
+asked against the evidence files (and the diff, with --range) in one request. A yes at or
+above flag_at passes, between review_at and flag_at needs a reader to confirm, below that
+fails. Truncated evidence never passes outright; it drops to confirm.
 
 `--extract` turns CLAUDE.md-style files into rules of the same shape, so the conventions
 reviewer's rubric can be scored the same way. `--check-rules` asks whether each profile
@@ -35,7 +41,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from kit_profile import CHECK_KEYS, add_profile_arg, enabled_checks, get, resolve_profile, validate, validate_checks  # noqa: E402
+from kit_profile import (  # noqa: E402
+    CHECK_KEYS, STAGES, add_profile_arg, enabled_checks, get, resolve_profile, stage_checks, validate, validate_checks,
+)
 from render import SECRET_PATTERNS  # noqa: E402
 
 API_URL = "https://api.typesafe.ai/v1/systemone"
@@ -454,6 +462,90 @@ def check_rules(rules, key=None, transport=None, dry_run=False, warn_below=0.5):
     return doubtful, [body]
 
 
+# --- stage checks --------------------------------------------------------------------
+
+EVIDENCE_CHARS = 60000
+
+
+def load_evidence(paths, diff_text=None, limit=EVIDENCE_CHARS):
+    """[{id, text}] from the evidence files and the diff, trimmed to `limit` characters in
+    total. Returns (items, truncated)."""
+    items = []
+    for path in paths:
+        file = Path(path)
+        if not file.exists():
+            raise SystemExit(f"evidence file not found: {path}")
+        if SECRET_PATTERNS.search(file.as_posix()):
+            raise SystemExit(f"refusing to send a secret-pattern file as evidence: {path}")
+        items.append({"id": file.name, "text": file.read_text(encoding="utf-8", errors="replace")})
+    files_text = {}
+    if diff_text is not None:
+        safe, _ = split_hunks(parse_diff(diff_text))
+        for h in safe:
+            files_text.setdefault(h["path"], []).append(h["text"])
+    file_total = sum(len("\n".join(t)) for t in files_text.values())
+    total = sum(len(i["text"]) for i in items) + file_total
+    truncated = total > limit
+    if truncated and items:
+        share = (limit // 2 if files_text else limit) // len(items)
+        items = [{"id": i["id"], "text": i["text"][:share]} for i in items]
+    if files_text:
+        # Every changed file stays visible when the diff is trimmed: the file list always goes
+        # first, then each file gets an even share of what is left, so a trim never drops the
+        # files that sort last (tests/ is usually the one a stage check asks about).
+        header = "Changed files:\n" + "\n".join(files_text) + "\n\n"
+        budget = (limit - sum(len(i["text"]) for i in items)) if truncated else None
+        overhead = len(header) + sum(len(path) + 3 for path in files_text)  # path line plus separator
+        per_file = max(200, (budget - overhead) // len(files_text)) if truncated else None
+        parts = [f"{path}\n" + ("\n".join(t)[:per_file] if per_file else "\n".join(t)) for path, t in files_text.items()]
+        items.append({"id": "diff", "text": header + "\n\n".join(parts)})
+    return items, truncated
+
+
+def stage_request(stage, checks, evidence):
+    return {
+        "state": {"stage": stage, "evidence": evidence},
+        "model": MODEL,
+        "questions": {
+            c["id"]: {
+                "type": "noul",
+                "instructions": c["prompt"],
+                "criteria": {"true": "The evidence shows this holds.",
+                             "false": "The evidence contradicts it or does not show it."},
+            }
+            for c in checks
+        },
+    }
+
+
+def score_stage(stage, checks, evidence, thresholds, truncated, key=None, transport=None, dry_run=False):
+    body = stage_request(stage, checks, evidence)
+    if dry_run:
+        return [], [body]
+    answers = post(body, key, transport)
+    results = []
+    for check in checks:
+        p = float((answers.get(check["id"]) or {}).get("noul", 0.0))
+        if p >= thresholds["flag_at"]:
+            verdict = "confirm" if truncated else "pass"
+        elif p >= thresholds["review_at"]:
+            verdict = "confirm"
+        else:
+            verdict = "fail"
+        results.append({**check, "p_yes": round(p, 2), "verdict": verdict})
+    return results, [body]
+
+
+def gate_of(results):
+    if any(r["verdict"] == "fail" and r["on_fail"] == "stop" for r in results):
+        return "stop"
+    if any(r["verdict"] == "fail" for r in results):
+        return "fix"
+    if any(r["verdict"] == "confirm" for r in results):
+        return "confirm"
+    return "pass"
+
+
 # --- output --------------------------------------------------------------------------
 
 
@@ -493,6 +585,8 @@ def main(argv=None):
     ap.add_argument("--rules", help="extra rules JSON (same shape as the profile's checks)")
     ap.add_argument("--extract", nargs="+", metavar="MD", help="extract rules from these markdown files and stop")
     ap.add_argument("--check-rules", action="store_true", help="ask whether each profile check is verifiable from a hunk")
+    ap.add_argument("--stage", choices=STAGES, help="answer the profile's stage_checks for this /next stage")
+    ap.add_argument("--evidence", nargs="*", default=[], metavar="FILE", help="evidence files for --stage")
     ap.add_argument("--out", help="write the JSON result here")
     ap.add_argument("--dry-run", action="store_true", help="build the requests, send nothing")
     args = ap.parse_args(argv)
@@ -512,6 +606,8 @@ def main(argv=None):
         if problems and "not found" not in problems[0]:
             return 1
         rules += extra
+    if args.stage:
+        return run_stage(args, profile, thresholds)
     if not (args.extract or args.check_rules or args.range or args.diff_file):
         print("usage: --range or --diff-file is required (or --extract / --check-rules)", file=sys.stderr)
         return 1
@@ -585,6 +681,42 @@ def main(argv=None):
         print(f"\n{len(hunks)} hunks, {len(requests)} requests, {len(findings)} findings, key from {source}")
     for line in skipped:
         print(f"skipped: {line}")
+    return 0
+
+
+def run_stage(args, profile, thresholds):
+    checks = stage_checks(profile, args.stage)
+    if not checks:
+        print(f"no stage_checks for {args.stage}; gate: pass")
+        return 0
+    diff_text = None
+    if args.range or args.diff_file:
+        diff_text = Path(args.diff_file).read_text(encoding="utf-8") if args.diff_file else git_diff(args.range, args.repo)
+    evidence, truncated = load_evidence(args.evidence, diff_text)
+    if not evidence:
+        print("usage: --stage needs --evidence files or --range", file=sys.stderr)
+        return 1
+    key, source = (None, "dry-run")
+    try:
+        if not args.dry_run:
+            key, source = require_key()
+        results, requests = score_stage(args.stage, checks, evidence, thresholds, truncated, key, None, args.dry_run)
+    except JevUnavailable as error:
+        print(f"jev unavailable: {error}", file=sys.stderr)
+        return 2
+    result = {"at": now(), "stage": args.stage, "key_source": source, "truncated": truncated,
+              "evidence": [e["id"] for e in evidence], "results": results,
+              "gate": gate_of(results) if results else "dry-run"}
+    if args.dry_run:
+        result["dry_run"] = requests
+        print(json.dumps(requests, indent=2))
+    else:
+        print("| Check | Verdict | Jev yes | On fail |\n|---|---|---|---|")
+        for r in results:
+            print(f"| {r['id']} | {r['verdict']} | {r['p_yes']:.2f} | {r['on_fail']} |")
+        note = " (evidence truncated)" if truncated else ""
+        print(f"\ngate: {result['gate']}{note}")
+    write_out(args.out, result)
     return 0
 
 

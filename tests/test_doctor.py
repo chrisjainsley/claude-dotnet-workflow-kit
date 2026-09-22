@@ -95,3 +95,12 @@ def test_given_jev_enabled_without_key_then_doctor_says_so(tmp_path):
 def test_given_defaults_then_jev_not_configured(tmp_path):
     code, out = run_doctor(tmp_path, {}, "--skip-fixtures")
     assert "jev: not configured" in out
+
+
+def test_given_stage_checks_then_doctor_lists_them(tmp_path):
+    answers = {"stage_checks": {"test": [{"id": "green", "prompt": "Did every suite pass?", "on_fail": "stop"},
+                                         {"id": "e2e", "prompt": "Did e2e run?"}]}}
+    code, out = run_doctor(tmp_path, answers, "--skip-fixtures")
+    assert code == 0, out
+    assert "stage checks (answered by Claude):" in out
+    assert "test" in out and "2 checks, 1 stop on fail" in out

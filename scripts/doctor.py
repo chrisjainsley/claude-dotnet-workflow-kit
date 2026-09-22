@@ -17,8 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit_profile import (  # noqa: E402
-    BUILT_IN_REVIEWERS, ENUMS, NEEDS, NEEDS_MCP, add_profile_arg, enabled_checks, get, resolve_profile,
-    validate,
+    BUILT_IN_REVIEWERS, ENUMS, NEEDS, NEEDS_MCP, STAGES, add_profile_arg, enabled_checks, get, resolve_profile,
+    stage_checks, validate,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -145,6 +145,13 @@ def main(argv=None):
     for name, status, reason in reviewer_report(profile):
         print(f"  {name:<22} {status:<8} {reason}")
     print(f"jev: {jev_report(profile)}")
+    gated = [(stage, stage_checks(profile, stage)) for stage in STAGES if stage_checks(profile, stage)]
+    if gated:
+        judge = "scored by jev, then confirmed" if profile.get("optional", {}).get("jev") else "answered by Claude"
+        print(f"stage checks ({judge}):")
+        for stage, checks in gated:
+            stops = sum(c["on_fail"] == "stop" for c in checks)
+            print(f"  {stage:<14} {len(checks)} check{'s' if len(checks) != 1 else ''}" + (f", {stops} stop on fail" if stops else ""))
 
     if not args.skip_fixtures:
         print("fixtures:")

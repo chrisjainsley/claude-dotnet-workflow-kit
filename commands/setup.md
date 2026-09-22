@@ -63,4 +63,5 @@ skill reads; see the README's profile reference for each field.
    dotnet-claude-kit is installed, suggest `/dotnet-init` before the first plan.
 
 Never write the profile's enum fields by hand; the script validates the enums and the
-invariants. The `checks` list is the one field edited in the file, since it is free text.
+invariants. The `checks` list and the `stage_checks` object are the fields edited in the
+file, since they are free text; rerunning setup keeps both.

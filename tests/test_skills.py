@@ -140,3 +140,11 @@ def test_given_jev_doc_then_every_tool_the_skills_call_is_described():
     for tool in sorted(set(re.findall(r"jev_[a-z]+", skills))):
         assert tool in doc, f"docs/jev.md must describe {tool}"
     assert "claude mcp add -s user jev" in doc
+
+
+def test_given_next_then_stage_checks_documented():
+    text = skill_text("next")
+    assert "## Stage checks" in text and "stage_checks" in text
+    for stage in ("start", "plan", "implement", "test", "review", "pull_request"):
+        assert f"| {stage} |" in text, f"next must name the evidence for {stage}"
+    assert "--stage" in text and "on_fail" in text and "never in place of the user's decision" in text

@@ -180,3 +180,40 @@ def test_given_frontend_blazor_and_designs_absent_then_sections_unchanged():
     prof = fresh_defaults()
     prof["stack"]["frontend"] = "blazor"
     assert profile_mod.expected_plan_sections(prof, ["Specs"]) == list(profile_mod.plan_sections(prof))
+
+
+def test_given_defaults_then_no_stage_checks():
+    prof = fresh_defaults()
+    assert prof["stage_checks"] == {}
+    assert profile_mod.stage_checks(prof, "test") == []
+
+
+@pytest.mark.parametrize(
+    "stage_checks,fragment",
+    [
+        ({"deploy": []}, "unknown stage 'deploy'"),
+        ({"test": {"id": "a"}}, "stage_checks.test must be a list"),
+        ({"test": [{"id": "a", "prompt": " "}]}, "prompt must be a non-empty"),
+        ({"test": [{"id": "A b", "prompt": "Q?"}]}, "id must match"),
+        ({"test": [{"id": "a", "prompt": "Q?", "on_fail": "warn"}]}, "on_fail must be one of"),
+        ({"test": [{"id": "a", "prompt": "Q?", "rule": "x"}]}, "unknown keys rule"),
+        ({"test": [{"id": "a", "prompt": "Q?"}, {"id": "a", "prompt": "R?"}]}, "duplicate id 'a'"),
+        ([], "stage_checks must be an object"),
+    ],
+)
+def test_given_bad_stage_checks_then_rejected(stage_checks, fragment):
+    prof = fresh_defaults()
+    prof["stage_checks"] = stage_checks
+    problems = profile_mod.validate(prof)
+    assert any(fragment in p for p in problems), problems
+
+
+def test_given_valid_stage_checks_then_on_fail_defaults_to_fix():
+    prof = fresh_defaults()
+    prof["stage_checks"] = {"test": [{"id": "green", "prompt": " Did every suite pass? "},
+                                     {"id": "e2e", "prompt": "Did e2e run?", "on_fail": "stop"}]}
+    assert profile_mod.validate(prof) == []
+    assert profile_mod.stage_checks(prof, "test") == [
+        {"id": "green", "prompt": "Did every suite pass?", "on_fail": "fix"},
+        {"id": "e2e", "prompt": "Did e2e run?", "on_fail": "stop"},
+    ]

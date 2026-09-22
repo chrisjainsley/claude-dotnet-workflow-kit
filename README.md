@@ -254,6 +254,7 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `jev.flag_at` | Number from 0 to 1 | `0.75` | Probability at or above which a scored check becomes a finding at the rule's severity. |
 | `jev.review_at` | Number from 0 to 1, at most `flag_at` | `0.4` | Probability at or above which a scored check is listed as low with "confirm by reading". |
 | `checks` | List of `{id, rule, severity, files}` | `[]` | Review checks the conventions reviewer enforces; `files` is an optional glob. Edited in the file, validated by `scripts/doctor.py`. |
+| `stage_checks` | Object of stage name to a list of `{id, prompt, on_fail}` | `{}` | Yes/no prompts a `/next` stage must pass before it is marked done. Stages: `start`, `plan`, `implement`, `test`, `review`, `pull_request`. `on_fail` is `fix` (default, keep working the stage) or `stop` (blocker). Edited in the file. |
 
 Validation requires a tracker when `qa.evidence` is `work-item`. Both `bug-hunt` and
 `conventions` remain in the reviewer list.
@@ -300,6 +301,17 @@ every project:
 
 ```bash
 claude mcp add -s user jev -e TYPESAFE_API_KEY=<your key> -- npx -y @jkudish/jev-mcp
+```
+
+Add your own stage checks too. Each is a yes/no question a `/next` stage must answer yes to
+before it is marked done, judged on that stage's evidence. Jev scores them when enabled, and
+Claude answers them otherwise:
+
+```json
+"stage_checks": {
+  "implement": [{"id": "migration-reviewed", "prompt": "Does every new EF Core migration have a matching Down method?"}],
+  "test": [{"id": "e2e-ran", "prompt": "Does the test output show the Playwright suite ran and passed?", "on_fail": "stop"}]
+}
 ```
 
 Add your own review checks to the profile; the conventions reviewer enforces them on

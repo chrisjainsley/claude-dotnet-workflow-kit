@@ -1,11 +1,49 @@
 {
   "schema": 1,
   "architecture": "clean",
-  "optional": { "jev": true },
-  "jev": { "flag_at": 0.75, "review_at": 0.4 },
+  "optional": {
+    "jev": true
+  },
+  "jev": {
+    "flag_at": 0.75,
+    "review_at": 0.4
+  },
   "checks": [
-    { "id": "cancellation", "rule": "Every new async method that performs I/O accepts and forwards a CancellationToken", "severity": "high", "files": "**/*.cs" },
-    { "id": "clock", "rule": "Use an injected clock, never DateTime.Now or DateTime.UtcNow", "severity": "medium", "files": "src/**/*.cs" },
-    { "id": "docs", "rule": "A behaviour change updates the README", "severity": "low" }
-  ]
+    {
+      "id": "cancellation",
+      "rule": "Every new async method that performs I/O accepts and forwards a CancellationToken",
+      "severity": "high",
+      "files": "**/*.cs"
+    },
+    {
+      "id": "clock",
+      "rule": "Use an injected clock, never DateTime.Now or DateTime.UtcNow",
+      "severity": "medium",
+      "files": "src/**/*.cs"
+    },
+    {
+      "id": "docs",
+      "rule": "A behaviour change updates the README",
+      "severity": "low"
+    }
+  ],
+  "stage_checks": {
+    "implement": [
+      {
+        "id": "has-tests",
+        "prompt": "Does the diff add or change a test for the new behaviour?"
+      }
+    ],
+    "test": [
+      {
+        "id": "suite-green",
+        "prompt": "Does the test output show every suite passed?",
+        "on_fail": "stop"
+      },
+      {
+        "id": "scenarios-run",
+        "prompt": "Does the test output show the plan's scenarios ran?"
+      }
+    ]
+  }
 }
