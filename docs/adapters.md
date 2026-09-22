@@ -28,8 +28,8 @@ folder. `tracker: azure-boards` is the one adapter shipped as a folder today, be
 it carries `fetch_context.py` alongside its `README.md`.
 
 `stack` is one level deeper than the other four, because the profile itself nests it:
-`stack.data`, `stack.api`, `stack.messaging`, `stack.errors` and `stack.local_run` each
-pick their own value independently. Instead of one file per value, each stack field
+`stack.data`, `stack.api`, `stack.messaging`, `stack.errors`, `stack.local_run` and
+`stack.frontend` each pick their own value independently. Instead of one file per value, each stack field
 gets a single file with one `## <value>` section per value it supports:
 `adapters/stack/<field>.md`. So `"stack.data": "ef-core"` reads the `## ef-core`
 section of `adapters/stack/data.md`, and a ticket that touches both data access and
@@ -120,11 +120,12 @@ Read by `review` to write the QA report and route the hand-off. Headings:
 Values per field: `stack.data` (`ef-core`, `dapper`, `cosmos`, `other`), `stack.api`
 (`minimal-api`, `controllers`, `graphql`, `grpc`), `stack.messaging` (`masstransit`,
 `wolverine`, `service-bus`, `none`), `stack.errors` (`result`, `exceptions`),
-`stack.local_run` (`aspire`, `docker`, `plain`).
+`stack.local_run` (`aspire`, `docker`, `plain`), `stack.frontend` (`none`, `blazor`,
+`razor`, `react`, `angular`, `vue`, `javascript`).
 
 Read by both document skills for whichever fields a ticket's diff actually touches.
-`data`, `api`, `messaging` and `errors` files share one heading set, because each of
-those describes a piece of the system's shape:
+`data`, `api`, `messaging`, `errors` and `frontend` files share one heading set, because
+each of those describes a piece of the system's shape:
 
 - **Plan: what to name** - the concrete types, project conventions and naming the plan
   should use for this choice, so the plan's Domain, Application, Infrastructure or API
@@ -135,6 +136,10 @@ those describes a piece of the system's shape:
 - **Common findings** - the mistakes the reviewer sweep and the review's Findings section
   should flag for this choice (an N+1 query for `ef-core`, a missing idempotency key
   for `masstransit`, an unhandled `Result` for `result`-style errors).
+
+`frontend` also decides whether `plan` runs its design step at all: `none` means the
+plan never carries a Designs section, and any other value names where the look of a
+kit-drawn artboard comes from when no design system is attached.
 
 `local_run` is the exception, because it is not about naming or contracts, it is about
 getting the system running to gather QA evidence, so its files use a different

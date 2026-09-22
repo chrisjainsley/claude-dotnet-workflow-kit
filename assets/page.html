@@ -81,6 +81,12 @@ td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: to
 .figures img { display: block; width: 100%; height: auto; }
 .figures figcaption { font-size: 12px; color: var(--muted); padding: 6px 10px; border-top: 1px solid var(--line); }
 .figures figure.missing figcaption { color: var(--warn); border-top: 0; }
+figure.design { margin: 10px 0 14px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--card); cursor: zoom-in; }
+figure.design .design-frame { position: relative; overflow: hidden; }
+figure.design iframe { border: 0; display: block; transform-origin: top left; pointer-events: none; background: #fff; }
+figure.design figcaption { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); padding: 6px 10px; border-top: 1px solid var(--line); }
+figure.design figcaption span { flex: 1; }
+dialog.diagram-modal .diagram-body iframe { border: 0; display: block; background: #fff; }
 .opt { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; border: 1px solid var(--line); border-radius: 6px; margin: 6px 0; cursor: pointer; }
 .kind-plan .opt { background: var(--card); }
 .kind-review .opt { background: var(--paper); }
@@ -236,10 +242,31 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
   });
   openTarget(location.hash);
   window.addEventListener('hashchange', function () { openTarget(location.hash); });
+  function fitDesigns() {
+    document.querySelectorAll('figure.design .design-frame').forEach(function (frame) {
+      var iframe = frame.querySelector('iframe');
+      if (!iframe) { return; }
+      var w = parseInt(iframe.getAttribute('width'), 10);
+      var h = parseInt(iframe.getAttribute('height'), 10);
+      if (!w || !h || !frame.clientWidth) { return; }
+      var s = Math.min(1, frame.clientWidth / w);
+      iframe.style.transform = 'scale(' + s + ')';
+      frame.style.height = Math.round(h * s) + 'px';
+    });
+  }
+  fitDesigns();
+  window.addEventListener('resize', fitDesigns);
+  window.addEventListener('load', fitDesigns);
+  document.querySelectorAll('details').forEach(function (d) { d.addEventListener('toggle', fitDesigns); });
+  if ('ResizeObserver' in window) {
+    // The column settles after fonts and the rail lay out; follow it rather than trust the first measure.
+    var ro = new ResizeObserver(fitDesigns);
+    document.querySelectorAll('figure.design .design-frame').forEach(function (frame) { ro.observe(frame); });
+  }
   var modal = document.getElementById('diagram-modal');
   var modalBody = document.getElementById('diagram-body');
   if (modal && modalBody && typeof modal.showModal === 'function') {
-    document.querySelectorAll('figure.diagram').forEach(function (fig) {
+    document.querySelectorAll('figure.diagram, figure.design').forEach(function (fig) {
       fig.addEventListener('click', function (e) {
         var caption = fig.querySelector('figcaption');
         if (caption && caption.contains(e.target) && !e.target.classList.contains('diagram-open')) { return; }
@@ -253,6 +280,13 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
           svg.style.maxWidth = 'none';
           svg.removeAttribute('width');
           svg.removeAttribute('height');
+        });
+        // An artboard shows at its own size in the dialog; the column view scaled it down.
+        modalBody.querySelectorAll('.design-frame').forEach(function (frame) {
+          frame.style.height = 'auto';
+          frame.style.overflow = 'visible';
+          var iframe = frame.querySelector('iframe');
+          if (iframe) { iframe.style.transform = 'none'; iframe.style.pointerEvents = 'auto'; }
         });
         modal.showModal();
       });

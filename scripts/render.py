@@ -18,7 +18,11 @@ paragraphs, bullet and numbered lists (one nesting level), pipe tables, fenced c
 HTML comments in the source are dropped so skeleton hints never reach the page.
 Images (`![caption](context/frame.png)`, path relative to the source) are inlined as
 data URIs, downscaled to 1600px wide when Pillow is installed, and consecutive images
-form a grid.
+form a grid. A `.dc.html` target (an artboard read from a Design canvas) is embedded
+instead as a sandboxed iframe at the artboard's own size, scaled to the column by the
+page script and opened full size by the diagram dialog; its `support.js` line is
+dropped because the canvas runtime is not present, so only static artboards render
+faithfully.
 
 Plan mode: the "Context" section renders collapsed inside a <details> element, each
 section head carries an onion ring marking its architecture layer, and "Open
@@ -83,6 +87,10 @@ SOURCE_DIR = Path(".")
 REPO_DIR = Path(".")
 KIND = "plan"
 MAX_IMAGE_WIDTH = 1600
+MAX_DESIGN_BYTES = 2 * 1024 * 1024
+DESIGN_DEFAULT_SIZE = (1280, 800)
+SUPPORT_JS_RE = re.compile(r"[ \t]*<script[^>]*support\.js[^>]*>\s*</script>[ \t]*(?:\r?\n)?", re.I)
+PREVIEW_RE = re.compile(r'"\$preview"\s*:\s*\{([^}]*)\}')
 MAX_FILE_DIFF_LINES = 400
 SECRET_PATTERNS = re.compile(r"(appsettings[^/]*\.json|local\.settings\.json|\.tfvars|\.env(\.|$)|secrets?\.(json|ya?ml)|\.pfx|\.pem)$", re.I)
 META = {}
@@ -92,7 +100,7 @@ USED_FILES = []
 WARNINGS = []
 
 NON_LAYER_SECTIONS = {
-    "Context", "Requirement", "Specs", "Tests", "Decisions",
+    "Context", "Requirement", "Specs", "Designs", "Tests", "Decisions",
     "Risks and rollout", "Open questions",
 }
 SHORT = {
@@ -160,10 +168,61 @@ def image_data_uri(path):
     return f"data:{mime};base64," + base64.b64encode(data).decode("ascii")
 
 
+def is_design(path):
+    return path.lower().endswith(".dc.html")
+
+
+def design_size(source):
+    """The artboard's $preview width and height, else the default desktop frame."""
+    m = PREVIEW_RE.search(source)
+    if m:
+        w = re.search(r'"width"\s*:\s*(\d+)', m.group(1))
+        h = re.search(r'"height"\s*:\s*(\d+)', m.group(1))
+        if w and h:
+            return int(w.group(1)), int(h.group(1))
+    return DESIGN_DEFAULT_SIZE
+
+
+def render_design(alt, path):
+    file = (SOURCE_DIR / path).resolve()
+    try:
+        source = file.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return f'<div class="figures"><figure class="missing"><figcaption>Missing artboard: {html.escape(path)}</figcaption></figure></div>'
+    if len(source.encode("utf-8")) > MAX_DESIGN_BYTES:
+        WARNINGS.append(f"artboard {path} is over {MAX_DESIGN_BYTES // (1024 * 1024)} MB; the page must stay under 16 MB")
+    source = SUPPORT_JS_RE.sub("", source)
+    width, height = design_size(source)
+    caption = html.escape(alt, quote=True)
+    return (
+        f'<figure class="design"><div class="design-frame">'
+        f'<iframe sandbox="" srcdoc="{html.escape(source, quote=True)}" title="{caption}" '
+        f'width="{width}" height="{height}" loading="lazy"></iframe></div>'
+        f'<figcaption><span>{inline(alt)}</span>'
+        f'<button type="button" class="diagram-open">Open full size</button></figcaption></figure>'
+    )
+
+
 def render_figures(lines):
-    out = ['<div class="figures">']
+    out = []
+    grid = []
     for line in lines:
         alt, path = IMAGE_RE.match(line.strip()).groups()
+        if is_design(path):
+            if grid:
+                out.append(render_image_grid(grid))
+                grid = []
+            out.append(render_design(alt, path))
+        else:
+            grid.append((alt, path))
+    if grid:
+        out.append(render_image_grid(grid))
+    return "".join(out)
+
+
+def render_image_grid(figures):
+    out = ['<div class="figures">']
+    for alt, path in figures:
         uri = image_data_uri(path)
         if uri is None:
             out.append(f'<figure class="missing"><figcaption>Missing image: {html.escape(path)}</figcaption></figure>')

@@ -33,6 +33,7 @@ ENUMS = {
     "stack.messaging": ("masstransit", "wolverine", "service-bus", "none"),
     "stack.errors": ("result", "exceptions"),
     "stack.local_run": ("aspire", "docker", "plain"),
+    "stack.frontend": ("none", "blazor", "razor", "react", "angular", "vue", "javascript"),
 }
 
 BUILT_IN_REVIEWERS = ("bug-hunt", "conventions")
@@ -53,7 +54,7 @@ DEFAULTS = {
     "tracker_states": {"active": "", "qa_ready": ""},
     "artifacts": True,
     "branding": True,
-    "stack": {"data": "ef-core", "api": "minimal-api", "messaging": "none", "errors": "exceptions", "local_run": "plain"},
+    "stack": {"data": "ef-core", "api": "minimal-api", "messaging": "none", "errors": "exceptions", "local_run": "plain", "frontend": "none"},
     "reviewers": list(BUILT_IN_REVIEWERS),
     "pipeline": {"execute": "", "resolve_comments": "", "qa": ""},
     "optional": {"dotnet-claude-kit": False, "codex": False, "roslyn-mcp": False},
@@ -94,6 +95,13 @@ PLAN_SECTIONS = {
 }
 PLAN_SECTIONS["ddd-clean"] = PLAN_SECTIONS["clean"]
 PLAN_SECTIONS["modular-monolith"] = PLAN_SECTIONS["clean"]
+
+# Sections a plan may carry but never has to: name -> (section it follows, cap, max bullets).
+# Designs holds the screens for a frontend change and is only allowed when the profile
+# says the repo has a frontend.
+OPTIONAL_PLAN_SECTIONS = {
+    "Designs": ("Specs", 60, None),
+}
 
 # Slice names the review's Changes tables group files by.
 REVIEW_SLICES = {
@@ -212,6 +220,34 @@ def resolve_profile(cwd=None, explicit=None):
 
 def plan_sections(profile):
     return PLAN_SECTIONS[profile.get("architecture", "clean")]
+
+
+def optional_plan_sections(profile):
+    """The optional section names this profile allows a plan to carry."""
+    allowed = []
+    if get(profile, "stack.frontend") not in (None, "none"):
+        allowed.append("Designs")
+    return allowed
+
+
+def disallowed_plan_sections(profile, present):
+    """Optional sections the document carries that this profile does not allow, with why."""
+    allowed = optional_plan_sections(profile)
+    return [f"{name}: only allowed when the profile's stack.frontend is not none"
+            for name in OPTIONAL_PLAN_SECTIONS if name in present and name not in allowed]
+
+
+def expected_plan_sections(profile, present):
+    """The section list a plan must match: the architecture's list plus any allowed
+    optional section the document actually carries, each slotted after its anchor."""
+    sections = list(plan_sections(profile))
+    for name in optional_plan_sections(profile):
+        if name not in present:
+            continue
+        after, cap, bullets = OPTIONAL_PLAN_SECTIONS[name]
+        index = next((i for i, (n, _, _) in enumerate(sections) if n == after), len(sections) - 1)
+        sections.insert(index + 1, (name, cap, bullets))
+    return sections
 
 
 def review_slices(profile):

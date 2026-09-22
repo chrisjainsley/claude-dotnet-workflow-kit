@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from kit_profile import add_profile_arg, plan_sections, resolve_profile  # noqa: E402
+from kit_profile import add_profile_arg, disallowed_plan_sections, expected_plan_sections, resolve_profile  # noqa: E402
 
 SIZE_MULTIPLIER = {"small": 0.6, "standard": 1.0, "large": 1.5}
 
@@ -161,8 +161,8 @@ def report(failures):
     return 0
 
 
-def check_plan(meta, body, multiplier, sections):
-    failures = []
+def check_plan(meta, body, multiplier, sections, disallowed=()):
+    failures = list(disallowed)
     for key in ("title", "ticket"):
         if not meta.get(key):
             failures.append(f"front matter is missing '{key}'")
@@ -329,7 +329,9 @@ def main(kind=None, argv=None):
     multiplier = SIZE_MULTIPLIER[size]
     profile = resolve_profile(explicit=args.profile)
     if document_kind == "plan":
-        return check_plan(meta, body, multiplier, plan_sections(profile))
+        present = [name for name, _ in split_sections(body)]
+        return check_plan(meta, body, multiplier, expected_plan_sections(profile, present),
+                          disallowed_plan_sections(profile, present))
     return check_review(meta, body, multiplier)
 
 
