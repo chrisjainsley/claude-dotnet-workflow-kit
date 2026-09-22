@@ -17,7 +17,8 @@ never leave the machine.
 `--stage` answers the profile's stage_checks for one /next stage: each yes/no prompt is
 asked against the evidence files (and the diff, with --range) in one request. A yes at or
 above flag_at passes, between review_at and flag_at needs a reader to confirm, below that
-fails. Truncated evidence never passes outright; it drops to confirm.
+fails. Trimmed evidence keeps each file's head and tail, and a trimmed run always
+answers confirm: neither a yes nor a no is final on evidence the model did not fully see.
 
 `--extract` turns CLAUDE.md-style files into rules of the same shape, so the conventions
 reviewer's rubric can be scored the same way. `--check-rules` asks whether each profile
@@ -467,9 +468,20 @@ def check_rules(rules, key=None, transport=None, dry_run=False, warn_below=0.5):
 EVIDENCE_CHARS = 60000
 
 
+def trim_middle(text, size):
+    """Keep the head and the tail when text is longer than size: a log's summary is at the
+    end, its setup at the start, and the middle is what a reader can most afford to lose."""
+    if len(text) <= size:
+        return text
+    marker = f"\n[... {len(text) - size} characters trimmed ...]\n"
+    keep = max(0, size - len(marker))
+    head = keep // 3
+    return text[:head] + marker + text[len(text) - (keep - head):]
+
+
 def load_evidence(paths, diff_text=None, limit=EVIDENCE_CHARS):
-    """[{id, text}] from the evidence files and the diff, trimmed to `limit` characters in
-    total. Returns (items, truncated)."""
+    """[{id, text}] from the evidence files and the diff, trimmed to at most `limit`
+    characters in total. Returns (items, truncated)."""
     items = []
     for path in paths:
         file = Path(path)
@@ -477,28 +489,41 @@ def load_evidence(paths, diff_text=None, limit=EVIDENCE_CHARS):
             raise SystemExit(f"evidence file not found: {path}")
         if SECRET_PATTERNS.search(file.as_posix()):
             raise SystemExit(f"refusing to send a secret-pattern file as evidence: {path}")
-        items.append({"id": file.name, "text": file.read_text(encoding="utf-8", errors="replace")})
+        name, n = file.name, 2
+        while any(i["id"] == name for i in items) or name == "diff":
+            name, n = f"{file.name} ({n})", n + 1
+        items.append({"id": name, "text": file.read_text(encoding="utf-8", errors="replace")})
     files_text = {}
     if diff_text is not None:
         safe, _ = split_hunks(parse_diff(diff_text))
         for h in safe:
             files_text.setdefault(h["path"], []).append(h["text"])
-    file_total = sum(len("\n".join(t)) for t in files_text.values())
-    total = sum(len(i["text"]) for i in items) + file_total
+    diff_full = {path: "\n".join(t) for path, t in files_text.items()}
+    total = sum(len(i["text"]) for i in items) + sum(len(t) for t in diff_full.values())
     truncated = total > limit
     if truncated and items:
-        share = (limit // 2 if files_text else limit) // len(items)
-        items = [{"id": i["id"], "text": i["text"][:share]} for i in items]
+        # Files and diff split the budget by need: a small diff leaves more room for the files.
+        diff_need = sum(len(t) for t in diff_full.values())
+        file_budget = limit - min(diff_need, limit // 2) if files_text else limit
+        share = file_budget // len(items)
+        items = [{"id": i["id"], "text": trim_middle(i["text"], share)} for i in items]
     if files_text:
         # Every changed file stays visible when the diff is trimmed: the file list always goes
         # first, then each file gets an even share of what is left, so a trim never drops the
         # files that sort last (tests/ is usually the one a stage check asks about).
         header = "Changed files:\n" + "\n".join(files_text) + "\n\n"
-        budget = (limit - sum(len(i["text"]) for i in items)) if truncated else None
-        overhead = len(header) + sum(len(path) + 3 for path in files_text)  # path line plus separator
-        per_file = max(200, (budget - overhead) // len(files_text)) if truncated else None
-        parts = [f"{path}\n" + ("\n".join(t)[:per_file] if per_file else "\n".join(t)) for path, t in files_text.items()]
-        items.append({"id": "diff", "text": header + "\n\n".join(parts)})
+        if truncated:
+            budget = limit - sum(len(i["text"]) for i in items)
+            overhead = len(header) + sum(len(path) + 3 for path in files_text)  # path line plus separator
+            per_file = (budget - overhead) // len(files_text)
+            if per_file < 100:
+                text = header  # too many files for a useful excerpt each: the list alone
+            else:
+                text = header + "\n\n".join(f"{path}\n{trim_middle(t, per_file)}" for path, t in diff_full.items())
+            text = text[:budget]
+        else:
+            text = header + "\n\n".join(f"{path}\n{t}" for path, t in diff_full.items())
+        items.append({"id": "diff", "text": text})
     return items, truncated
 
 
@@ -525,9 +550,16 @@ def score_stage(stage, checks, evidence, thresholds, truncated, key=None, transp
     answers = post(body, key, transport)
     results = []
     for check in checks:
-        p = float((answers.get(check["id"]) or {}).get("noul", 0.0))
-        if p >= thresholds["flag_at"]:
-            verdict = "confirm" if truncated else "pass"
+        raw = (answers.get(check["id"]) or {}).get("noul")
+        if not isinstance(raw, (int, float)) or isinstance(raw, bool):
+            # No answer is an integration fault, not a "no": a reader decides.
+            results.append({**check, "p_yes": None, "verdict": "confirm", "note": "no answer from jev"})
+            continue
+        p = float(raw)
+        if truncated:
+            verdict = "confirm"  # the evidence was trimmed, so neither a yes nor a no is final
+        elif p >= thresholds["flag_at"]:
+            verdict = "pass"
         elif p >= thresholds["review_at"]:
             verdict = "confirm"
         else:
@@ -694,7 +726,7 @@ def run_stage(args, profile, thresholds):
         diff_text = Path(args.diff_file).read_text(encoding="utf-8") if args.diff_file else git_diff(args.range, args.repo)
     evidence, truncated = load_evidence(args.evidence, diff_text)
     if not evidence:
-        print("usage: --stage needs --evidence files or --range", file=sys.stderr)
+        print("usage: --stage needs --evidence files or a non-empty --range / --diff-file", file=sys.stderr)
         return 1
     key, source = (None, "dry-run")
     try:
@@ -713,7 +745,8 @@ def run_stage(args, profile, thresholds):
     else:
         print("| Check | Verdict | Jev yes | On fail |\n|---|---|---|---|")
         for r in results:
-            print(f"| {r['id']} | {r['verdict']} | {r['p_yes']:.2f} | {r['on_fail']} |")
+            shown = "none" if r["p_yes"] is None else f"{r['p_yes']:.2f}"
+            print(f"| {r['id']} | {r['verdict']} | {shown} | {r['on_fail']} |")
         note = " (evidence truncated)" if truncated else ""
         print(f"\ngate: {result['gate']}{note}")
     write_out(args.out, result)

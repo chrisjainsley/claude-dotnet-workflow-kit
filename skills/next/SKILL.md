@@ -49,7 +49,7 @@ Bug-fixing for a sweep finding or a Test failure is never its own row: the stage
 
 ## Stage checks
 
-The profile's `stage_checks` add the team's own conditions to the Done-when column. Each stage key (`start`, `plan`, `implement`, `test`, `review`, `pull_request`) holds a list of `{id, prompt, on_fail}`, where `prompt` is a yes/no question a yes answer satisfies. Run them when the built-in rule for a stage is met and before marking it done. For the plan and review stages, run them before presenting the page, never in place of the user's decision.
+The profile's `stage_checks` add the team's own conditions to the Done-when column. Each stage key holds a list of `{id, prompt, on_fail}`. The keys are `start`, `plan`, `implement`, `test`, `review` and `pull_request`. A `prompt` is a yes/no question that a yes answer satisfies. Run them when the built-in rule for a stage is met and before marking it done. For the plan and review stages, run them before presenting the page, never in place of the user's decision.
 
 The evidence each stage is judged on:
 
@@ -68,9 +68,9 @@ Write the evidence that is not already a file to files beside the state file (`<
 python "<plugin root>/scripts/jev_checks.py" --stage <stage> --evidence <files> [--range "origin/$base...HEAD"] --out ~/.claude/dotnet-workflow-kit/pipeline/<slug>-<stage>-checks.json
 ```
 
-A yes at or above `jev.flag_at` passes, between `jev.review_at` and `jev.flag_at` needs you to read the evidence and decide, and below `jev.review_at` fails. Exit 2 means Jev was unavailable. Then, and whenever `optional.jev` is false, answer each prompt yourself from the same evidence: yes only when you can quote the line that shows it, otherwise no.
+A yes at or above `jev.flag_at` passes, between `jev.review_at` and `jev.flag_at` needs you to read the evidence and decide, and below `jev.review_at` fails. When the output says the evidence was trimmed, every check answers confirm. Exit 2 means Jev was unavailable. In that case, or when `optional.jev` is false, answer each prompt yourself from the same evidence. Answer yes only when you can quote the line that shows it, otherwise no.
 
-A failed check with `on_fail: fix` (the default) keeps the stage in progress with the check's id in the evidence column, and fixing it is the next action inside that stage. A failed check with `on_fail: stop` is a blocker. Record the results as `stages.<stage>.checks` in the state file, one `{id, verdict, p_yes}` per check (`p_yes` blank when you answered without Jev). A result older than the branch's latest commit is stale, like any other marker.
+A failed check with `on_fail: fix` (the default) keeps the stage in progress with the check's id in the evidence column. Fixing it is the next action inside that stage. A failed check with `on_fail: stop` is a blocker. Record the results as `stages.<stage>.checks` in the state file, one `{id, verdict, p_yes}` per check (`p_yes` blank when you answered without Jev). A result older than the branch's latest commit is stale, like any other marker.
 
 ## State file
 

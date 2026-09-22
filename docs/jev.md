@@ -81,9 +81,10 @@ clean-tree rule holds. Exit 2 means Jev was unavailable; record `skipped` and ca
 
 `stage_checks` in the profile gives each `/next` stage extra yes/no conditions to pass
 before it counts as done. `jev_checks.py --stage <stage> --evidence <files>` asks every
-prompt for that stage in one request, as `noul` questions over the stage's evidence, and
+prompt for that stage in one request, as `noul` questions over the stage's evidence. It
 bands the yes probability with the same `flag_at` and `review_at` thresholds. Evidence is
-capped at 60,000 characters; a trimmed run never passes outright and drops to confirm.
+capped at 60,000 characters. A trim keeps each file's head and tail and every changed
+file's name. A trimmed run always answers confirm, so the reader decides.
 Without Jev, Claude answers the same prompts from the same evidence. `skills/next/SKILL.md`
 lists the evidence per stage.
 

@@ -104,3 +104,10 @@ def test_given_stage_checks_then_doctor_lists_them(tmp_path):
     assert code == 0, out
     assert "stage checks (answered by Claude):" in out
     assert "test" in out and "2 checks, 1 stop on fail" in out
+
+
+def test_given_malformed_stage_checks_then_doctor_reports_instead_of_crashing(tmp_path):
+    for bad in ({"stage_checks": {"test": [{"prompt": "x"}]}}, {"stage_checks": ["x"]}, {"checks": [{"rule": "x"}]}):
+        code, out = run_doctor(tmp_path, bad, "--skip-fixtures")
+        assert code == 1, out
+        assert "invalid:" in out and "Traceback" not in out

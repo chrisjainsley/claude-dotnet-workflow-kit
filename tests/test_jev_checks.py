@@ -416,3 +416,61 @@ def test_given_big_diff_then_every_file_survives_the_trim():
     assert truncated and len(text) <= 6000
     assert text.startswith('Changed files:')
     assert text.count('tests/test_last.py') == 2
+
+
+def test_given_long_log_then_trim_keeps_head_and_tail(tmp_path):
+    log = tmp_path / "dotnet-test.log"
+    log.write_text("Build started\n" + "noise\n" * 20000 + "Passed!  - Failed: 0, Passed: 214\n", encoding="utf-8")
+    evidence, truncated = jev_checks.load_evidence([str(log)], limit=4000)
+    text = evidence[0]["text"]
+    assert truncated and len(text) <= 4000
+    assert text.startswith("Build started") and "Failed: 0, Passed: 214" in text and "characters trimmed" in text
+
+
+def test_given_hundreds_of_files_then_cap_still_holds():
+    parts = []
+    for i in range(400):
+        name = f"src/Module{i:03}/Handler.cs"
+        parts.append(f"diff --git a/{name} b/{name}\n--- a/{name}\n+++ b/{name}\n@@ -0,0 +1,1 @@\n+x")
+    evidence, truncated = jev_checks.load_evidence([], "\n".join(parts) + "\n", limit=6000)
+    assert truncated and len(evidence[0]["text"]) <= 6000
+    assert evidence[0]["text"].startswith("Changed files:")
+
+
+@pytest.mark.parametrize("name", [".env.local", "src/.env.production", "id_rsa", "cert.key", ".npmrc", "credentials.json"])
+def test_given_more_secret_file_names_then_refused(tmp_path, name):
+    target = tmp_path / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("x", encoding="utf-8")
+    with pytest.raises(SystemExit, match="secret-pattern"):
+        jev_checks.load_evidence([str(target)])
+
+
+@pytest.mark.parametrize("name", ["src/environment.ts", "src/EnvReader.cs", "docs/keyboard.md", "README.md"])
+def test_given_ordinary_file_names_then_not_treated_as_secret(name):
+    assert not jev_checks.SECRET_PATTERNS.search(name)
+
+
+def test_given_missing_answer_then_confirm_not_fail(tmp_path):
+    out = tmp_path / "o.txt"
+    out.write_text("x", encoding="utf-8")
+    evidence, _ = jev_checks.load_evidence([str(out)])
+
+    class Missing(FakeTransport):
+        def __call__(self, body_bytes, headers):
+            return 200, json.dumps({"answers": {"suite-green": {"type": "noul", "noul": None}}})
+
+    results, _ = jev_checks.score_stage("test", jev_checks.stage_checks(profile(), "test"), evidence,
+                                        {"flag_at": 0.75, "review_at": 0.4}, False, PLACEHOLDER_KEY, Missing())
+    assert [(r["id"], r["verdict"], r["p_yes"]) for r in results] == [("suite-green", "confirm", None), ("scenarios-run", "confirm", None)]
+    assert jev_checks.gate_of(results) == "confirm"
+
+
+def test_given_duplicate_evidence_names_then_ids_stay_unique(tmp_path):
+    a = tmp_path / "a" / "plan.md"
+    b = tmp_path / "b" / "plan.md"
+    for f in (a, b):
+        f.parent.mkdir()
+        f.write_text("x", encoding="utf-8")
+    evidence, _ = jev_checks.load_evidence([str(a), str(b)])
+    assert [e["id"] for e in evidence] == ["plan.md", "plan.md (2)"]

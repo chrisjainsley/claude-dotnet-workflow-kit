@@ -287,20 +287,26 @@ def validate_stage_checks(profile):
 
 
 def stage_checks(profile, stage):
-    """The profile's yes/no checks for one stage, with on_fail defaulted to fix."""
-    checks = (profile.get("stage_checks") or {}).get(stage) or []
+    """The profile's yes/no checks for one stage, with on_fail defaulted to fix. Malformed
+    entries are skipped here; validate() is what reports them."""
+    stages = profile.get("stage_checks")
+    checks = stages.get(stage) if isinstance(stages, dict) else None
     return [
         {"id": c["id"], "prompt": c["prompt"].strip(), "on_fail": c.get("on_fail") or "fix"}
-        for c in checks if isinstance(c, dict)
+        for c in (checks if isinstance(checks, list) else [])
+        if isinstance(c, dict) and isinstance(c.get("id"), str) and isinstance(c.get("prompt"), str)
     ]
 
 
 def enabled_checks(profile):
     """The profile's checks with files defaulted, in file order."""
+    checks = profile.get("checks")
     return [
         {"id": c["id"], "rule": c["rule"].strip(), "severity": c["severity"],
          "files": c.get("files") or CHECK_FILES_DEFAULT}
-        for c in profile.get("checks", []) if isinstance(c, dict)
+        for c in (checks if isinstance(checks, list) else [])
+        if isinstance(c, dict) and isinstance(c.get("id"), str) and isinstance(c.get("rule"), str)
+        and isinstance(c.get("severity"), str)
     ]
 
 
