@@ -64,6 +64,14 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    test users and one line of evidence per scenario; classify every failure as
    regression, pre-existing bug or environment issue. With `qa.owner: none`, the QA
    section still exists and says what the author verified.
+   **Attach the proof to the step it proves.** After a scenario's Evidence line, add
+   the API request and response (`http` fence), a screenshot (`![caption](evidence/<file>.png)`,
+   from `plans/<slug>/evidence/`) or a database query and its rows (`sql` or `text`
+   fence, never a markdown table) wherever it decided the result. The fence caption
+   (`http When the member pays`) or the image caption repeats the gherkin step
+   verbatim; case and spacing are ignored. The page folds each into its step as a
+   collapsed item. Redact every credential to `<redacted>` and trim bodies to the
+   fields the step proves.
    **Verify with Jev** before writing, when `optional.jev` is true. Load `jev_verify`
    and send one claim per Plan versus delivered row marked done ("<scenario> is
    implemented") with the slice's hunks as evidence. Send one claim per QA Pass row
@@ -114,7 +122,8 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 12. **On approve:** post the QA report section, and only that section, where
     `qa.evidence` says (the tracker adapter has the posting steps; plain ASCII, `--` for
     dashes, no emoji, no PR numbers that the tracker would auto-link, no artifact link
-    because artifacts are private). With `qa.evidence: none`, post nothing. Then continue
+    because artifacts are private). Evidence fences go as plain text under their
+    scenario; screenshots stay on the page and are not posted. With `qa.evidence: none`, post nothing. Then continue
     the pipeline hand-off. **On changes:** fix the branch, rebuild the review, republish
     to the same path. Open findings marked `accept` move to the Findings table as
     accepted with the reviewer's note as the reason. For a merged PR, open findings
@@ -129,7 +138,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 | Changes | 300 words + 1 diagram + 8 hunks | One line for what the reviewer must not miss. One mermaid diagram of the changed components and the path between them. Then per service a Slice / File / Change table whose File cells open the full per-file diff, and the load-bearing hunks as collapsed diffs under 60 lines each. |
 | Contracts and coordination | 140 words + table | API contract and snapshot, new events and their topics, storage and infrastructure as code, configuration keys, migrations, client apps, tenants, name collisions. Rows are illustrative; keep only what someone else has to act on. |
 | Findings | 200 words + table | Severity, location, finding, status, note. Accepted needs a reason. Open rows become accept or fix radios in the decision form. |
-| QA report | 350 words + gherkin | Environment and test users, one scenario per behaviour tagged Acceptance or Manual with Pass, Fail or Blocked, Evidence, Classification (regression, pre-existing bug, environment issue, not run) on anything but Pass, the summary table, Not covered. When nothing was run, open with **No QA run.** and list every criterion under Not covered. |
+| QA report | 350 words + gherkin + evidence, 10 images | Environment and test users, one scenario per behaviour tagged Acceptance or Manual with Pass, Fail or Blocked, Evidence with per-step proof, Classification (regression, pre-existing bug, environment issue, not run) on anything but Pass, the summary table, Not covered. When nothing was run, open with **No QA run.** and list every criterion under Not covered. |
 | Rollout | 90 words, 8 items | Ordered checklist with persistent ticks: infrastructure applied, config set, stacked order, migration, labels, hand-off. |
 | Decision | 60 words + form | Your recommendation in a sentence or two. The form is generated. |
 
@@ -147,6 +156,9 @@ agree, report what happened rather than what should have, diffs carry a decision
   diffs, so it refuses to embed `appsettings*.json`, `local.settings.json`, `.tfvars`,
   `.env*`, `secrets.*`, `.pfx` and `.pem` files and links to the PR instead. If a file
   outside that list carries a secret, do not put it in the Changes table.
+- QA evidence is copied from live traffic, so it carries tokens, cookies and personal
+  data. The check fails an unredacted `Authorization`, cookie, API key or password;
+  it cannot see custom headers such as `X-Api-Token`, so redact every credential.
 - The QA comment posted to a tracker must contain no bare PR numbers (some trackers
   auto-link `#1234` to a work item) and no artifact link. Plain ASCII, `--` for dashes,
   no emoji.

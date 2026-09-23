@@ -17,6 +17,10 @@ bug, or environment issue. A summary table lists every scenario with its type,
 environment and result. A Not covered section names what was not tested and why. Unit
 and integration suites never appear here; they are not QA evidence.
 
+Where a result was judged from an API response, a screen or a database row, that proof
+sits under the Evidence line with a caption repeating the step it proves: the request
+and response, the screenshot, or the query and its rows, credentials redacted.
+
 ## Hand-off
 
 Add the profile's `qa.handoff_label` to the PR so the QA team picks it up, and the

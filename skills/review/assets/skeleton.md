@@ -73,7 +73,7 @@ flowchart LR
 | high | `<path>:<line>` | <one sentence> | fixed | |
 
 ## QA report
-<!-- Same structure the test skill posts to the work item. Environment and date line, then one #### per behaviour verified, tagged Acceptance test or Manual test with Pass, Fail or Blocked, a gherkin fence, an Evidence line, and a Classification line (regression | pre-existing bug | environment issue | not run) for anything but Pass. Unit and integration suites are not QA and do not appear. If nothing was run, open with **No QA run.** and put every criterion under Not covered instead of inventing a Blocked row. End with the summary table and Not covered. -->
+<!-- Same structure the test skill posts to the work item. Environment and date line, then one #### per behaviour verified, tagged Acceptance test or Manual test with Pass, Fail or Blocked, a gherkin fence, an Evidence line, and a Classification line (regression | pre-existing bug | environment issue | not run) for anything but Pass. After the Evidence line, the proof that decided the result: an http fence for an API request and response, ![caption](evidence/<file>.png) for a screenshot, a sql or text fence for a query and its rows. Each fence's caption (the words after the language) and each image caption repeats the gherkin step it proves; the page folds it into that step. Credentials become <redacted>. At most ten images. Unit and integration suites are not QA and do not appear. If nothing was run, open with **No QA run.** and put every criterion under Not covered instead of inventing a Blocked row. End with the summary table and Not covered. -->
 
 **Environment:** <qa environment / local> | **Date:** <YYYY-MM-DD> | **Test users:** <emails>
 
@@ -84,6 +84,14 @@ When <action>
 Then <observed outcome>
 ```
 Evidence: <one line>
+```http When <action>
+POST /api/<resource>
+Authorization: Bearer <redacted>
+
+HTTP/1.1 201 Created
+{"id": "<id>"}
+```
+![Then <observed outcome>](evidence/<file>.png)
 
 | Scenario | Type | Env | Result |
 |---|---|---|---|
