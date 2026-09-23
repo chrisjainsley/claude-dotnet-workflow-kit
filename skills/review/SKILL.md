@@ -75,8 +75,8 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    **Verify with Jev** before writing, when `optional.jev` is true. Load `jev_verify`
    and send one claim per Plan versus delivered row marked done ("<scenario> is
    implemented") with the slice's hunks as evidence. Send one claim per QA Pass row
-   against its Evidence line, and one per Verdict tile against the section it
-   summarises.
+   against its Evidence line plus the text of its evidence fences (images are not
+   sent), and one per Verdict tile against the section it summarises.
    An `unsupported` or `contradicted` delivered row becomes changed or dropped with the
    reason; a Pass row without evidence becomes not run; a tile that disagrees with its
    section is recounted. Say in the Verdict how many claims Jev verified. Without the
