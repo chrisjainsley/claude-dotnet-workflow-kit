@@ -69,12 +69,12 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    `assertion_changed_by_refactor` are a regression, `flaky_known` that failed twice
    is a regression, `environment` is an environment issue; `manual_review` means you
    decide and say so in the Evidence line.
-   **Capture the proof as you go**, per step, wherever it decided the result: the API
-   request and response (`curl -i` or the `.http` file's output), a screenshot saved
-   to `plans/<slug>/evidence/` (Playwright: the project's own, or
-   `npx playwright screenshot <url> <file>`; the in-app browser cannot save to disk),
-   and the database query with its rows. Redact every token, cookie, key and password
-   to `<redacted>`; trim bodies to the fields the step proves.
+   **Capture the proof as you go**, per step, wherever it decided the result. An API
+   call is the request and response (`curl -i` or the `.http` file's output). A
+   screenshot is saved under `plans/<slug>/evidence/` with Playwright (the project's
+   own, or `npx playwright screenshot <url> <file>`); the in-app browser cannot save
+   to disk. A database check is the query and its rows. Redact every token, cookie,
+   key and password to `<redacted>`, and trim bodies to the fields the step proves.
    **Unit and integration suites are never QA evidence.** If the only verification
    performed was an in-process test suite, say so and stop: there is nothing to report.
 4. **Write the report** with this exact structure:
@@ -113,9 +113,11 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    <what was not tested and why>
    ```
 
-   Each evidence fence or image caption repeats the gherkin step it proves, verbatim;
-   the review page folds it into that step, and `check_review.py` fails a caption that
-   names no step, an unredacted credential, or more than ten images.
+   Put an API call in an `http` fence and a database check in a `sql` or `text`
+   fence, never a markdown table. Each fence caption or image caption repeats the
+   gherkin step it proves; case and spacing are ignored. The review page folds it into
+   that step. Once the section is in a review, the review skill's `check_review.py`
+   fails a caption that names no step, an unredacted credential, or over ten images.
    When nothing was run this session, open with **No QA run.** and list every
    acceptance criterion under Not covered instead of inventing a scenario.
 5. **Publish as an Artifact only when `artifacts` is true.** Load the `artifact-design`
@@ -168,8 +170,8 @@ section (for the Azure Boards form this is a markdown comment via the REST API, 
 `--discussion`, since that stores plain text as escaped HTML). `pr-comment`: post
 through the scm adapter as a plain PR comment (for the GitHub form, `gh pr comment
 <number> --body-file report.md`). `none`: print only, nothing to send. Evidence
-fences post as plain text under their scenario; screenshots stay on the review page
-and are not uploaded. **Never change
+fences post as plain text under their scenario. Screenshots stay on the review page:
+replace each image line with its caption in plain text before posting. **Never change
 the work item's or PR's state from this skill, in either mode.**
 
 ## Traps

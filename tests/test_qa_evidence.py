@@ -128,3 +128,51 @@ def test_given_exemplar_without_evidence_then_unchanged(review_fixture_path, tmp
     page, _ = build(review_fixture_path, tmp_path)
     assert '<div class="steps">' not in page
     assert "No QA run." in page
+
+
+@pytest.mark.parametrize("line, what", [
+    ('curl -H "Authorization: Bearer abc.def" https://api.test/orders', "Authorization header"),
+    ('{"headers": {"Authorization": "Bearer abc"}}', "Authorization header"),
+    ('{"access_token": "eyJhbGciOi"}', "token"),
+    ('{"client_secret": "zzz"}', "secret"),
+    ('{"newPassword": "hunter2"}', "password"),
+    ("Cookie: session=abc123; csrf=<redacted>", "cookie"),
+])
+def test_given_credential_outside_a_plain_header_then_exit1(evidence_review, line, what):
+    edit(evidence_review, "Authorization: Bearer <redacted>", line)
+    code, out, err = run_py(CHECK_REVIEW_PY, evidence_review)
+    assert code == 1
+    assert f"unredacted {what} in evidence" in out
+
+
+@pytest.mark.parametrize("line", [
+    '{"password": null, "passwordReset": true, "token_type": "Bearer"}',
+    "Set-Cookie: session=<redacted>; Path=/; HttpOnly",
+])
+def test_given_credential_words_without_secrets_then_passes(evidence_review, line):
+    edit(evidence_review, "Authorization: Bearer <redacted>", line)
+    code, out, err = run_py(CHECK_REVIEW_PY, evidence_review)
+    assert code == 0, out + err
+
+
+def test_given_heading_inside_evidence_fence_then_still_checked(evidence_review):
+    edit(evidence_review, "Authorization: Bearer <redacted>\n", "Authorization: Bearer abc123\n#### Response\n")
+    code, out, err = run_py(CHECK_REVIEW_PY, evidence_review)
+    assert code == 1
+    assert "unredacted Authorization header in evidence under 'Repeat payer is refused'" in out
+
+
+def test_given_star_step_then_evidence_attaches(evidence_review, tmp_path):
+    edit(evidence_review, f"{WHEN_STEP}\nThen", f"* {WHEN_STEP[5:]}\nThen")
+    edit(evidence_review, f"```http {WHEN_STEP}", f"```http * {WHEN_STEP[5:]}")
+    code, out, err = run_py(CHECK_REVIEW_PY, evidence_review)
+    assert code == 0, out + err
+    page, _ = build(evidence_review, tmp_path)
+    assert step_block(page, "an admin grants the signup campaign").startswith('<details class="step">')
+
+
+def test_given_quote_in_fence_language_then_escaped(evidence_review, tmp_path):
+    edit(evidence_review, f"```http {WHEN_STEP}", f'```j"onclick="x {WHEN_STEP}')
+    page, _ = build(evidence_review, tmp_path)
+    assert 'class="language-j&quot;onclick=&quot;x"' in page
+    assert 'onclick="x"' not in page

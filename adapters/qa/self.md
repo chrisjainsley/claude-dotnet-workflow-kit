@@ -15,9 +15,9 @@ regression, pre-existing bug, or environment issue. A summary table and a Not co
 section still apply; verifying it yourself is not a reason to skip naming what was not
 checked. Unit and integration suites never count as QA evidence here either.
 
-Where a result was judged from an API response, a screen or a database row, that proof
-sits under the Evidence line with a caption repeating the step it proves: the request
-and response, the screenshot, or the query and its rows, credentials redacted.
+Where an API response, a screen or a database row decided a result, that proof sits
+under the Evidence line: the request and response, the screenshot, or the query and its
+rows. Its caption repeats the step it proves, and credentials are redacted.
 
 ## Hand-off
 

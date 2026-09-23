@@ -147,7 +147,7 @@ def inline(text):
     text = re.sub(r"`([^`]+)`", stash, text)
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(r"(?<![*\w])\*(?!\s)(.+?)(?<!\s)\*(?!\w)", r"<em>\1</em>", text)
-    text = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', text)
+    text = re.sub(r"\[([^\]]+)\]\((https?://[^)\s\x22]+)\)", r'<a href="\2">\1</a>', text)
     return re.sub(r"\x00(\d+)\x00", lambda m: codes[int(m.group(1))], text)
 
 
@@ -438,7 +438,7 @@ def render_code(lang, body):
             f'<figcaption><button type="button" class="diagram-open">Open full size</button></figcaption>'
             f"</figure>"
         )
-    cls = f' class="language-{lang}"' if lang else ""
+    cls = f' class="language-{html.escape(lang, quote=True)}"' if lang else ""
     return f"<pre><code{cls}>{body}</code></pre>"
 
 

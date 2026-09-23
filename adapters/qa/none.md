@@ -13,9 +13,9 @@ checked, tagged `Acceptance test` or `Manual test` with Pass, Fail or Blocked an
 Evidence line, plus a Not covered section for anything left unchecked. Unit and
 integration suites are still never counted as QA evidence, even here.
 
-Where a result was judged from an API response, a screen or a database row, that proof
-sits under the Evidence line with a caption repeating the step it proves: the request
-and response, the screenshot, or the query and its rows, credentials redacted.
+Where an API response, a screen or a database row decided a result, that proof sits
+under the Evidence line: the request and response, the screenshot, or the query and its
+rows. Its caption repeats the step it proves, and credentials are redacted.
 
 ## Hand-off
 

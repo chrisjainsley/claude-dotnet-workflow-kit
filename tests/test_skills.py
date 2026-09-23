@@ -156,4 +156,6 @@ def test_given_test_and_review_skills_then_same_evidence_syntax():
         text = (root / rel).read_text(encoding="utf-8")
         assert "evidence/<file>.png" in text, rel
         assert "<redacted>" in text, rel
-        assert "http" in text and "sql" in text, rel
+        assert "`sql` or `text`" in text or "sql or text" in text, rel
+        assert "never a markdown table" in text, rel
+        assert "case and spacing are ignored" in text, rel

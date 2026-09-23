@@ -64,14 +64,14 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    test users and one line of evidence per scenario; classify every failure as
    regression, pre-existing bug or environment issue. With `qa.owner: none`, the QA
    section still exists and says what the author verified.
-   **Attach the proof to the step it proves.** After a scenario's Evidence line, add
-   the API request and response (`http` fence), a screenshot (`![caption](evidence/<file>.png)`,
-   from `plans/<slug>/evidence/`) or a database query and its rows (`sql` or `text`
-   fence, never a markdown table) wherever it decided the result. The fence caption
-   (`http When the member pays`) or the image caption repeats the gherkin step
-   verbatim; case and spacing are ignored. The page folds each into its step as a
-   collapsed item. Redact every credential to `<redacted>` and trim bodies to the
-   fields the step proves.
+   **Attach the proof to the step it proves.** Wherever it decided the result, add it
+   after the scenario's Evidence line. An API call is an `http` fence with the request
+   and response. A screenshot is `![caption](evidence/<file>.png)`, saved under
+   `plans/<slug>/evidence/`. A database check is a `sql` or `text` fence with the query
+   and its rows, never a markdown table. The fence caption (`http When the member
+   pays`) or the image caption repeats the gherkin step; case and spacing are ignored.
+   The page folds each into its step as a collapsed item. Redact every credential to
+   `<redacted>` and trim bodies to the fields the step proves.
    **Verify with Jev** before writing, when `optional.jev` is true. Load `jev_verify`
    and send one claim per Plan versus delivered row marked done ("<scenario> is
    implemented") with the slice's hunks as evidence. Send one claim per QA Pass row
@@ -123,7 +123,8 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
     `qa.evidence` says (the tracker adapter has the posting steps; plain ASCII, `--` for
     dashes, no emoji, no PR numbers that the tracker would auto-link, no artifact link
     because artifacts are private). Evidence fences go as plain text under their
-    scenario; screenshots stay on the page and are not posted. With `qa.evidence: none`, post nothing. Then continue
+    scenario. Screenshots stay on the page: replace each image line with its caption
+    in plain text before posting. With `qa.evidence: none`, post nothing. Then continue
     the pipeline hand-off. **On changes:** fix the branch, rebuild the review, republish
     to the same path. Open findings marked `accept` move to the Findings table as
     accepted with the reviewer's note as the reason. For a merged PR, open findings
