@@ -83,19 +83,73 @@ def split_sections(body):
     return [(name, "\n".join(lines)) for name, lines in sections]
 
 
-def fences(text):
-    blocks, current, lang = [], None, None
+def fences(text, captions=False):
+    """[(lang, lines)], or [(lang, caption, lines)] with captions=True. The info string's
+    first word is the language; the rest is the caption (QA evidence names its step there)."""
+    blocks, current, lang, caption = [], None, None, ""
     for line in text.splitlines():
         if line.strip().startswith("```"):
             if current is None:
-                current, lang = [], line.strip()[3:].strip().lower()
+                info = line.strip()[3:].strip().split(None, 1)
+                lang = info[0].lower() if info else ""
+                caption = info[1].strip() if len(info) > 1 else ""
+                current = []
             else:
-                blocks.append((lang, current))
+                blocks.append((lang, caption, current) if captions else (lang, current))
                 current = None
             continue
         if current is not None:
             current.append(line)
     return blocks
+
+
+def step_key(text):
+    """Normalise a gherkin step or an evidence caption for matching: case and spacing."""
+    return re.sub(r"\s+", " ", text.strip().rstrip(".:")).lower()
+
+
+STEP_RE = re.compile(r"^\s*(Given|When|Then|And|But)\b", re.I)
+IMAGE_LINE_RE = re.compile(r"^!\[([^\]]*)\]\(([^)\s]+)\)\s*$")
+EVIDENCE_SECRETS = [
+    (re.compile(r"^\s*(proxy-)?authorization\s*:\s*(?!.*<redacted>)\S", re.I | re.M), "Authorization header"),
+    (re.compile(r"^\s*(set-)?cookie\s*:\s*(?!.*<redacted>)\S", re.I | re.M), "cookie"),
+    (re.compile(r"\bapi[-_]?key\b[\"']?\s*[:=]\s*[\"']?(?!<redacted>)[^\s\"'<,}]+", re.I), "API key"),
+    (re.compile(r"\b(password|pwd)\b[\"']?\s*[:=]\s*[\"']?(?!<redacted>)[^\s;\"'<,}]+", re.I), "password"),
+]
+MAX_EVIDENCE_IMAGES = 10
+
+
+def qa_scenarios(qa):
+    """[(title, text)] per '#### ' scenario block in the QA report."""
+    parts = re.split(r"^#### (.+)$", qa, flags=re.M)
+    return [(parts[i].strip(), parts[i + 1]) for i in range(1, len(parts) - 1, 2)]
+
+
+def check_evidence(qa, multiplier):
+    """Evidence under each scenario: every fence or image names a step of that scenario's
+    gherkin, no credential is left unredacted, and images stay under the cap."""
+    failures, images = [], 0
+    for title, block in qa_scenarios(qa):
+        name = re.sub(r"\s*`.*$", "", title)
+        blocks = fences(block, captions=True)
+        steps = {step_key(l) for lang, _, body in blocks if lang == "gherkin" for l in body if STEP_RE.match(l)}
+        prose, _ = strip_fences(block)
+        items = [(lang, cap, body) for lang, cap, body in blocks if lang != "gherkin"]
+        items += [("image", m.group(1), []) for m in map(IMAGE_LINE_RE.match, prose.splitlines()) if m]
+        for lang, cap, body in items:
+            if lang == "image":
+                images += 1
+            if step_key(cap) not in steps:
+                label = f"'{cap}'" if cap else f"an uncaptioned {lang} block"
+                failures.append(f"QA report: {label} under '{name}' names no step of its gherkin; caption it with the step it proves")
+            text = "\n".join(body)
+            for pattern, what in EVIDENCE_SECRETS:
+                if pattern.search(text):
+                    failures.append(f"QA report: unredacted {what} in evidence under '{name}'; replace the value with <redacted>")
+    cap = round(MAX_EVIDENCE_IMAGES * multiplier)
+    if images > cap:
+        failures.append(f"QA report: {images} evidence images, cap {cap}")
+    return failures, images
 
 
 def strip_fences(text):
@@ -294,6 +348,8 @@ def check_review(meta, body, multiplier):
         failures.append("QA report: state what is Not covered (or 'Not covered: nothing')")
     if re.search(r"\b(WebApplicationFactory|InMemory|\.Tests\b)", qa):
         failures.append("QA report: unit and integration suites are not QA; remove them")
+    evidence_failures, evidence_images = check_evidence(qa, multiplier)
+    failures += evidence_failures
 
     rollout = by_name.get("Rollout", "")
     items = re.findall(r"^\s*[-*]\s+\[[xX ]\]", rollout, flags=re.M)
@@ -308,7 +364,7 @@ def check_review(meta, body, multiplier):
     for name, words, limit, status in rows:
         print(f"{name:<28}{words:>7}{limit:>6}  {status}")
     print(f"{'total prose':<28}{total:>7}{round(sum(c for _, c in REVIEW_SECTIONS) * multiplier):>6}")
-    print(f"hunks {len(diffs)}/{MAX_HUNKS}, findings {len(frows)}, qa scenarios {len(scenarios)}, rollout items {len(items)}")
+    print(f"hunks {len(diffs)}/{MAX_HUNKS}, findings {len(frows)}, qa scenarios {len(scenarios)}, evidence images {evidence_images}, rollout items {len(items)}")
     return report(failures)
 
 

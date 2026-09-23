@@ -35,7 +35,8 @@ as long as the title is unchanged.
 Review mode: Verdict becomes stat tiles, Plan versus delivered and Findings render
 status pills, Changes pairs "#### title" with a ```diff fence into collapsed hunks
 and links backticked File cells to full per-file diffs pulled from git for --range
-(derived from the front matter when omitted), QA report renders scenario cards,
+(derived from the front matter when omitted), QA report renders scenario cards whose
+gherkin steps expand to the evidence captioned with their text,
 Rollout renders a persistent checklist, and Decision gets the approve /
 request-changes form.
 """
@@ -59,6 +60,7 @@ DEFAULT_TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "page.html"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit_profile import add_profile_arg, resolve_profile  # noqa: E402
+from check import STEP_RE, step_key  # noqa: E402
 
 # Delivery Labs branding: the profile's `branding` flag (default true) switches it off.
 # Colours follow deliverylabs.co: indigo accents on a gray-900 dark ground. Only the
@@ -407,12 +409,21 @@ def render_checklist(lines):
     return "".join(out)
 
 
-def read_fence(lines, i):
-    lang = LANG_ALIAS.get(lines[i][3:].strip().lower(), lines[i][3:].strip().lower())
+def fence_info(line):
+    """(lang, caption) from a fence opener: the first word is the language, the rest a caption."""
+    info = line.strip()[3:].strip().split(None, 1)
+    lang = info[0].lower() if info else ""
+    return LANG_ALIAS.get(lang, lang), (info[1].strip() if len(info) > 1 else "")
+
+
+def read_fence(lines, i, with_caption=False):
+    lang, caption = fence_info(lines[i])
     code, i = [], i + 1
     while i < len(lines) and not lines[i].startswith("```"):
         code.append(lines[i])
         i += 1
+    if with_caption:
+        return lang, caption, "\n".join(code), i + 1
     return lang, "\n".join(code), i + 1
 
 
@@ -509,6 +520,8 @@ def render_blocks(lines, mode=None, state=None):
             continue
         para = []
         while i < len(lines) and lines[i].strip() and not re.match(r"^(```|#{3,4} |\s*[-*]\s|\s*\d+\.\s|\s*\||!\[)", lines[i]):
+            if para and mode == "qa" and re.match(r"^(Evidence|Classification|Not covered):", lines[i]):
+                break
             para.append(lines[i].strip())
             i += 1
         text = " ".join(para)
@@ -520,6 +533,92 @@ def render_blocks(lines, mode=None, state=None):
         else:
             out.append(f"<p>{inline(text)}</p>")
     return "\n".join(out)
+
+
+def render_evidence(item):
+    kind, caption, payload = item
+    if kind == "image":
+        return render_image_grid([(caption, payload)])
+    return f'<div class="evidence-item"><span class="qa-label">{html.escape(kind)}</span>{render_code(kind, payload)}</div>'
+
+
+def render_steps(body, items, scenario):
+    """The scenario's gherkin as a step list. A step whose text an evidence caption repeats
+    becomes a collapsed item holding that evidence; the rest stay plain lines."""
+    lines = body.splitlines()
+    steps = {step_key(l) for l in lines if STEP_RE.match(l)}
+    by_step, unmatched = {}, []
+    for item in items:
+        key = step_key(item[1])
+        if key in steps:
+            by_step.setdefault(key, []).append(item)
+        else:
+            unmatched.append(item)
+    out = ['<div class="steps">']
+    for line in lines:
+        if not line.strip():
+            continue
+        m = STEP_RE.match(line)
+        if not m:
+            out.append(f'<div class="step-other">{html.escape(line.strip())}</div>')
+            continue
+        keyword = line.strip()[:len(m.group(1))]
+        head = f'<span class="kw">{html.escape(keyword)}</span> {html.escape(line.strip()[len(keyword):].strip())}'
+        evidence = by_step.pop(step_key(line), None)
+        if evidence:
+            count = f'{len(evidence)} item{"s" if len(evidence) > 1 else ""}'
+            out.append(f'<details class="step"><summary><span>{head}</span><span class="ev-count">{count}</span></summary>'
+                       f'{"".join(render_evidence(e) for e in evidence)}</details>')
+        else:
+            out.append(f'<div class="step">{head}</div>')
+    out.append("</div>")
+    for item in unmatched:
+        WARNINGS.append(f"QA report: evidence '{item[1] or item[0]}' under '{scenario}' names no step; shown after the steps")
+        out.append(f'<details class="hunk evidence"><summary>{inline(item[1] or item[0])}</summary>{render_evidence(item)}</details>')
+    return "".join(out)
+
+
+def render_scenario(lines):
+    """One '#### ' scenario block: evidence fences and images after the gherkin are lifted
+    out of the flow and folded into the steps they name."""
+    title = lines[0][5:].strip()
+    gherkin, items, before, after, i = None, [], [], [], 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("```"):
+            start = i
+            lang, caption, body, i = read_fence(lines, i, with_caption=True)
+            if lang == "gherkin" and gherkin is None:
+                gherkin = body
+            elif gherkin is not None:
+                items.append((lang, caption, body))
+            else:
+                before.extend(lines[start:i])
+            continue
+        if gherkin is not None and IMAGE_RE.match(line.strip()):
+            items.append(("image",) + IMAGE_RE.match(line.strip()).groups())
+        else:
+            (after if gherkin is not None else before).append(line)
+        i += 1
+    if gherkin is None:
+        return render_blocks(lines, "qa")
+    name = re.sub(r"\s*`.*$", "", title)
+    return render_blocks(before, "qa") + render_steps(gherkin, items, name) + render_blocks(after, "qa")
+
+
+def render_qa(lines):
+    """QA report: split at '#### ' scenario headings (outside fences) and render each."""
+    segments, current, in_fence = [], [], False
+    for line in lines:
+        if line.startswith("```"):
+            in_fence = not in_fence
+        if line.startswith("#### ") and not in_fence and current:
+            segments.append(current)
+            current = []
+        current.append(line)
+    if current:
+        segments.append(current)
+    return "\n".join(render_scenario(s) if s[0].startswith("#### ") else render_blocks(s, "qa") for s in segments)
 
 
 def split_title(text):
@@ -670,7 +769,10 @@ def parse(text, kind=None):
     open_findings, output = [], []
     for name, lines in sections:
         mode = REVIEW_MODES.get(name)
-        body = render_blocks(lines, mode, open_findings if mode == "findings" else None)
+        if mode == "qa":
+            body = render_qa(lines)
+        else:
+            body = render_blocks(lines, mode, open_findings if mode == "findings" else None)
         if name == "Changes":
             body += render_file_diffs()
         if name == "Decision":
