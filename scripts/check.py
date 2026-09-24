@@ -112,11 +112,13 @@ IMAGE_LINE_RE = re.compile(r"^!\[([^\]]*)\]\(([^)\s]+)\)\s*$")
 REDACTED = "<redacted>"
 # A credential-bearing key anywhere on a line (header, curl -H, JSON, query string,
 # connection string): the key must end with the credential word, so passwordReset or
-# token_type do not count. The value after it must be <redacted> or a JSON literal.
+# token_type do not count. The value after it must be <redacted> or a JSON literal, and
+# <redacted> must be the whole value: "<redacted>abc" still leaks abc.
+VALUE_END = r"(?:[\"',;&}\s]|$)"
 CREDENTIAL_KEY_RE = re.compile(
     r"\b[\w-]*(password|passwd|pwd|secret|token|api[-_]?key)[\"']?\s*[:=]\s*[\"']?"
-    r"(?!<redacted>|null\b|true\b|false\b|[\"',}\s]|$)", re.I)
-AUTH_RE = re.compile(r"\b(proxy-)?authorization[\"']?\s*:\s*[\"']?(?!(\w+\s+)?<redacted>)\S", re.I)
+    rf"(?!<redacted>{VALUE_END}|null\b|true\b|false\b|[\"',}}\s]|$)", re.I | re.M)
+AUTH_RE = re.compile(rf"\b(proxy-)?authorization[\"']?\s*:\s*(?![\"']?(\w+\s+)?<redacted>{VALUE_END})\S", re.I | re.M)
 COOKIE_RE = re.compile(r"\b(set-)?cookie[\"']?\s*:\s*[\"']?([^\"'\n]*)", re.I)
 MAX_EVIDENCE_IMAGES = 10
 

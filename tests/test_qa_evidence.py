@@ -176,3 +176,22 @@ def test_given_quote_in_fence_language_then_escaped(evidence_review, tmp_path):
     page, _ = build(evidence_review, tmp_path)
     assert 'class="language-j&quot;onclick=&quot;x"' in page
     assert 'onclick="x"' not in page
+
+
+@pytest.mark.parametrize("line, what", [
+    ("Authorization: Bearer <redacted>suffix", "Authorization header"),
+    ('{"Authorization": "Bearer <redacted>x"}', "Authorization header"),
+    ("apiKey: <redacted>suffix", "API key"),
+])
+def test_given_text_after_redacted_marker_then_exit1(evidence_review, line, what):
+    edit(evidence_review, "Authorization: Bearer <redacted>", line)
+    code, out, err = run_py(CHECK_REVIEW_PY, evidence_review)
+    assert code == 1
+    assert f"unredacted {what} in evidence" in out
+
+
+def test_given_redacted_json_authorization_then_passes(evidence_review):
+    edit(evidence_review, "Authorization: Bearer <redacted>",
+         '{"Authorization": "Bearer <redacted>", "token": "<redacted>"}\ncurl -H "Authorization: Bearer <redacted>"')
+    code, out, err = run_py(CHECK_REVIEW_PY, evidence_review)
+    assert code == 0, out + err
