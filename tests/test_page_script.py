@@ -1,6 +1,7 @@
 """The shared page template's inline script parses, and each kind gets only its own form."""
 import re
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -52,3 +53,25 @@ def test_given_review_source_then_only_the_decision_form_renders(tmp_path, revie
     assert '<form class="qform"' not in page
     assert 'id="qform"' not in page
     assert 'class="layout kind-review"' in page
+
+
+def test_given_evidence_review_then_inline_script_parses(tmp_path):
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not on PATH; cannot syntax-check the inline page script")
+    fixtures = Path(__file__).resolve().parent / "fixtures"
+    source = tmp_path / "review.md"
+    shutil.copy(fixtures / "review-evidence.md", source)
+    shutil.copytree(fixtures / "evidence", tmp_path / "evidence")
+    out_path = tmp_path / "review.html"
+    code, out, err = run_py(RENDER_PY, source, "--out", out_path, "--range", "deadbeef^..deadbeef")
+    assert code == 0, out + err
+    scripts = INLINE_SCRIPT_RE.findall(out_path.read_text(encoding="utf-8"))
+    assert scripts
+    for n, body in enumerate(scripts, start=1):
+        path = tmp_path / f"evidence-script-{n}.js"
+        path.write_text(body, encoding="utf-8")
+        result = __import__("subprocess").run(
+            [node, "--check", str(path)], capture_output=True, text=True, encoding="utf-8", errors="replace"
+        )
+        assert result.returncode == 0, result.stdout + result.stderr

@@ -148,3 +148,14 @@ def test_given_next_then_stage_checks_documented():
     for stage in ("start", "plan", "implement", "test", "review", "pull_request"):
         assert f"| {stage} |" in text, f"next must name the evidence for {stage}"
     assert "--stage" in text and "on_fail" in text and "never in place of the user's decision" in text
+
+
+def test_given_test_and_review_skills_then_same_evidence_syntax():
+    root = Path(__file__).resolve().parents[1]
+    for rel in ("skills/test/SKILL.md", "skills/review/SKILL.md", "skills/review/assets/skeleton.md"):
+        text = (root / rel).read_text(encoding="utf-8")
+        assert "evidence/<file>.png" in text, rel
+        assert "<redacted>" in text, rel
+        assert "`sql` or `text`" in text or "sql or text" in text, rel
+        assert "never a markdown table" in text, rel
+        assert "case and spacing are ignored" in text, rel
