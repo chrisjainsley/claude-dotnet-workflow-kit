@@ -14,7 +14,7 @@ Evidence line, plus a Not covered section for anything left unchecked. Unit and
 integration suites are still never counted as QA evidence, even here.
 
 Where an API response, a screen or a database row decided a result, that proof sits
-under the Evidence line: the request and response, the screenshot, or the query and its
+under the Evidence line: the request and response, the screenshot or video, or the query and its
 rows. Its caption repeats the step it proves, and credentials are redacted.
 
 ## Hand-off

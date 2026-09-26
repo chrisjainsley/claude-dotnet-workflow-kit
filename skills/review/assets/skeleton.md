@@ -73,7 +73,7 @@ flowchart LR
 | high | `<path>:<line>` | <one sentence> | fixed | |
 
 ## QA report
-<!-- Same structure the test skill posts to the work item. Environment and date line, then one #### per behaviour verified, tagged Acceptance test or Manual test with Pass, Fail or Blocked, a gherkin fence, an Evidence line, and a Classification line (regression | pre-existing bug | environment issue | not run) for anything but Pass. After the Evidence line, the proof that decided the result: an http fence for an API request and response, ![caption](evidence/<file>.png) for a screenshot, a sql or text fence for a query and its rows, never a markdown table. Each fence's caption (the words after the language) and each image caption repeats the gherkin step it proves, case and spacing are ignored; the page folds it into that step. Credentials become <redacted>. At most ten images. Unit and integration suites are not QA and do not appear. If nothing was run, open with **No QA run.** and put every criterion under Not covered instead of inventing a Blocked row. End with the summary table and Not covered. -->
+<!-- Same structure the test skill posts to the work item. Environment and date line, then one #### per behaviour verified, tagged Acceptance test or Manual test with Pass, Fail or Blocked, a gherkin fence, an Evidence line, and a Classification line (regression | pre-existing bug | environment issue | not run) for anything but Pass. After the Evidence line, the proof that decided the result: an http fence for an API call (the request as sent, then the response from its status line; the page splits them into two panes and indents JSON), ![caption](evidence/<file>.png) for a screenshot, ![caption](evidence/<file>.webm) for a video, a sql or text fence for a query and its rows, never a markdown table. Each fence's caption (the words after the language) and each image or video caption repeats the gherkin step it proves, case and spacing are ignored; a whole-run video may take the scenario title instead. Fences fold into their step; screenshots and videos show in a grid under the steps. Media files live in evidence/ beside this file and publish next to the page. Credentials become <redacted>. At most ten images and three videos, 15 MB a file. Unit and integration suites are not QA and do not appear. If nothing was run, open with **No QA run.** and put every criterion under Not covered instead of inventing a Blocked row. End with the summary table and Not covered. -->
 
 **Environment:** <qa environment / local> | **Date:** <YYYY-MM-DD> | **Test users:** <emails>
 
@@ -87,6 +87,9 @@ Evidence: <one line>
 ```http When <action>
 POST /api/<resource>
 Authorization: Bearer <redacted>
+Content-Type: application/json
+
+{"<field>": "<value>"}
 
 HTTP/1.1 201 Created
 {"id": "<id>"}

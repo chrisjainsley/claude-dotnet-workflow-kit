@@ -136,11 +136,15 @@ Evidence: second member's balance stays 0
 ```http When an admin grants the signup campaign to their alias account
 POST /graphql
 Authorization: Bearer <redacted>
+Content-Type: application/json
+
+{"query":"mutation Grant($input: GrantCampaignInput!) { grantCampaign(input: $input) { balance } }","variables":{"input":{"campaign":"signup","userId":"member-2"}}}
 
 HTTP/1.1 200 OK
 {"errors":[{"message":"payer already had the grant"}]}
 ```
 ![Then the alias account's balance is 0](evidence/wallet.png)
+![Repeat payer is refused](evidence/run.webm)
 ```sql Then the alias account's balance is 0
 SELECT COUNT(*) FROM Ledger WHERE UserId = 'member-2' AND Kind = 'Grant';
 -- 0

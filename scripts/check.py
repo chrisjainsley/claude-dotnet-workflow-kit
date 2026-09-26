@@ -120,7 +120,21 @@ CREDENTIAL_KEY_RE = re.compile(
     rf"(?!<redacted>{VALUE_END}|null\b|true\b|false\b|[\"',}}\s]|$)", re.I | re.M)
 AUTH_RE = re.compile(rf"\b(proxy-)?authorization[\"']?\s*:\s*(?![\"']?(\w+\s+)?<redacted>{VALUE_END})\S", re.I | re.M)
 COOKIE_RE = re.compile(r"\b(set-)?cookie[\"']?\s*:\s*[\"']?([^\"'\n]*)", re.I)
+# A custom header whose name carries a credential (X-Api-Token, X-Hub-Signature,
+# Ocp-Apim-Subscription-Key): the whole header value must be <redacted>.
+CUSTOM_HEADER_RE = re.compile(
+    r"(?:^\s*|-H\s+[\"'])([\w-]*(?:token|key|secret|signature)[\w-]*)\s*:\s*"
+    rf"(?!<redacted>{VALUE_END})(?=\S)", re.I | re.M)
 MAX_EVIDENCE_IMAGES = 10
+MAX_EVIDENCE_VIDEOS = 3
+VIDEO_EXTENSIONS = (".webm", ".mp4", ".mov")
+MAX_MEDIA_FILE_BYTES = 15 * 1024 * 1024
+MAX_MEDIA_TOTAL_BYTES = 60 * 1024 * 1024
+SOURCE_DIR = Path(".")
+
+
+def is_video(path):
+    return path.lower().endswith(VIDEO_EXTENSIONS)
 
 
 def credential_leaks(text):
@@ -138,6 +152,9 @@ def credential_leaks(text):
     for m in CREDENTIAL_KEY_RE.finditer(text):
         word = m.group(1).lower()
         leaks.append("API key" if word.startswith("api") else "password" if word.startswith("p") else word)
+    for m in CUSTOM_HEADER_RE.finditer(text):
+        if not CREDENTIAL_KEY_RE.match(text, m.start(1)):
+            leaks.append(f"{m.group(1)} header")
     return list(dict.fromkeys(leaks))
 
 
@@ -172,22 +189,35 @@ def evidence_items(block):
             elif gherkin is not None:
                 items.append((lang, info[1].strip() if len(info) > 1 else "", body))
         elif gherkin is not None and IMAGE_LINE_RE.match(line.strip()):
-            items.append(("image", IMAGE_LINE_RE.match(line.strip()).group(1), []))
+            cap, path = IMAGE_LINE_RE.match(line.strip()).groups()
+            items.append(("video" if is_video(path) else "image", cap, [path]))
         i += 1
     return gherkin or [], items
 
 
 def check_evidence(qa, multiplier):
-    """Evidence under each scenario: every fence or image names a step of that scenario's
-    gherkin, no credential is left unredacted, and images stay under the cap."""
-    failures, images = [], 0
+    """Evidence under each scenario: every fence, image or video names a step of that
+    scenario's gherkin (or the scenario title, for whole-run media), no credential is left
+    unredacted, every media file exists within the artifact's file limits, and images and
+    videos stay under their caps."""
+    failures, images, videos, total, seen = [], 0, 0, 0, set()
     for title, block in qa_scenarios(qa):
         name = re.sub(r"\s*`.*$", "", title)
         gherkin, items = evidence_items(block)
-        steps = {step_key(l) for l in gherkin if STEP_RE.match(l)}
-        for lang, cap, _ in items:
-            if lang == "image":
-                images += 1
+        steps = {step_key(l) for l in gherkin if STEP_RE.match(l)} | {step_key(name)}
+        for lang, cap, body in items:
+            if lang in ("image", "video"):
+                images += lang == "image"
+                videos += lang == "video"
+                path, file = body[0], SOURCE_DIR / body[0]
+                if not file.is_file():
+                    failures.append(f"QA report: evidence file {path} under '{name}' does not exist next to the review")
+                elif path not in seen:
+                    seen.add(path)
+                    size = file.stat().st_size
+                    total += size
+                    if size > MAX_MEDIA_FILE_BYTES:
+                        failures.append(f"QA report: {path} is {size / 1048576:.1f} MB, cap 15 MB per file; trim or re-encode it")
             if step_key(cap) not in steps:
                 label = f"'{cap}'" if cap else f"an uncaptioned {lang} block"
                 failures.append(f"QA report: {label} under '{name}' names no step of its gherkin; caption it with the step it proves")
@@ -199,7 +229,12 @@ def check_evidence(qa, multiplier):
     cap = round(MAX_EVIDENCE_IMAGES * multiplier)
     if images > cap:
         failures.append(f"QA report: {images} evidence images, cap {cap}")
-    return failures, images
+    video_cap = round(MAX_EVIDENCE_VIDEOS * multiplier)
+    if videos > video_cap:
+        failures.append(f"QA report: {videos} evidence videos, cap {video_cap}")
+    if total > MAX_MEDIA_TOTAL_BYTES:
+        failures.append(f"QA report: evidence files total {total / 1048576:.1f} MB, cap 60 MB")
+    return failures, images, videos
 
 
 def strip_fences(text):
@@ -398,7 +433,7 @@ def check_review(meta, body, multiplier):
         failures.append("QA report: state what is Not covered (or 'Not covered: nothing')")
     if re.search(r"\b(WebApplicationFactory|InMemory|\.Tests\b)", qa):
         failures.append("QA report: unit and integration suites are not QA; remove them")
-    evidence_failures, evidence_images = check_evidence(qa, multiplier)
+    evidence_failures, evidence_images, evidence_videos = check_evidence(qa, multiplier)
     failures += evidence_failures
 
     rollout = by_name.get("Rollout", "")
@@ -414,7 +449,7 @@ def check_review(meta, body, multiplier):
     for name, words, limit, status in rows:
         print(f"{name:<28}{words:>7}{limit:>6}  {status}")
     print(f"{'total prose':<28}{total:>7}{round(sum(c for _, c in REVIEW_SECTIONS) * multiplier):>6}")
-    print(f"hunks {len(diffs)}/{MAX_HUNKS}, findings {len(frows)}, qa scenarios {len(scenarios)}, evidence images {evidence_images}, rollout items {len(items)}")
+    print(f"hunks {len(diffs)}/{MAX_HUNKS}, findings {len(frows)}, qa scenarios {len(scenarios)}, evidence images {evidence_images}, evidence videos {evidence_videos}, rollout items {len(items)}")
     return report(failures)
 
 
@@ -425,6 +460,8 @@ def main(kind=None, argv=None):
                     help="rule set; inferred from the sections and front matter when omitted")
     args = ap.parse_args(argv)
 
+    global SOURCE_DIR
+    SOURCE_DIR = Path(args.source).resolve().parent
     text = Path(args.source).read_text(encoding="utf-8")
     meta, body = split_front_matter(text)
     document_kind = args.kind or infer_kind(meta, [name for name, _ in split_sections(body)])

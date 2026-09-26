@@ -45,6 +45,7 @@ import base64
 import hashlib
 import html
 import io
+import json
 import mimetypes
 import re
 import subprocess
@@ -60,7 +61,7 @@ DEFAULT_TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "page.html"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit_profile import add_profile_arg, resolve_profile  # noqa: E402
-from check import STEP_RE, step_key  # noqa: E402
+from check import STEP_RE, is_video, step_key  # noqa: E402
 
 # Delivery Labs branding: the profile's `branding` flag (default true) switches it off.
 # Colours follow deliverylabs.co: indigo accents on a gray-900 dark ground. Only the
@@ -104,6 +105,9 @@ DIFF_RANGE = None
 FILE_STATS = {}
 USED_FILES = []
 WARNINGS = []
+MEDIA_FILES = []
+HTTP_STATUS_RE = re.compile(r"^HTTP/\d(?:\.\d)?\s+(\d{3})\b")
+HEADER_RE = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]+:\s")
 
 NON_LAYER_SECTIONS = {
     "Context", "Requirement", "Specs", "Designs", "Tests", "Decisions",
@@ -535,22 +539,99 @@ def render_blocks(lines, mode=None, state=None):
     return "\n".join(out)
 
 
+def pretty_json(text):
+    """A JSON body indented for reading; anything that does not parse stays as it was."""
+    try:
+        return json.dumps(json.loads(text), indent=2, ensure_ascii=False)
+    except ValueError:
+        return text
+
+
+def http_part(lines):
+    """Start line and headers, then the body pretty-printed when it is JSON."""
+    cut = 1
+    while cut < len(lines) and HEADER_RE.match(lines[cut]):
+        cut += 1
+    head, body = lines[:cut], lines[cut:]
+    text = "\n".join(head)
+    body_text = "\n".join(body).strip()
+    if body_text:
+        text += "\n\n" + pretty_json(body_text)
+    return text
+
+
+def render_http(body):
+    """An http fence as a request pane and a response pane, split at the first status
+    line. Without one the fence renders as a plain http block."""
+    lines = body.splitlines()
+    at = next((n for n, l in enumerate(lines) if HTTP_STATUS_RE.match(l)), None)
+    if at is None:
+        return f'<div class="evidence-item"><span class="qa-label">http</span>{render_code("http", body)}</div>'
+    request, response = lines[:at], lines[at:]
+    while request and not request[-1].strip():
+        request.pop()
+    status = int(HTTP_STATUS_RE.match(response[0]).group(1))
+    tone = "pass" if status < 300 else "fail" if status >= 400 else "info"
+    start = next((l.strip() for l in request if l.strip()), "")
+    return (
+        '<div class="evidence-item http-pair">'
+        f'<div class="http-pane"><div class="http-head"><span class="qa-label">Request</span>'
+        f'<code class="http-line">{html.escape(start)}</code></div>{render_code("http", http_part(request))}</div>'
+        f'<div class="http-pane"><div class="http-head"><span class="qa-label">Response</span>'
+        f'<span class="pill pill-{tone}">{status}</span></div>{render_code("http", http_part(response))}</div>'
+        "</div>"
+    )
+
+
 def render_evidence(item):
     kind, caption, payload = item
-    if kind == "image":
-        return render_image_grid([(caption, payload)])
+    if kind in ("image", "video"):
+        return render_media_grid([item])
+    if kind == "http":
+        return render_http(payload)
     return f'<div class="evidence-item"><span class="qa-label">{html.escape(kind)}</span>{render_code(kind, payload)}</div>'
 
 
+def media_caption(caption):
+    m = STEP_RE.match(caption)
+    if not m:
+        return inline(caption)
+    keyword = caption.strip()[:len(m.group(1))]
+    return f'<span class="kw">{html.escape(keyword)}</span> {inline(caption.strip()[len(keyword):].strip())}'
+
+
+def render_media_grid(items):
+    """QA screenshots and videos as one visible grid. The files are referenced by their
+    relative path and published next to the page, never inlined: a video cannot be."""
+    out = ['<div class="figures qa-media">']
+    for kind, caption, path in items:
+        if not (SOURCE_DIR / path).is_file():
+            out.append(f'<figure class="missing"><figcaption>Missing {kind}: {html.escape(path)}</figcaption></figure>')
+            continue
+        if path not in MEDIA_FILES:
+            MEDIA_FILES.append(path)
+        src, alt = html.escape(path, quote=True), html.escape(caption, quote=True)
+        if kind == "video":
+            media = f'<video controls preload="metadata" playsinline src="{src}" aria-label="{alt}"></video>'
+            out.append(f'<figure class="video">{media}<figcaption>{media_caption(caption)}</figcaption></figure>')
+        else:
+            out.append(f'<figure class="shot"><img src="{src}" alt="{alt}" loading="lazy"><figcaption>{media_caption(caption)}</figcaption></figure>')
+    out.append("</div>")
+    return "".join(out)
+
+
 def render_steps(body, items, scenario):
-    """The scenario's gherkin as a step list. A step whose text an evidence caption repeats
-    becomes a collapsed item holding that evidence; the rest stay plain lines."""
+    """The scenario's gherkin as a step list. A step whose text a fence caption repeats
+    becomes a collapsed item holding that evidence; the rest stay plain lines. Screenshots
+    and videos, captioned with a step or the scenario title, show in one grid below."""
     lines = body.splitlines()
     steps = {step_key(l) for l in lines if STEP_RE.match(l)}
-    by_step, unmatched = {}, []
+    by_step, unmatched, media = {}, [], []
     for item in items:
         key = step_key(item[1])
-        if key in steps:
+        if item[0] in ("image", "video") and (key in steps or key == step_key(scenario)):
+            media.append(item)
+        elif key in steps:
             by_step.setdefault(key, []).append(item)
         else:
             unmatched.append(item)
@@ -572,6 +653,8 @@ def render_steps(body, items, scenario):
         else:
             out.append(f'<div class="step">{head}</div>')
     out.append("</div>")
+    if media:
+        out.append(render_media_grid(media))
     for item in unmatched:
         WARNINGS.append(f"QA report: evidence '{item[1] or item[0]}' under '{scenario}' names no step; shown after the steps")
         out.append(f'<details class="hunk evidence"><summary>{inline(item[1] or item[0])}</summary>{render_evidence(item)}</details>')
@@ -596,7 +679,8 @@ def render_scenario(lines):
                 before.extend(lines[start:i])
             continue
         if gherkin is not None and IMAGE_RE.match(line.strip()):
-            items.append(("image",) + IMAGE_RE.match(line.strip()).groups())
+            alt, path = IMAGE_RE.match(line.strip()).groups()
+            items.append(("video" if is_video(path) else "image", alt, path))
         else:
             (after if gherkin is not None else before).append(line)
         i += 1
@@ -868,6 +952,7 @@ def main(kind=None, argv=None):
     REPO_DIR = Path(args.repo).resolve()
     text = Path(args.source).read_text(encoding="utf-8")
     META.clear()
+    MEDIA_FILES.clear()
     META.update(parse_meta(text))
     document_kind = args.kind or infer_kind(META, re.findall(r"^## (.+?)\s*$", text, flags=re.M))
     if document_kind == "review":
@@ -881,6 +966,15 @@ def main(kind=None, argv=None):
         print(f"wrote {args.out} ({len(page):,} bytes, {len(sections)} sections, {count} answerable questions)")
     else:
         print(f"wrote {args.out} ({len(page):,} bytes, {len(sections)} sections, {count} open findings in the decision form, {len(USED_FILES)} linked file diffs from {DIFF_RANGE})")
+        # Evidence media is referenced by relative path, so it is published beside the
+        # page: the list below is the Artifact tool's `files` argument, with root = the
+        # review's folder.
+        out_dir = Path(args.out).resolve().parent
+        manifest = out_dir / "review.files.json"
+        manifest.write_text(json.dumps(sorted(MEDIA_FILES), indent=2) + "\n", encoding="utf-8", newline="\n")
+        print(f"evidence files: {len(MEDIA_FILES)} ({manifest.name})")
+        if MEDIA_FILES and out_dir != SOURCE_DIR:
+            WARNINGS.append(f"--out is not beside {Path(args.source).name}; the page's evidence/ paths will not resolve until the files sit next to it")
     for warning in WARNINGS:
         print("warning: " + warning, file=sys.stderr)
     return 0
