@@ -69,12 +69,24 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    `assertion_changed_by_refactor` are a regression, `flaky_known` that failed twice
    is a regression, `environment` is an environment issue; `manual_review` means you
    decide and say so in the Evidence line.
-   **Capture the proof as you go**, per step, wherever it decided the result. An API
-   call is the request and response (`curl -i` or the `.http` file's output). A
-   screenshot is saved under `plans/<slug>/evidence/` with Playwright (the project's
-   own, or `npx playwright screenshot <url> <file>`); the in-app browser cannot save
-   to disk. A database check is the query and its rows. Redact every token, cookie,
-   key and password to `<redacted>`, and trim bodies to the fields the step proves.
+   **Capture the proof as you go**, per step, wherever it decided the result.
+   - **API call:** the request as sent (method and path, the headers that matter, the
+     body), then the response from its status line down. `curl -i` prints only the
+     response, so write the request above it, or trim `curl -v` output to the same
+     shape; a `.http` file's request and its output work too.
+   - **Screenshot:** saved under `plans/<slug>/evidence/` with Playwright (the
+     project's own, or `npx playwright screenshot <url> <file>`); the in-app browser
+     cannot save to disk.
+   - **Video**, when a flow is easier to prove moving than in stills: record the
+     browser with Playwright's `recordVideo` context option. The Playwright MCP takes
+     it through its `--config` file,
+     `{"browser": {"contextOptions": {"recordVideo": {"dir": "plans/<slug>/evidence"}}}}`,
+     and writes the `.webm` when the browser closes; a project Playwright script sets
+     it on `browser.newContext`. Rename the file to say what it shows and keep it under
+     15 MB (trim with `ffmpeg -ss <start> -to <end> -i in.webm -c copy out.webm`).
+   - **Database check:** the query and its rows.
+   Redact every token, cookie, key and password to `<redacted>`, and trim bodies to the
+   fields the step proves. Crop or blur personal data in screenshots and videos.
    **Unit and integration suites are never QA evidence.** If the only verification
    performed was an in-process test suite, say so and stop: there is nothing to report.
 4. **Write the report** with this exact structure:
@@ -92,9 +104,19 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    ```
    Evidence: <observed value, test-run count, transaction id>
    ```http When <action>
-   <request, credentials as <redacted>, then the response>
+   POST /api/<resource>
+   Authorization: Bearer <redacted>
+   Content-Type: application/json
+
+   {"<field>": "<value>"}
+
+   HTTP/1.1 201 Created
+   Content-Type: application/json
+
+   {"id": "<id>"}
    ```
    ![Then <observed outcome>](evidence/<file>.png)
+   ![<Short scenario title>](evidence/<file>.webm)
    ```sql Then <observed outcome>
    <query, then its rows as text>
    ```
@@ -114,10 +136,14 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    ```
 
    Put an API call in an `http` fence and a database check in a `sql` or `text`
-   fence, never a markdown table. Each fence caption or image caption repeats the
-   gherkin step it proves; case and spacing are ignored. The review page folds it into
-   that step. Once the section is in a review, the review skill's `check_review.py`
-   fails a caption that names no step, an unredacted credential, or over ten images.
+   fence, never a markdown table. Each fence, image or video caption repeats the
+   gherkin step it proves; case and spacing are ignored, and a whole-run video may
+   take the scenario title instead. The review page folds fences into their step,
+   splits an http fence into Request and Response panes, and shows screenshots and
+   videos in a grid under the steps. Once the section is in a review, the review
+   skill's `check_review.py` fails a caption that names no step, an unredacted
+   credential, a missing or oversized media file, or more than ten images or three
+   videos.
    When nothing was run this session, open with **No QA run.** and list every
    acceptance criterion under Not covered instead of inventing a scenario.
 5. **Publish as an Artifact only when `artifacts` is true.** Load the `artifact-design`
@@ -170,8 +196,9 @@ section (for the Azure Boards form this is a markdown comment via the REST API, 
 `--discussion`, since that stores plain text as escaped HTML). `pr-comment`: post
 through the scm adapter as a plain PR comment (for the GitHub form, `gh pr comment
 <number> --body-file report.md`). `none`: print only, nothing to send. Evidence
-fences post as plain text under their scenario. Screenshots stay on the review page:
-replace each image line with its caption in plain text before posting. **Never change
+fences post as plain text under their scenario. Screenshots and videos stay on the
+review page: replace each image or video line with its caption in plain text before
+posting. **Never change
 the work item's or PR's state from this skill, in either mode.**
 
 ## Traps

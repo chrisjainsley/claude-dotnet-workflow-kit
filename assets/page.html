@@ -171,17 +171,29 @@ details.filediff:target { outline: 2px solid var(--accent, var(--muted)); outlin
 .steps .step, .steps .step-other { padding: 2px 14px 2px 28px; }
 .steps .step-other { color: var(--muted); padding-left: 14px; }
 .steps .kw { color: var(--hl-kw); font-weight: 500; }
-.steps details.step > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; padding: 2px 14px; }
+.steps details.step { padding: 0; }
+.steps details.step > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; padding: 2px 14px 2px 28px; }
 .steps details.step > summary::-webkit-details-marker { display: none; }
-.steps details.step > summary::before { content: ""; flex: none; width: 6px; height: 6px; border-right: 1.5px solid var(--accent); border-bottom: 1.5px solid var(--accent); transform: rotate(-45deg); align-self: center; }
-.steps details.step[open] > summary::before { transform: rotate(45deg); }
 .steps details.step > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .steps details.step > summary > span:first-child { flex: 1; }
-.steps .ev-count { font: 600 10.5px/1 var(--sans); text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); white-space: nowrap; }
+.steps .ev-count { flex: none; font: 600 10.5px/1 var(--sans); text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); white-space: nowrap; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; }
+.steps details.step > summary:hover .ev-count { border-color: var(--accent); }
+.steps details.step[open] .ev-count { background: var(--accent-soft); border-color: var(--accent); }
 .steps details.step[open] { background: var(--card); border-block: 1px solid var(--line); margin: 4px 0; }
 .steps details.step > .evidence-item, .steps details.step > .figures { margin: 6px 14px 10px 28px; font-family: var(--sans); }
 .evidence-item pre { margin: 4px 0 0; }
 details.evidence > .evidence-item, details.evidence > .figures { margin: 0 14px 12px; }
+.figures.qa-media { grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 14px; align-items: start; }
+.qa-media figure.shot { cursor: zoom-in; }
+.qa-media figure.video video { display: block; width: 100%; height: auto; background: #000; }
+.qa-media figcaption .kw { color: var(--hl-kw); font-weight: 600; }
+.http-pair { display: flex; flex-direction: column; gap: 8px; }
+.http-pane { border: 1px solid var(--line); border-radius: 6px; background: var(--card); overflow: hidden; }
+.http-pane pre { margin: 0; border: 0; border-radius: 0; }
+.http-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.http-head .qa-label { margin: 0; }
+.http-line { font-family: var(--mono); font-size: 12px; color: var(--ink); overflow-wrap: anywhere; }
+dialog.diagram-modal .diagram-body img { display: block; max-width: 100%; height: auto; margin: 0 auto; }
 .checklist { list-style: none; padding: 0; }
 .checklist li { margin: 0; border-bottom: 1px solid var(--line); }
 .checklist label { display: flex; gap: 12px; align-items: flex-start; padding: 9px 4px; cursor: pointer; }
@@ -227,6 +239,8 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/gherkin.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/graphql.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/http.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
 <script>
 (function () {
   if (window.hljs) { document.querySelectorAll('pre code[class*="language-"]').forEach(function (el) { hljs.highlightElement(el); }); }
@@ -281,7 +295,7 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
   var modal = document.getElementById('diagram-modal');
   var modalBody = document.getElementById('diagram-body');
   if (modal && modalBody && typeof modal.showModal === 'function') {
-    document.querySelectorAll('figure.diagram, figure.design').forEach(function (fig) {
+    document.querySelectorAll('figure.diagram, figure.design, .qa-media figure.shot').forEach(function (fig) {
       fig.addEventListener('click', function (e) {
         var caption = fig.querySelector('figcaption');
         if (caption && caption.contains(e.target) && !e.target.classList.contains('diagram-open')) { return; }

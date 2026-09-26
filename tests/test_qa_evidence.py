@@ -1,3 +1,4 @@
+import json
 import re
 import shutil
 
@@ -42,7 +43,7 @@ def step_block(page, text):
 def test_given_evidence_fixture_then_check_passes(evidence_review):
     code, out, err = run_py(CHECK_REVIEW_PY, evidence_review)
     assert code == 0, out + err
-    assert "evidence images 1" in out
+    assert "evidence images 1, evidence videos 1" in out
 
 
 def test_given_captioned_evidence_then_step_collapses_with_it(evidence_review, tmp_path):
@@ -51,7 +52,8 @@ def test_given_captioned_evidence_then_step_collapses_with_it(evidence_review, t
     assert when.startswith('<details class="step">')
     assert "1 item" in when and "language-http" in when
     then = step_block(page, "the alias account&#x27;s balance is 0")
-    assert "2 items" in then and "language-sql" in then and "<img" in then
+    assert "1 item" in then and "language-sql" in then and "<img" not in then
+    assert "shot below" not in then
 
 
 def test_given_step_without_evidence_then_plain(evidence_review, tmp_path):
@@ -60,10 +62,89 @@ def test_given_step_without_evidence_then_plain(evidence_review, tmp_path):
     assert given.startswith('<div class="step">')
 
 
-def test_given_evidence_image_then_inlined_inside_step(evidence_review, tmp_path):
+def media_grid(page):
+    start = page.index('<div class="figures qa-media">')
+    return page[start:page.index("</div>", start)]
+
+
+def test_given_evidence_image_then_linked_in_visible_grid_after_steps(evidence_review, tmp_path):
     page, _ = build(evidence_review, tmp_path)
-    then = step_block(page, "the alias account&#x27;s balance is 0")
-    assert 'src="data:image/png;base64,' in then
+    grid = media_grid(page)
+    assert page.index('<div class="steps">') < page.index(grid)
+    assert '<figure class="shot"><img src="evidence/wallet.png"' in grid
+    assert '<span class="kw">Then</span> the alias account' in grid
+    assert "data:image/png;base64," not in page
+
+
+def test_given_video_captioned_with_scenario_title_then_plays_in_grid_without_warning(evidence_review, tmp_path):
+    page, log = build(evidence_review, tmp_path)
+    grid = media_grid(page)
+    assert '<video controls preload="metadata" playsinline src="evidence/run.webm"' in grid
+    assert "names no step" not in log
+    files = json.loads((tmp_path / "review.files.json").read_text(encoding="utf-8"))
+    assert files == ["evidence/run.webm", "evidence/wallet.png"]
+    assert "evidence files: 2 (review.files.json)" in log
+
+
+def test_given_two_images_on_a_scenario_then_one_grid(evidence_review, tmp_path):
+    image = "![Then the alias account's balance is 0](evidence/wallet.png)"
+    edit(evidence_review, image, image + "\n![Given a member who already holds the signup grant](evidence/wallet.png)")
+    page, _ = build(evidence_review, tmp_path)
+    assert page.count('<div class="figures qa-media">') == 1
+    assert media_grid(page).count('<figure class="shot">') == 2
+    assert step_block(page, "a member who already holds the signup grant").startswith('<div class="step">')
+
+
+def test_given_http_fence_with_status_line_then_request_and_response_panes(evidence_review, tmp_path):
+    page, _ = build(evidence_review, tmp_path)
+    when = step_block(page, "an admin grants the signup campaign")
+    assert '<div class="evidence-item http-pair">' in when
+    assert '<code class="http-line">POST /graphql</code>' in when
+    assert '<span class="pill pill-pass">200</span>' in when
+    assert '&quot;message&quot;: &quot;payer already had the grant&quot;' not in when
+    assert '"message": "payer already had the grant"' in when
+    assert '{\n  "errors": [' in when
+    request = when[when.index("Request"):when.index("Response")]
+    assert "Content-Type: application/json\n\n{\n  &quot;query&quot;" in request or 'Content-Type: application/json\n\n{\n  "query"' in request
+    assert '"userId": "member-2"' in request
+
+
+def test_given_http_fence_with_error_status_then_fail_pill(evidence_review, tmp_path):
+    edit(evidence_review, "HTTP/1.1 200 OK", "HTTP/2 409 Conflict")
+    page, _ = build(evidence_review, tmp_path)
+    assert '<span class="pill pill-fail">409</span>' in step_block(page, "an admin grants the signup campaign")
+
+
+def test_given_http_fence_without_status_line_then_plain_block(evidence_review, tmp_path):
+    edit(evidence_review, "HTTP/1.1 200 OK\n", "")
+    page, _ = build(evidence_review, tmp_path)
+    when = step_block(page, "an admin grants the signup campaign")
+    assert "http-pair" not in when and "language-http" in when
+
+
+def test_given_missing_evidence_file_then_exit1(evidence_review, tmp_path):
+    (tmp_path / "evidence" / "wallet.png").unlink()
+    code, out, err = run_py(CHECK_REVIEW_PY, evidence_review)
+    assert code == 1
+    assert "evidence file evidence/wallet.png under 'Repeat payer is refused' does not exist" in out
+    page, _ = build(evidence_review, tmp_path)
+    assert "Missing image: evidence/wallet.png" in page
+
+
+def test_given_four_videos_then_exit1(evidence_review):
+    video = "![Repeat payer is refused](evidence/run.webm)"
+    edit(evidence_review, video, "\n".join([video] * 4))
+    code, out, err = run_py(CHECK_REVIEW_PY, evidence_review)
+    assert code == 1
+    assert "QA report: 4 evidence videos, cap 3" in out
+
+
+def test_given_oversized_evidence_file_then_exit1(evidence_review, tmp_path):
+    with open(tmp_path / "evidence" / "run.webm", "ab") as f:
+        f.truncate(16 * 1024 * 1024)
+    code, out, err = run_py(CHECK_REVIEW_PY, evidence_review)
+    assert code == 1
+    assert "evidence/run.webm is 16.0 MB, cap 15 MB per file" in out
 
 
 def test_given_evidence_and_classification_lines_then_separate_paragraphs(evidence_review, tmp_path):
@@ -99,6 +180,10 @@ def test_given_caption_differs_in_case_and_spacing_then_matches(evidence_review)
     ("Cookie: session=abc123", "cookie"),
     ('{"apiKey": "sk-live-123"}', "API key"),
     ("Server=db;User Id=sa;Password=hunter2;", "password"),
+    ("X-Api-Token: abc123", "token"),
+    ("X-Hub-Signature-256: sha256=abc", "X-Hub-Signature-256 header"),
+    ("Ocp-Apim-Subscription-Key: abc123", "Ocp-Apim-Subscription-Key header"),
+    ('curl -H "X-Session-Key: abc" https://api.test', "X-Session-Key header"),
 ])
 def test_given_credential_in_evidence_then_exit1(evidence_review, line, what):
     edit(evidence_review, "Authorization: Bearer <redacted>", line)

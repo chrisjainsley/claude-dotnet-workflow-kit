@@ -115,7 +115,7 @@ the QA report, or testing notes for a QA team.
 
 | Mode | Content | Posting |
 |---|---|---|
-| Report | Given/When/Then scenarios, Pass/Fail/Blocked results, evidence (API calls, screenshots, query results) folded under the step each proves, summary and untested criteria. | After approval, post according to `qa.evidence`. |
+| Report | Given/When/Then scenarios, Pass/Fail/Blocked results, evidence (API request and response pairs, query results folded under the step each proves; screenshots and videos in a visible grid per scenario), summary and untested criteria. | After approval, post according to `qa.evidence`. |
 | Notes | What changed, steps per persona, test data, edge cases, scope, environment and flags. | After approval, post for `qa-team` according to `qa.evidence`; otherwise print in chat. |
 
 Reports cover acceptance runs against a real environment and manual checks. Unit and

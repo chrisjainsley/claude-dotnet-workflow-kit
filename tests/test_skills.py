@@ -155,6 +155,7 @@ def test_given_test_and_review_skills_then_same_evidence_syntax():
     for rel in ("skills/test/SKILL.md", "skills/review/SKILL.md", "skills/review/assets/skeleton.md"):
         text = (root / rel).read_text(encoding="utf-8")
         assert "evidence/<file>.png" in text, rel
+        assert "evidence/<file>.webm" in text, rel
         assert "<redacted>" in text, rel
         assert "`sql` or `text`" in text or "sql or text" in text, rel
         assert "never a markdown table" in text, rel

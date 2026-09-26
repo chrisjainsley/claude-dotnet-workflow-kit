@@ -16,7 +16,7 @@ section still apply; verifying it yourself is not a reason to skip naming what w
 checked. Unit and integration suites never count as QA evidence here either.
 
 Where an API response, a screen or a database row decided a result, that proof sits
-under the Evidence line: the request and response, the screenshot, or the query and its
+under the Evidence line: the request and response, the screenshot or video, or the query and its
 rows. Its caption repeats the step it proves, and credentials are redacted.
 
 ## Hand-off

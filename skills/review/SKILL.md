@@ -65,18 +65,23 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    regression, pre-existing bug or environment issue. With `qa.owner: none`, the QA
    section still exists and says what the author verified.
    **Attach the proof to the step it proves.** Wherever it decided the result, add it
-   after the scenario's Evidence line. An API call is an `http` fence with the request
-   and response. A screenshot is `![caption](evidence/<file>.png)`, saved under
-   `plans/<slug>/evidence/`. A database check is a `sql` or `text` fence with the query
-   and its rows, never a markdown table. The fence caption (`http When the member
-   pays`) or the image caption repeats the gherkin step; case and spacing are ignored.
-   The page folds each into its step as a collapsed item. Redact every credential to
-   `<redacted>` and trim bodies to the fields the step proves.
+   after the scenario's Evidence line. An API call is an `http` fence holding the
+   request as sent (method and path, the headers that matter, the body), then the
+   response from its `HTTP/1.1 200 OK` status line; the page shows them as a Request
+   pane and a Response pane with a status pill and indented JSON. A screenshot is
+   `![caption](evidence/<file>.png)` and a video `![caption](evidence/<file>.webm)`
+   (or `.mp4`), both saved under `plans/<slug>/evidence/`. A database check is a
+   `sql` or `text` fence with the query and its rows, never a markdown table. The fence
+   caption (`http When the member pays`) or the image or video caption repeats the
+   gherkin step; case and spacing are ignored, and a whole-run video may take the
+   scenario title instead. Fences fold into their step as collapsed items; screenshots
+   and videos show in a visible grid under the steps, captioned with the step. Redact
+   every credential to `<redacted>` and trim bodies to the fields the step proves.
    **Verify with Jev** before writing, when `optional.jev` is true. Load `jev_verify`
    and send one claim per Plan versus delivered row marked done ("<scenario> is
    implemented") with the slice's hunks as evidence. Send one claim per QA Pass row
-   against its Evidence line plus the text of its evidence fences (images are not
-   sent), and one per Verdict tile against the section it summarises.
+   against its Evidence line plus the text of its evidence fences (images and videos
+   are not sent), and one per Verdict tile against the section it summarises.
    An `unsupported` or `contradicted` delivered row becomes changed or dropped with the
    reason; a Pass row without evidence becomes not run; a tile that disagrees with its
    section is recounted. Say in the Verdict how many claims Jev verified. Without the
@@ -104,10 +109,16 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    The builder pulls each linked file's diff with git over `origin/<base>...HEAD`, or
    `<sha>^..<sha>` when `state: merged` and `commits` names the sha. Pass `--range` to
    override and `--repo` when the review lives outside the checkout. Read the warnings it
-   prints: an unlinked File cell means the path did not match one changed file.
+   prints: an unlinked File cell means the path did not match one changed file. Keep
+   `--out` beside `review.md`: the page links evidence media by its `evidence/` path,
+   and the builder lists those files in `plans/<slug>/review.files.json`.
 9. **Publish.** With `artifacts: true`, use the Artifact tool: `file_path` is
    `review.html`, `favicon` 🔍 on the first publish only, one-sentence `description`,
-   `capabilities` `{"db": {}}`. Invoke `artifact-design` and `artifact-capabilities`
+   `capabilities` `{"db": {}}`. When `review.files.json` lists any files, also pass
+   `root: plans/<slug>` and `files` set to that list, so each screenshot and video is
+   published at its `evidence/` path next to the page. Republishing from a new
+   session: run `list` with `scope: "files"` on the URL first, because the tool
+   refuses to replace published paths the session has not seen. Invoke `artifact-design` and `artifact-capabilities`
    because the tool asks; the template is already designed, leave it alone. Record the
    URL in the pipeline state file as `review.artifactUrl`. With `artifacts: false`,
    give the path of `review.html`; the rollout ticks and the decision form render but
@@ -123,8 +134,8 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
     `qa.evidence` says (the tracker adapter has the posting steps; plain ASCII, `--` for
     dashes, no emoji, no PR numbers that the tracker would auto-link, no artifact link
     because artifacts are private). Evidence fences go as plain text under their
-    scenario. Screenshots stay on the page: replace each image line with its caption
-    in plain text before posting. With `qa.evidence: none`, post nothing. Then continue
+    scenario. Screenshots and videos stay on the page: replace each image or video
+    line with its caption in plain text before posting. With `qa.evidence: none`, post nothing. Then continue
     the pipeline hand-off. **On changes:** fix the branch, rebuild the review, republish
     to the same path. Open findings marked `accept` move to the Findings table as
     accepted with the reviewer's note as the reason. For a merged PR, open findings
@@ -139,7 +150,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 | Changes | 300 words + 1 diagram + 8 hunks | One line for what the reviewer must not miss. One mermaid diagram of the changed components and the path between them. Then per service a Slice / File / Change table whose File cells open the full per-file diff, and the load-bearing hunks as collapsed diffs under 60 lines each. |
 | Contracts and coordination | 140 words + table | API contract and snapshot, new events and their topics, storage and infrastructure as code, configuration keys, migrations, client apps, tenants, name collisions. Rows are illustrative; keep only what someone else has to act on. |
 | Findings | 200 words + table | Severity, location, finding, status, note. Accepted needs a reason. Open rows become accept or fix radios in the decision form. |
-| QA report | 350 words + gherkin + evidence, 10 images | Environment and test users, one scenario per behaviour tagged Acceptance or Manual with Pass, Fail or Blocked, Evidence with per-step proof, Classification (regression, pre-existing bug, environment issue, not run) on anything but Pass, the summary table, Not covered. When nothing was run, open with **No QA run.** and list every criterion under Not covered. |
+| QA report | 350 words + gherkin + evidence, 10 images, 3 videos | Environment and test users, one scenario per behaviour tagged Acceptance or Manual with Pass, Fail or Blocked, Evidence with per-step proof, Classification (regression, pre-existing bug, environment issue, not run) on anything but Pass, the summary table, Not covered. When nothing was run, open with **No QA run.** and list every criterion under Not covered. |
 | Rollout | 90 words, 8 items | Ordered checklist with persistent ticks: infrastructure applied, config set, stacked order, migration, labels, hand-off. |
 | Decision | 60 words + form | Your recommendation in a sentence or two. The form is generated. |
 
@@ -158,8 +169,13 @@ agree, report what happened rather than what should have, diffs carry a decision
   `.env*`, `secrets.*`, `.pfx` and `.pem` files and links to the PR instead. If a file
   outside that list carries a secret, do not put it in the Changes table.
 - QA evidence is copied from live traffic, so it carries tokens, cookies and personal
-  data. The check fails an unredacted `Authorization`, cookie, API key or password;
-  it cannot see custom headers such as `X-Api-Token`, so redact every credential.
+  data. The check fails an unredacted `Authorization`, cookie, API key, password, or a
+  header named for a token, key, secret or signature (`X-Api-Token`,
+  `Ocp-Apim-Subscription-Key`); a credential under any other name gets past it, so
+  redact every one. Screenshots and videos show whatever was on screen: crop or blur
+  personal data before saving them.
+- Evidence media is published as files. The check fails a missing file, a file over
+  15 MB, or more than 60 MB in total; trim a video to the steps it proves.
 - The QA comment posted to a tracker must contain no bare PR numbers (some trackers
   auto-link `#1234` to a work item) and no artifact link. Plain ASCII, `--` for dashes,
   no emoji.
