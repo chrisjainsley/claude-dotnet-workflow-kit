@@ -123,7 +123,8 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
 11. **Hand off in chat.** The link or path, the canvas link when one was made, one line
     on which services and areas the work touches, and ask the user to approve or
     answer the open questions. That message
-    is the approval gate; do not add a separate "does this look right".
+    is the approval gate; do not add a separate "does this look right". Inside
+    `/next`, end it with the pipeline's gate line and stop.
 12. **Read the answers** when the user says "answered" (or when the pipeline re-enters
     the plan stage): Artifact tool, `action: "read_db"`, `db_op: "list"`,
     `collection: "answers"`, `url` of the plan. Each document is keyed by question id and

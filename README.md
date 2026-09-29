@@ -50,7 +50,7 @@ the next gate:
 
 ```text
 /dotnet-workflow-kit:next
-/goal complete /next
+/goal /next has stopped at a gate
 ```
 
 The driver checks the branch, PR and saved state, then runs the earliest unfinished
@@ -175,14 +175,18 @@ ends early. To keep the pipeline moving until it reaches a gate, wrap it in a go
 
 ```text
 /dotnet-workflow-kit:start 1234
-/goal complete /next
+/goal /next has stopped at a gate
 ```
 
-The goal re-invokes `/next` until it stops at the plan gate, the review checkpoint
-or a blocker. At the plan page, send your answers and tell the session "answered",
-or approve the plan. At the review page, send your decision and tell the session
-"decided". Pages cannot wake the session themselves. After each gate, set the same
-goal again to continue.
+The goal keeps `/next` running until it stops at the plan gate, the review
+checkpoint or a blocker. Every stop ends with "Gate reached: /next has stopped and
+needs your reply", which the goal evaluator reads as met, so the goal clears instead
+of re-prompting while you decide. Phrase the condition as reaching a gate: a goal
+such as `complete /next` is never met at a gate, because the pipeline is not
+finished while it waits for you, and the hook loops. At the plan page, send your
+answers and tell the session "answered", or approve the plan. At the review page,
+send your decision and tell the session "decided". Pages cannot wake the session
+themselves. After each gate, set the same goal again to continue.
 
 Tool permission prompts may still require input. When the pipeline reports a
 blocker, resolve it before continuing.

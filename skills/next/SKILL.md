@@ -136,7 +136,7 @@ Stop only for a big blocker, something the user genuinely has to decide or that 
 - A Test failure whose fix changes scope or touches infrastructure, or a sweep finding that contradicts the ticket's acceptance criteria.
 - Missing credentials or access.
 
-When blocked, print the table, state the blocker and a recommended resolution in two or three sentences, and stop.
+When blocked, print the table, state the blocker and a recommended resolution in two or three sentences, end with the gate line (see Stopping at a gate), and stop.
 
 ## The checkpoint
 
@@ -145,10 +145,19 @@ When stages 0 through 3 are done and the review page is built, present everythin
 1. The draft PR link when one exists and a one-paragraph summary of the change.
 2. The review artifact link, its Verdict line, and the headline numbers as a small table (acceptance, manual QA, open findings, criteria covered). Do not paste the QA report body.
 3. The final status table.
+4. The gate line.
 
 The review link goes in the checkpoint message itself as a plain URL; a link only inside a subagent's transcript does not count as delivered.
 
 Then wait. When the user says "decided" or invokes the pipeline again, read the decision with the Artifact tool: `read_db`, `db_op: "list"`, `collection: "review"`, url from `review.artifactUrl`. The `decision` document carries `verdict` (`approve` or `changes`) and `notes`; `finding-<n>` documents carry `action` (`fix` or `accept`) per open finding. Approve continues to stage 5. Changes returns to stage 2 with the notes and the per-finding fix or accept choices, then rebuilds and republishes the review to the same URL before re-presenting only what changed. With `artifacts: false`, take the verdict in chat instead.
+
+## Stopping at a gate
+
+Every stop, whether the plan gate, the checkpoint or a blocker, ends its message with this line, word for word:
+
+> Gate reached: /next has stopped and needs your reply. It will not continue until you answer.
+
+A stop is a finished run, not pending work, so `/goal` conditions such as "/next reaches a gate" read it as met. A turn that arrives with no new user message, such as a `/goal` or Stop-hook re-prompt, is not a decision: do not re-read the page, do not poll, and do not rephrase the wait. Repeat the gate line once and end the turn. Only "answered", "decided" or a user-typed invocation re-reads a stored decision.
 
 ## The pull request (stage 5)
 
