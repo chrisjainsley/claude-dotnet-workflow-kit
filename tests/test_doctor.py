@@ -9,10 +9,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DOCTOR = REPO_ROOT / "scripts" / "doctor.py"
 
 
-def run_doctor(tmp_path, answers, *extra):
+def run_doctor(tmp_path, answers, *extra, key=None):
     profile = tmp_path / "profile.json"
     profile.write_text(json.dumps(answers), encoding="utf-8")
-    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1", HOME=str(tmp_path), USERPROFILE=str(tmp_path))
+    env.pop("TYPESAFE_API_KEY", None)
+    if key:
+        env["TYPESAFE_API_KEY"] = key
     run = subprocess.run([sys.executable, str(DOCTOR), "--profile", str(profile), *extra],
                          capture_output=True, text=True, encoding="utf-8", env=env, cwd=tmp_path)
     return run.returncode, run.stdout + run.stderr
@@ -57,3 +60,54 @@ def test_given_fixtures_then_both_checkers_pass(tmp_path):
     code, out = run_doctor(tmp_path, {})
     assert code == 0, out
     assert "plan     ok" in out and "review   ok" in out
+
+
+def test_given_checks_without_jev_then_conventions_only(tmp_path):
+    answers = {"checks": [{"id": "ct", "rule": "Propagate CancellationToken", "severity": "high"}]}
+    code, out = run_doctor(tmp_path, answers, "--skip-fixtures")
+    assert code == 0, out
+    assert "checks" in out and "1 rule enforced by conventions only" in out
+
+
+def test_given_checks_with_jev_then_scored_by_jev(tmp_path):
+    answers = {"optional": {"jev": True}, "checks": [
+        {"id": "ct", "rule": "Propagate CancellationToken", "severity": "high"},
+        {"id": "now", "rule": "No DateTime.Now", "severity": "medium"}]}
+    code, out = run_doctor(tmp_path, answers, "--skip-fixtures")
+    assert code == 0, out
+    assert "2 rules scored by jev" in out
+    assert "jev " in out and "via the jev MCP" in out
+
+
+def test_given_key_in_env_then_doctor_names_the_source_not_the_value(tmp_path):
+    code, out = run_doctor(tmp_path, {"optional": {"jev": True}}, "--skip-fixtures", key="placeholder-key-for-tests")
+    assert code == 0, out
+    assert "jev: key from env" in out
+    assert "placeholder-key-for-tests" not in out
+
+
+def test_given_jev_enabled_without_key_then_doctor_says_so(tmp_path):
+    code, out = run_doctor(tmp_path, {"optional": {"jev": True}}, "--skip-fixtures")
+    assert code == 0, out
+    assert "jev: no key found" in out
+
+
+def test_given_defaults_then_jev_not_configured(tmp_path):
+    code, out = run_doctor(tmp_path, {}, "--skip-fixtures")
+    assert "jev: not configured" in out
+
+
+def test_given_stage_checks_then_doctor_lists_them(tmp_path):
+    answers = {"stage_checks": {"test": [{"id": "green", "prompt": "Did every suite pass?", "on_fail": "stop"},
+                                         {"id": "e2e", "prompt": "Did e2e run?"}]}}
+    code, out = run_doctor(tmp_path, answers, "--skip-fixtures")
+    assert code == 0, out
+    assert "stage checks (answered by Claude):" in out
+    assert "test" in out and "2 checks, 1 stop on fail" in out
+
+
+def test_given_malformed_stage_checks_then_doctor_reports_instead_of_crashing(tmp_path):
+    for bad in ({"stage_checks": {"test": [{"prompt": "x"}]}}, {"stage_checks": ["x"]}, {"checks": [{"rule": "x"}]}):
+        code, out = run_doctor(tmp_path, bad, "--skip-fixtures")
+        assert code == 1, out
+        assert "invalid:" in out and "Traceback" not in out

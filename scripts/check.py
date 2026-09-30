@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from kit_profile import add_profile_arg, plan_sections, resolve_profile  # noqa: E402
+from kit_profile import add_profile_arg, disallowed_plan_sections, expected_plan_sections, resolve_profile  # noqa: E402
 
 SIZE_MULTIPLIER = {"small": 0.6, "standard": 1.0, "large": 1.5}
 
@@ -84,11 +84,15 @@ def split_sections(body):
 
 
 def fences(text):
+    """[(lang, lines)]. The info string's first word is the language; the rest is a
+    caption (QA evidence names its step there) and is ignored here."""
     blocks, current, lang = [], None, None
     for line in text.splitlines():
         if line.strip().startswith("```"):
             if current is None:
-                current, lang = [], line.strip()[3:].strip().lower()
+                info = line.strip()[3:].strip().split(None, 1)
+                lang = info[0].lower() if info else ""
+                current = []
             else:
                 blocks.append((lang, current))
                 current = None
@@ -96,6 +100,141 @@ def fences(text):
         if current is not None:
             current.append(line)
     return blocks
+
+
+def step_key(text):
+    """Normalise a gherkin step or an evidence caption for matching: case and spacing."""
+    return re.sub(r"\s+", " ", text.strip().rstrip(".:")).lower()
+
+
+STEP_RE = re.compile(r"^\s*(Given|When|Then|And|But|\*)(?=\s)", re.I)
+IMAGE_LINE_RE = re.compile(r"^!\[([^\]]*)\]\(([^)\s]+)\)\s*$")
+REDACTED = "<redacted>"
+# A credential-bearing key anywhere on a line (header, curl -H, JSON, query string,
+# connection string): the key must end with the credential word, so passwordReset or
+# token_type do not count. The value after it must be <redacted> or a JSON literal, and
+# <redacted> must be the whole value: "<redacted>abc" still leaks abc.
+VALUE_END = r"(?:[\"',;&}\s]|$)"
+CREDENTIAL_KEY_RE = re.compile(
+    r"\b[\w-]*(password|passwd|pwd|secret|token|api[-_]?key)[\"']?\s*[:=]\s*[\"']?"
+    rf"(?!<redacted>{VALUE_END}|null\b|true\b|false\b|[\"',}}\s]|$)", re.I | re.M)
+AUTH_RE = re.compile(rf"\b(proxy-)?authorization[\"']?\s*:\s*(?![\"']?(\w+\s+)?<redacted>{VALUE_END})\S", re.I | re.M)
+COOKIE_RE = re.compile(r"\b(set-)?cookie[\"']?\s*:\s*[\"']?([^\"'\n]*)", re.I)
+# A custom header whose name carries a credential (X-Api-Token, X-Hub-Signature,
+# Ocp-Apim-Subscription-Key): the whole header value must be <redacted>.
+CUSTOM_HEADER_RE = re.compile(
+    r"(?:^\s*|-H\s+[\"'])([\w-]*(?:token|key|secret|signature)[\w-]*)\s*:\s*"
+    rf"(?!<redacted>{VALUE_END})(?=\S)", re.I | re.M)
+MAX_EVIDENCE_IMAGES = 10
+MAX_EVIDENCE_VIDEOS = 3
+VIDEO_EXTENSIONS = (".webm", ".mp4", ".mov")
+MAX_MEDIA_FILE_BYTES = 15 * 1024 * 1024
+MAX_MEDIA_TOTAL_BYTES = 60 * 1024 * 1024
+SOURCE_DIR = Path(".")
+
+
+def is_video(path):
+    return path.lower().endswith(VIDEO_EXTENSIONS)
+
+
+def credential_leaks(text):
+    """Kinds of credential left unredacted in an evidence block."""
+    leaks = []
+    if AUTH_RE.search(text):
+        leaks.append("Authorization header")
+    for m in COOKIE_RE.finditer(text):
+        pairs = [p for p in m.group(2).split(";") if p.strip()]
+        # Set-Cookie carries attributes (Path=/, HttpOnly) after its one value.
+        pairs = pairs[:1] if m.group(1) else pairs
+        if any(p.split("=", 1)[-1].strip() != REDACTED for p in pairs):
+            leaks.append("cookie")
+            break
+    for m in CREDENTIAL_KEY_RE.finditer(text):
+        word = m.group(1).lower()
+        leaks.append("API key" if word.startswith("api") else "password" if word.startswith("p") else word)
+    for m in CUSTOM_HEADER_RE.finditer(text):
+        if not CREDENTIAL_KEY_RE.match(text, m.start(1)):
+            leaks.append(f"{m.group(1)} header")
+    return list(dict.fromkeys(leaks))
+
+
+def qa_scenarios(qa):
+    """[(title, text)] per '#### ' scenario block in the QA report, split outside fences."""
+    scenarios, in_fence = [], False
+    for line in qa.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+        if line.startswith("#### ") and not in_fence:
+            scenarios.append([line[5:].strip(), []])
+        elif scenarios:
+            scenarios[-1][1].append(line)
+    return [(title, "\n".join(lines)) for title, lines in scenarios]
+
+
+def evidence_items(block):
+    """(gherkin lines, [(kind, caption, lines)]) for one scenario. Evidence is what the
+    page folds into steps: unindented fences and image lines after the gherkin fence."""
+    lines, gherkin, items, i = block.splitlines(), None, [], 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("```"):
+            info = line[3:].strip().split(None, 1)
+            lang = info[0].lower() if info else ""
+            body, i = [], i + 1
+            while i < len(lines) and not lines[i].startswith("```"):
+                body.append(lines[i])
+                i += 1
+            if lang in ("gherkin", "feature") and gherkin is None:
+                gherkin = body
+            elif gherkin is not None:
+                items.append((lang, info[1].strip() if len(info) > 1 else "", body))
+        elif gherkin is not None and IMAGE_LINE_RE.match(line.strip()):
+            cap, path = IMAGE_LINE_RE.match(line.strip()).groups()
+            items.append(("video" if is_video(path) else "image", cap, [path]))
+        i += 1
+    return gherkin or [], items
+
+
+def check_evidence(qa, multiplier):
+    """Evidence under each scenario: every fence, image or video names a step of that
+    scenario's gherkin (or the scenario title, for whole-run media), no credential is left
+    unredacted, every media file exists within the artifact's file limits, and images and
+    videos stay under their caps."""
+    failures, images, videos, total, seen = [], 0, 0, 0, set()
+    for title, block in qa_scenarios(qa):
+        name = re.sub(r"\s*`.*$", "", title)
+        gherkin, items = evidence_items(block)
+        steps = {step_key(l) for l in gherkin if STEP_RE.match(l)} | {step_key(name)}
+        for lang, cap, body in items:
+            if lang in ("image", "video"):
+                images += lang == "image"
+                videos += lang == "video"
+                path, file = body[0], SOURCE_DIR / body[0]
+                if not file.is_file():
+                    failures.append(f"QA report: evidence file {path} under '{name}' does not exist next to the review")
+                elif path not in seen:
+                    seen.add(path)
+                    size = file.stat().st_size
+                    total += size
+                    if size > MAX_MEDIA_FILE_BYTES:
+                        failures.append(f"QA report: {path} is {size / 1048576:.1f} MB, cap 15 MB per file; trim or re-encode it")
+            if step_key(cap) not in steps:
+                label = f"'{cap}'" if cap else f"an uncaptioned {lang} block"
+                failures.append(f"QA report: {label} under '{name}' names no step of its gherkin; caption it with the step it proves")
+        # Every fence in the scenario is scanned, evidence or not: a leak is a leak.
+        for lang, body in fences(block):
+            if lang not in ("gherkin", "feature"):
+                for what in credential_leaks("\n".join(body)):
+                    failures.append(f"QA report: unredacted {what} in evidence under '{name}'; replace the value with <redacted>")
+    cap = round(MAX_EVIDENCE_IMAGES * multiplier)
+    if images > cap:
+        failures.append(f"QA report: {images} evidence images, cap {cap}")
+    video_cap = round(MAX_EVIDENCE_VIDEOS * multiplier)
+    if videos > video_cap:
+        failures.append(f"QA report: {videos} evidence videos, cap {video_cap}")
+    if total > MAX_MEDIA_TOTAL_BYTES:
+        failures.append(f"QA report: evidence files total {total / 1048576:.1f} MB, cap 60 MB")
+    return failures, images, videos
 
 
 def strip_fences(text):
@@ -161,8 +300,8 @@ def report(failures):
     return 0
 
 
-def check_plan(meta, body, multiplier, sections):
-    failures = []
+def check_plan(meta, body, multiplier, sections, disallowed=()):
+    failures = list(disallowed)
     for key in ("title", "ticket"):
         if not meta.get(key):
             failures.append(f"front matter is missing '{key}'")
@@ -294,6 +433,8 @@ def check_review(meta, body, multiplier):
         failures.append("QA report: state what is Not covered (or 'Not covered: nothing')")
     if re.search(r"\b(WebApplicationFactory|InMemory|\.Tests\b)", qa):
         failures.append("QA report: unit and integration suites are not QA; remove them")
+    evidence_failures, evidence_images, evidence_videos = check_evidence(qa, multiplier)
+    failures += evidence_failures
 
     rollout = by_name.get("Rollout", "")
     items = re.findall(r"^\s*[-*]\s+\[[xX ]\]", rollout, flags=re.M)
@@ -308,7 +449,7 @@ def check_review(meta, body, multiplier):
     for name, words, limit, status in rows:
         print(f"{name:<28}{words:>7}{limit:>6}  {status}")
     print(f"{'total prose':<28}{total:>7}{round(sum(c for _, c in REVIEW_SECTIONS) * multiplier):>6}")
-    print(f"hunks {len(diffs)}/{MAX_HUNKS}, findings {len(frows)}, qa scenarios {len(scenarios)}, rollout items {len(items)}")
+    print(f"hunks {len(diffs)}/{MAX_HUNKS}, findings {len(frows)}, qa scenarios {len(scenarios)}, evidence images {evidence_images}, evidence videos {evidence_videos}, rollout items {len(items)}")
     return report(failures)
 
 
@@ -319,6 +460,8 @@ def main(kind=None, argv=None):
                     help="rule set; inferred from the sections and front matter when omitted")
     args = ap.parse_args(argv)
 
+    global SOURCE_DIR
+    SOURCE_DIR = Path(args.source).resolve().parent
     text = Path(args.source).read_text(encoding="utf-8")
     meta, body = split_front_matter(text)
     document_kind = args.kind or infer_kind(meta, [name for name, _ in split_sections(body)])
@@ -329,7 +472,9 @@ def main(kind=None, argv=None):
     multiplier = SIZE_MULTIPLIER[size]
     profile = resolve_profile(explicit=args.profile)
     if document_kind == "plan":
-        return check_plan(meta, body, multiplier, plan_sections(profile))
+        present = [name for name, _ in split_sections(body)]
+        return check_plan(meta, body, multiplier, expected_plan_sections(profile, present),
+                          disallowed_plan_sections(profile, present))
     return check_review(meta, body, multiplier)
 
 

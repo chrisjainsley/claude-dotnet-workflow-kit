@@ -3,7 +3,7 @@
 An adapter is a markdown file that tells a skill how to do something in terms of the
 tool the team actually uses. Skills never branch on a profile value themselves; they
 resolve the profile, then read the adapter file the value points to and follow it.
-This keeps `visual-plan` and `visual-review` identical across a GitHub team on
+This keeps `plan` and `review` identical across a GitHub team on
 Azure Boards and a team that lives entirely in GitHub Issues.
 
 ## The pattern
@@ -28,8 +28,8 @@ folder. `tracker: azure-boards` is the one adapter shipped as a folder today, be
 it carries `fetch_context.py` alongside its `README.md`.
 
 `stack` is one level deeper than the other four, because the profile itself nests it:
-`stack.data`, `stack.api`, `stack.messaging`, `stack.errors` and `stack.local_run` each
-pick their own value independently. Instead of one file per value, each stack field
+`stack.data`, `stack.api`, `stack.messaging`, `stack.errors`, `stack.local_run` and
+`stack.frontend` each pick their own value independently. Instead of one file per value, each stack field
 gets a single file with one `## <value>` section per value it supports:
 `adapters/stack/<field>.md`. So `"stack.data": "ef-core"` reads the `## ef-core`
 section of `adapters/stack/data.md`, and a ticket that touches both data access and
@@ -43,12 +43,12 @@ actually touches.
 
 Values: `azure-boards`, `github-issues`, `jira`, `none`.
 
-Read by both document skills to fetch a ticket, and by `visual-review` to post the
+Read by both document skills to fetch a ticket, and by `review` to post the
 QA report on approve. Each file has these headings:
 
 - **Fetch a ticket** - the command or API call that returns a ticket's title,
   acceptance criteria and, for a bug, its repro steps.
-- **Start work** - how `start-ticket` assigns the ticket and moves it to an active
+- **Start work** - how `start` assigns the ticket and moves it to an active
   state.
 - **Context for the plan** - how to pull a parent feature, sibling stories and design
   links for the plan's collapsed Context section.
@@ -60,14 +60,14 @@ QA report on approve. Each file has these headings:
 the ticket, and `qa.evidence` cannot be `work-item` when `tracker` is `none`.
 
 `azure-boards` ships as a folder, `adapters/tracker/azure-boards/`, with the four
-headings above in its `README.md` plus `fetch_context.py`, the script `visual-plan`
+headings above in its `README.md` plus `fetch_context.py`, the script `plan`
 runs for the plan's Context section. The other tracker values are plain files.
 
 ### scm
 
 Values: `github`, `azure-repos`.
 
-Read by `visual-review` to find the PR and by `start-ticket` to open one. Headings:
+Read by `review` to find the PR and by `start` to open one. Headings:
 
 - **Find the PR and base** - the command that returns the PR's base branch, checks and
   merge state, including the stacked-PR case where the real base is not the default
@@ -86,13 +86,13 @@ Values: `clean`, `vertical`, `ddd-clean`, `modular-monolith`.
 
 Read by both document skills for section and slice naming. Headings:
 
-- **Plan sections** - the section list and word caps `visual-plan` uses beyond
+- **Plan sections** - the section list and word caps `plan` uses beyond
   the shared Context, Requirement, Specs, Tests, Decisions, Risks and rollout, and
   Open questions; for `clean` these are Domain, Application, Infrastructure, API, for
   `vertical` they are Slice, Persistence, Integration, Endpoint.
 - **Review slices** - the same layer names as they appear as Slice values in the
   review's per-service Changes tables.
-- **What the reviewer looks for** - the architectural rules `mega-review` and the
+- **What the reviewer looks for** - the architectural rules the reviewer sweep and the
   review's Findings section check for in this architecture (dependency direction,
   where domain logic is allowed to live, what counts as a layering violation).
 
@@ -105,7 +105,7 @@ boundaries or module isolation, without overloading the `clean` file.
 
 Values: `qa-team`, `self`, `none`.
 
-Read by `visual-review` to write the QA report and route the hand-off. Headings:
+Read by `review` to write the QA report and route the hand-off. Headings:
 
 - **Who signs off** - who is expected to run QA and who has authority to approve.
 - **What the QA report must contain** - the scenario format, evidence expectations,
@@ -120,11 +120,12 @@ Read by `visual-review` to write the QA report and route the hand-off. Headings:
 Values per field: `stack.data` (`ef-core`, `dapper`, `cosmos`, `other`), `stack.api`
 (`minimal-api`, `controllers`, `graphql`, `grpc`), `stack.messaging` (`masstransit`,
 `wolverine`, `service-bus`, `none`), `stack.errors` (`result`, `exceptions`),
-`stack.local_run` (`aspire`, `docker`, `plain`).
+`stack.local_run` (`aspire`, `docker`, `plain`), `stack.frontend` (`none`, `blazor`,
+`razor`, `react`, `angular`, `vue`, `javascript`).
 
 Read by both document skills for whichever fields a ticket's diff actually touches.
-`data`, `api`, `messaging` and `errors` files share one heading set, because each of
-those describes a piece of the system's shape:
+`data`, `api`, `messaging`, `errors` and `frontend` files share one heading set, because
+each of those describes a piece of the system's shape:
 
 - **Plan: what to name** - the concrete types, project conventions and naming the plan
   should use for this choice, so the plan's Domain, Application, Infrastructure or API
@@ -132,9 +133,13 @@ those describes a piece of the system's shape:
 - **Review: contracts and coordination** - what this stack choice puts in the review's
   Contracts and coordination table (schema changes, event topics, migrations,
   configuration keys) and who else has to move for it.
-- **Common findings** - the mistakes `mega-review` and the review's Findings section
+- **Common findings** - the mistakes the reviewer sweep and the review's Findings section
   should flag for this choice (an N+1 query for `ef-core`, a missing idempotency key
   for `masstransit`, an unhandled `Result` for `result`-style errors).
+
+`frontend` also decides whether `plan` runs its design step at all: `none` means the
+plan never carries a Designs section, and any other value names where the look of a
+kit-drawn artboard comes from when no design system is attached.
 
 `local_run` is the exception, because it is not about naming or contracts, it is about
 getting the system running to gather QA evidence, so its files use a different
@@ -147,6 +152,13 @@ heading set:
 - **Common issues** - the failure modes specific to this run style that QA and
   reviewers should not mistake for a regression (a stale container, a port already in
   use, a missing local secret).
+
+## Jev is not an adapter
+
+Jev touchpoints live in the skills and the sweep, described once in `docs/jev.md`, and
+switch on `optional.jev` rather than on an adapter value. An adapter says how to talk to
+a tool the team chose; Jev is a judge the skills consult on any tool's output, so it
+never gets a file here.
 
 ## Adding a new value
 

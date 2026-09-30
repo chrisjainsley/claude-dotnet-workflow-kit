@@ -1,4 +1,4 @@
-<title>{{TITLE}}</title>
+<title>{{PAGETITLE}}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 :root {
@@ -58,6 +58,19 @@ code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); 
 pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; margin: 10px 0 14px; font-size: 12.5px; line-height: 1.5; }
 pre code { background: none; padding: 0; font-size: inherit; }
 pre.mermaid { background: var(--card); text-align: center; }
+figure.diagram { margin: 10px 0 14px; cursor: zoom-in; }
+figure.diagram pre.mermaid { margin: 0; }
+figure.diagram figcaption { display: flex; justify-content: flex-end; margin-top: 4px; }
+.diagram-open, .diagram-close { font: 600 12px/1 var(--sans); color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; cursor: pointer; }
+.diagram-open:hover, .diagram-close:hover, .diagram-open:focus-visible, .diagram-close:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
+dialog.diagram-modal { width: 96vw; max-width: none; height: 94vh; max-height: none; margin: auto; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); display: none; flex-direction: column; }
+dialog.diagram-modal[open] { display: flex; }
+dialog.diagram-modal::backdrop { background: rgba(10, 14, 20, 0.6); }
+dialog.diagram-modal .diagram-bar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+dialog.diagram-modal .diagram-bar span { flex: 1; }
+dialog.diagram-modal .diagram-body { flex: 1; overflow: auto; padding: 16px; }
+dialog.diagram-modal .diagram-body pre.mermaid { border: 0; margin: 0; min-height: 100%; }
+dialog.diagram-modal .diagram-body svg { max-width: none !important; width: 100%; height: auto; }
 .table-wrap { overflow-x: auto; margin: 8px 0 14px; }
 table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
 th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line); font-weight: 600; }
@@ -68,6 +81,12 @@ td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: to
 .figures img { display: block; width: 100%; height: auto; }
 .figures figcaption { font-size: 12px; color: var(--muted); padding: 6px 10px; border-top: 1px solid var(--line); }
 .figures figure.missing figcaption { color: var(--warn); border-top: 0; }
+figure.design { margin: 10px 0 14px; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--card); cursor: zoom-in; }
+figure.design .design-frame { position: relative; overflow: hidden; }
+figure.design iframe { border: 0; display: block; transform-origin: top left; pointer-events: none; background: #fff; }
+figure.design figcaption { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); padding: 6px 10px; border-top: 1px solid var(--line); }
+figure.design figcaption span { flex: 1; }
+dialog.diagram-modal .diagram-body iframe { border: 0; display: block; background: #fff; }
 .opt { display: flex; gap: 12px; align-items: flex-start; padding: 10px 14px; border: 1px solid var(--line); border-radius: 6px; margin: 6px 0; cursor: pointer; }
 .kind-plan .opt { background: var(--card); }
 .kind-review .opt { background: var(--paper); }
@@ -80,6 +99,10 @@ td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: to
 .qfoot { display: flex; align-items: center; gap: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
 .qstatus { flex: 1; }
 .hint { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+.attribution { border-top: 1px solid var(--line); background: var(--card); color: var(--muted); font-size: 12.5px; padding: 14px 28px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.attribution .wordmark { font-weight: 600; letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+.attribution .wordmark:hover { color: var(--accent); }
+.attribution .sep { color: var(--line); }
 .hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-selector-tag { color: var(--hl-kw); }
 .hljs-string, .hljs-attr, .hljs-symbol { color: var(--hl-str); }
 .hljs-comment, .hljs-meta { color: var(--hl-cm); }
@@ -144,6 +167,33 @@ details.filediff:target { outline: 2px solid var(--accent, var(--muted)); outlin
 .qa-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-right: 6px; }
 .qa-evidence, .qa-classification, .qa-not { font-size: 13.5px; }
 .qa-not { padding: 10px 14px; background: var(--warn-soft); border-left: 3px solid var(--warn); margin-top: 12px; }
+.steps { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 0; margin: 10px 0 14px; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; overflow-x: auto; }
+.steps .step, .steps .step-other { padding: 2px 14px 2px 28px; }
+.steps .step-other { color: var(--muted); padding-left: 14px; }
+.steps .kw { color: var(--hl-kw); font-weight: 500; }
+.steps details.step { padding: 0; }
+.steps details.step > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; padding: 2px 14px 2px 28px; }
+.steps details.step > summary::-webkit-details-marker { display: none; }
+.steps details.step > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.steps details.step > summary > span:first-child { flex: 1; }
+.steps .ev-count { flex: none; font: 600 10.5px/1 var(--sans); text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); white-space: nowrap; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; }
+.steps details.step > summary:hover .ev-count { border-color: var(--accent); }
+.steps details.step[open] .ev-count { background: var(--accent-soft); border-color: var(--accent); }
+.steps details.step[open] { background: var(--card); border-block: 1px solid var(--line); margin: 4px 0; }
+.steps details.step > .evidence-item, .steps details.step > .figures { margin: 6px 14px 10px 28px; font-family: var(--sans); }
+.evidence-item pre { margin: 4px 0 0; }
+details.evidence > .evidence-item, details.evidence > .figures { margin: 0 14px 12px; }
+.figures.qa-media { grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 14px; align-items: start; }
+.qa-media figure.shot { cursor: zoom-in; }
+.qa-media figure.video video { display: block; width: 100%; height: auto; background: #000; }
+.qa-media figcaption .kw { color: var(--hl-kw); font-weight: 600; }
+.http-pair { display: flex; flex-direction: column; gap: 8px; }
+.http-pane { border: 1px solid var(--line); border-radius: 6px; background: var(--card); overflow: hidden; }
+.http-pane pre { margin: 0; border: 0; border-radius: 0; }
+.http-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.http-head .qa-label { margin: 0; }
+.http-line { font-family: var(--mono); font-size: 12px; color: var(--ink); overflow-wrap: anywhere; }
+dialog.diagram-modal .diagram-body img { display: block; max-width: 100%; height: auto; margin: 0 auto; }
 .checklist { list-style: none; padding: 0; }
 .checklist li { margin: 0; border-bottom: 1px solid var(--line); }
 .checklist label { display: flex; gap: 12px; align-items: flex-start; padding: 9px 4px; cursor: pointer; }
@@ -167,6 +217,7 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
 }
 @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 </style>
+{{BRAND_STYLE}}
 <header class="topbar">
   <span class="kind">{{KINDLABEL}}</span>
   <span class="ticket">{{TICKET}}</span>
@@ -180,9 +231,16 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
     <p class="hint">{{HINT}}</p>
   </main>
 </div>
+<dialog class="diagram-modal" id="diagram-modal" aria-label="Diagram, full size">
+  <div class="diagram-bar"><span>Scroll to pan. Esc or click outside to close.</span><button type="button" class="diagram-close" id="diagram-close">Close</button></div>
+  <div class="diagram-body" id="diagram-body"></div>
+</dialog>
+{{FOOTER}}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/gherkin.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/graphql.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/http.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
 <script>
 (function () {
   if (window.hljs) { document.querySelectorAll('pre code[class*="language-"]').forEach(function (el) { hljs.highlightElement(el); }); }
@@ -213,6 +271,59 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
   });
   openTarget(location.hash);
   window.addEventListener('hashchange', function () { openTarget(location.hash); });
+  function fitDesigns() {
+    document.querySelectorAll('figure.design .design-frame').forEach(function (frame) {
+      var iframe = frame.querySelector('iframe');
+      if (!iframe) { return; }
+      var w = parseInt(iframe.getAttribute('width'), 10);
+      var h = parseInt(iframe.getAttribute('height'), 10);
+      if (!w || !h || !frame.clientWidth) { return; }
+      var s = Math.min(1, frame.clientWidth / w);
+      iframe.style.transform = 'scale(' + s + ')';
+      frame.style.height = Math.round(h * s) + 'px';
+    });
+  }
+  fitDesigns();
+  window.addEventListener('resize', fitDesigns);
+  window.addEventListener('load', fitDesigns);
+  document.querySelectorAll('details').forEach(function (d) { d.addEventListener('toggle', fitDesigns); });
+  if ('ResizeObserver' in window) {
+    // The column settles after fonts and the rail lay out; follow it rather than trust the first measure.
+    var ro = new ResizeObserver(fitDesigns);
+    document.querySelectorAll('figure.design .design-frame').forEach(function (frame) { ro.observe(frame); });
+  }
+  var modal = document.getElementById('diagram-modal');
+  var modalBody = document.getElementById('diagram-body');
+  if (modal && modalBody && typeof modal.showModal === 'function') {
+    document.querySelectorAll('figure.diagram, figure.design, .qa-media figure.shot').forEach(function (fig) {
+      fig.addEventListener('click', function (e) {
+        var caption = fig.querySelector('figcaption');
+        if (caption && caption.contains(e.target) && !e.target.classList.contains('diagram-open')) { return; }
+        // Copy whatever the runtime has rendered by now (an svg, or the source before it runs)
+        // and drop mermaid's inline max-width so the viewBox scales to the dialog.
+        modalBody.innerHTML = '';
+        Array.prototype.slice.call(fig.children).forEach(function (child) {
+          if (child.tagName !== 'FIGCAPTION') { modalBody.appendChild(child.cloneNode(true)); }
+        });
+        modalBody.querySelectorAll('svg').forEach(function (svg) {
+          svg.style.maxWidth = 'none';
+          svg.removeAttribute('width');
+          svg.removeAttribute('height');
+        });
+        // An artboard shows at its own size in the dialog; the column view scaled it down.
+        modalBody.querySelectorAll('.design-frame').forEach(function (frame) {
+          frame.style.height = 'auto';
+          frame.style.overflow = 'visible';
+          var iframe = frame.querySelector('iframe');
+          if (iframe) { iframe.style.transform = 'none'; iframe.style.pointerEvents = 'auto'; }
+        });
+        modal.showModal();
+      });
+    });
+    document.getElementById('diagram-close').addEventListener('click', function () { modal.close(); });
+    modal.addEventListener('click', function (e) { if (e.target === modal) { modal.close(); } });
+    modal.addEventListener('close', function () { modalBody.innerHTML = ''; });
+  }
 })();
 (async function () {
   var qform = document.getElementById('qform');

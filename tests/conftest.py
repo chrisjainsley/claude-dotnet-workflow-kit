@@ -15,8 +15,8 @@ RENDER_PY = SCRIPTS_DIR / "render.py"
 CHECK_PY = SCRIPTS_DIR / "check.py"
 PAGE_TEMPLATE = REPO_ROOT / "assets" / "page.html"
 
-PLAN_SKILL_DIR = REPO_ROOT / "skills" / "visual-plan"
-REVIEW_SKILL_DIR = REPO_ROOT / "skills" / "visual-review"
+PLAN_SKILL_DIR = REPO_ROOT / "skills" / "plan"
+REVIEW_SKILL_DIR = REPO_ROOT / "skills" / "review"
 
 CHECK_PLAN_PY = PLAN_SKILL_DIR / "scripts" / "check_plan.py"
 BUILD_PLAN_PY = PLAN_SKILL_DIR / "scripts" / "build_plan.py"

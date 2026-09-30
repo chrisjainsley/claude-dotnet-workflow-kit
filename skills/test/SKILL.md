@@ -1,12 +1,12 @@
 ---
-name: qa-report
-description: Generate a BDD-format QA report of what was tested this session, covering acceptance runs against a real environment and manual checks and never unit or integration suites, then post it where the profile's qa.evidence says. Use whenever the user says "qa report", "write up the testing", "document what we tested", or wants a test summary after running acceptance tests or manual verification. Also produces pre-hand-off QA notes, testing guidance written before anyone tests, covering what changed, how to test it per persona, test data and accounts, edge cases, out of scope, and environment or flag setup. Use notes mode whenever the user says "qa notes", "test notes", "notes for QA", or passes the literal argument "notes".
+name: test
+description: Run the Test stage for a branch: the build and the unit and integration suites first, then the approved plan's acceptance scenarios against the profile's QA environment, opening the draft PR and applying the deploy label when that environment needs one, and write a BDD-format QA report of what was actually tested, covering acceptance runs and manual checks and never unit or integration suites, posted where the profile's qa.evidence says. Use whenever the user says "test", "run the scenarios", "qa", "qa report", "write up the testing", "document what we tested", "/qa-report", or when the kit's pipeline reaches the Test stage. Not for a bare "dotnet test" run with nothing to report. Also produces pre-hand-off QA notes, testing guidance written before anyone tests, covering what changed, how to test it per persona, test data and accounts, edge cases, out of scope, and environment or flag setup. Use notes mode whenever the user says "qa notes", "test notes", "notes for QA", or passes the literal argument "notes".
 ---
 
-# QA report
+# Test
 
-This skill has two modes. Default mode writes a report of what was actually tested and
-what happened, not what should be tested next; it exists so a QA owner or a reviewer
+This skill has two modes. Default mode runs the Test stage and writes a report of what
+was actually tested and what happened, not what should be tested next; it exists so a QA owner or a reviewer
 can trust a Pass without re-running it themselves, and so a Fail carries enough to
 decide whether it blocks anything. Notes mode writes the opposite direction: testing
 guidance for someone who has not seen the change yet, written before testing happens.
@@ -29,24 +29,67 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 - `testing.acceptance`: the tool that produced any automated run (Reqnroll, SpecFlow,
   or none), named in the report's evidence lines where it matters.
 - `artifacts`: whether to publish a rendered page at all.
+- `pipeline.qa`: a project command that replaces the scenario run in step 2 when set.
+- `qa.environment`, `qa.deploy_label`, `scm`: where the scenarios run and how the
+  branch gets there. Read `adapters/qa/<qa.owner>.md` and `adapters/scm/<scm>.md`.
+- `stack.local_run`: how to start the system when `qa.environment` is `local`.
+- `optional.jev`: when true, failing tests are bucketed with `jev_classify` before any
+  fixing, and the QA report's Classification column comes from the same call. See
+  `docs/jev.md`. Skipped, never failed, when the MCP is not loaded.
 
-## Default mode: report
+## Default mode: run and report
 
-1. **Check for an existing review page first.** If this session already produced a
+1. **Run the suites, then the scenarios.** `dotnet build`, then `dotnet test` on the
+   solutions the branch touches; a red suite stops here. Then run the approved plan's
+   Specs (`plans/<id>-<slug>/plan.md`) the way `adapters/qa/<qa.owner>.md` says, or
+   `pipeline.qa` when set. When `qa.environment` is not `local`, push the branch, open
+   the draft PR through the scm adapter if none exists and apply `qa.deploy_label`, then
+   wait for the deployment before running. Fix failures on the branch and rerun until
+   green, unless a fix would change the ticket's scope. With `optional.jev`, bucket the
+   failures first. Load `jev_classify` with one item per failing test or scenario: the
+   name plus the assertion message, under 2000 characters. Pass the plan's Requirement
+   and a one-line summary of the change as `context`. The classes: `real_regression`
+   and `assertion_changed_by_refactor` (fix), `flaky_known` (rerun once, then treat as
+   a regression), `environment` (follow `adapters/stack/local_run.md` "Common issues")
+   and `manual_review` (read it yourself). Write `test` to the pipeline
+   state file as `{"done": true, "at": "<ISO time>", "note": "<n> scenarios pass"}`.
+2. **Check for an existing review page first.** If this session already produced a
    review artifact (the kit's review skill) that contains a QA section, copy that
    section verbatim into this report instead of rewriting it; the two must never
    diverge. Otherwise build the report from scratch in this step.
-2. **Gather what was tested**, from the conversation or from what the user describes.
+3. **Gather what was tested**, from the conversation or from what the user describes.
    For each distinct behaviour verified, capture: the persona and action as
    Given/When/Then; whether it was an **Acceptance test** (an automated run against a
    real environment) or a **Manual test** (a person's own steps, such as API calls,
    browser steps, or direct inspection of a provider or data store); the environment;
    the outcome,
    Pass, Fail or Blocked, with one line of evidence; and, for anything but Pass, whether
-   it is a regression, a pre-existing bug, an environment issue, or simply not run.
+   it is a regression, a pre-existing bug, an environment issue, or simply not run. The
+   Jev buckets from step 1 map straight onto that column: `real_regression` and
+   `assertion_changed_by_refactor` are a regression, `flaky_known` that failed twice
+   is a regression, `environment` is an environment issue; `manual_review` means you
+   decide and say so in the Evidence line.
+   **Capture the proof as you go**, per step, wherever it decided the result.
+   - **API call:** the request as sent (method and path, the headers that matter, the
+     body), then the response from its status line down. `curl -i` prints only the
+     response, so write the request above it, or trim `curl -v` output to the same
+     shape; a `.http` file's request and its output work too.
+   - **Screenshot:** saved under `plans/<slug>/evidence/` with Playwright (the
+     project's own, or `npx playwright screenshot <url> <file>`); the in-app browser
+     cannot save to disk.
+   - **Video**, when a flow is easier to prove moving than in stills: record the
+     browser with Playwright's `recordVideo` context option. The Playwright MCP takes
+     it through its `--config` file,
+     `{"browser": {"contextOptions": {"recordVideo": {"dir": "plans/<slug>/evidence"}}}}`,
+     and writes the `.webm` when the browser closes; a project Playwright script sets
+     it on `browser.newContext`. Rename the file to say what it shows and keep it under
+     15 MB (trim with `ffmpeg -ss <start> -to <end> -i in.webm -c copy out.webm`).
+   - **Database check:** the query and its rows.
+   Redact every token, cookie, key and password to `<redacted>`, and trim bodies to the
+   fields the step proves. Crop or blur personal data in screenshots and videos.
    **Unit and integration suites are never QA evidence.** If the only verification
    performed was an in-process test suite, say so and stop: there is nothing to report.
-3. **Write the report** with this exact structure:
+4. **Write the report** with this exact structure:
 
    ```markdown
    ## QA Report
@@ -60,6 +103,23 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    Then <observed outcome>
    ```
    Evidence: <observed value, test-run count, transaction id>
+   ```http When <action>
+   POST /api/<resource>
+   Authorization: Bearer <redacted>
+   Content-Type: application/json
+
+   {"<field>": "<value>"}
+
+   HTTP/1.1 201 Created
+   Content-Type: application/json
+
+   {"id": "<id>"}
+   ```
+   ![Then <observed outcome>](evidence/<file>.png)
+   ![<Short scenario title>](evidence/<file>.webm)
+   ```sql Then <observed outcome>
+   <query, then its rows as text>
+   ```
 
    #### <Short scenario title>  `Manual test`  **Fail**
    ...
@@ -75,15 +135,24 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    <what was not tested and why>
    ```
 
+   Put an API call in an `http` fence and a database check in a `sql` or `text`
+   fence, never a markdown table. Each fence, image or video caption repeats the
+   gherkin step it proves; case and spacing are ignored, and a whole-run video may
+   take the scenario title instead. The review page folds fences into their step,
+   splits an http fence into Request and Response panes, and shows screenshots and
+   videos in a grid under the steps. Once the section is in a review, the review
+   skill's `check_review.py` fails a caption that names no step, an unredacted
+   credential, a missing or oversized media file, or more than ten images or three
+   videos.
    When nothing was run this session, open with **No QA run.** and list every
    acceptance criterion under Not covered instead of inventing a scenario.
-4. **Publish as an Artifact only when `artifacts` is true.** Load the `artifact-design`
+5. **Publish as an Artifact only when `artifacts` is true.** Load the `artifact-design`
    skill first, then render the same content as stat tiles (pass counts per type), a
    card per scenario with the Given/When/Then in a labelled column, and the caveats. Do
    not add findings or soften an outcome that the markdown does not have.
-5. **Ask for approval.** Show the report text (and the artifact link if one exists) and
+6. **Ask for approval.** Show the report text (and the artifact link if one exists) and
    ask whether to post it. Do not post before a clear yes.
-6. **Post per `qa.evidence`** the way the shared posting step below describes.
+7. **Post per `qa.evidence`** the way the shared posting step below describes.
 
 ## Notes mode: pre-hand-off testing notes
 
@@ -126,7 +195,10 @@ Post per `qa.evidence`. `work-item`: follow the tracker adapter's "Post the QA r
 section (for the Azure Boards form this is a markdown comment via the REST API, never
 `--discussion`, since that stores plain text as escaped HTML). `pr-comment`: post
 through the scm adapter as a plain PR comment (for the GitHub form, `gh pr comment
-<number> --body-file report.md`). `none`: print only, nothing to send. **Never change
+<number> --body-file report.md`). `none`: print only, nothing to send. Evidence
+fences post as plain text under their scenario. Screenshots and videos stay on the
+review page: replace each image or video line with its caption in plain text before
+posting. **Never change
 the work item's or PR's state from this skill, in either mode.**
 
 ## Traps
@@ -152,4 +224,5 @@ the work item's or PR's state from this skill, in either mode.**
 ## Files
 
 None. This skill has no scripts or templates of its own; rendering, when it runs, uses
-the same page shape as the kit's review skill.
+the same page shape as the kit's review skill. The report structure above is also what
+the review page's QA report section carries, so the two never diverge.

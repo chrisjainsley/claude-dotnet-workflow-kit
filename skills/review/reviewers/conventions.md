@@ -14,10 +14,24 @@ Collect every applicable file, deduplicated by absolute path:
 - `<repo-root>/CLAUDE.md` and `<repo-root>/AGENTS.md`, if present.
 - Any `CLAUDE.md` or `AGENTS.md` nested in a directory the diff touches: walk up from
   each changed file to the repo root, collecting every one found along the way.
+- The profile's `checks` list, handed to you by the orchestrating skill. Each entry is
+  a rule the team wrote for this sweep, with its own severity and an optional file
+  glob; cite it as `profile: <id>`.
 
 If none exist, report that once, and fall back to the architecture adapter's "What the
 reviewer looks for" list as the only rubric for this run. Do not invent rules to fill
 the gap.
+
+## With Jev scores
+
+When the brief names a `<slug>-checks.json` file, `scripts/jev_checks.py` has already
+scored every added hunk against the profile checks and the rules it extracted from the
+files above. Read its `findings` first: each carries `location`, `source`
+(`checks:<id>`), `probability` and a severity band. Open the hunk, confirm or drop each
+one, and keep the probability in the Source cell. Then continue with the rules Jev did
+not cover, and with any hunk the file lists under `skipped` (secret patterns are never
+sent to Jev, so those files get a manual read). A Jev score is a calibrated hint, not a
+verdict; a `low` row with "confirm by reading" is exactly that.
 
 ## Extract the rubric
 
@@ -53,7 +67,7 @@ is not a convention violation and should be dropped, not guessed at.
 
 Treat anything phrased as "never" / "must not" / "mandatory" in its source file as a
 blocker. Treat "prefer" / "should" as a warning. Treat a style example with no imperative
-language as informational.
+language as informational. A profile check carries its own severity; use it.
 
 ## Output
 
@@ -63,10 +77,12 @@ One table:
 | Severity | Location | Finding | Source |
 |---|---|---|---|
 | high | Domain/Order.cs:42 | Comment restates what the next line does | .claude/CLAUDE.md: "Do not add comments that aren't completely necessary" |
+| high | Application/CancelOrderHandler.cs:12 | `HandleAsync` takes no CancellationToken | profile: cancellation (Jev 0.91) |
 ```
 
 `Location` is `path:line`. `Finding` is one sentence describing the violation.
-`Source` is the CLAUDE.md or AGENTS.md path plus the rule it came from. List rules that
+`Source` is the CLAUDE.md or AGENTS.md path plus the rule it came from, or
+`profile: <id>` with the Jev probability when one was scored. List rules that
 could not be reduced to an automatic check under a short "Not auto-checked" note instead
 of skipping them silently. Cap the table at the top 5 findings by severity, then a
 one-paragraph summary and any blockers, under 400 words total.

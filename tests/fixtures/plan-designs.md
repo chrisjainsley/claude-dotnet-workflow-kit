@@ -1,11 +1,3 @@
-# Exemplar: AB#17444 re-cut to budget
-
-The original visual-plan output for this ticket ran 3,373 prose words with a flow
-diagram, a data model, three annotated code tabs and a question form. This is the
-same plan at about 800 prose words. Nothing an implementer would act on differently was
-lost. Use it as the bar for density, section shape and tone; do not copy its content.
-
-```markdown
 ---
 title: Signup grant once per payer
 ticket: AB#17444
@@ -22,7 +14,7 @@ date: 2026-09-11
 
 **Area:** SubscriptionService, Loyalty Points bounded context. `LoyaltyPointsAccountGrain` and its ledger in `Acme.Data.ReadModels.Subscription`, the `SignupCampaignGrantIssuer` on the API wallet read, and the B2C `EnrichToken` connector in UserService for identity at signup.
 
-**Designs:** none. Backend-only story; the member sees no new UI.
+**Designs:** none attached to the item; the wallet page below was drawn for this plan.
 
 ## Requirement
 A new Free account created under the `signup-grant` campaign gets 1,000 Loyalty Points that expire after 30 days. Today the credit is per account, so a second account is another $10. This story makes it once per payer, where the payer is the email root: lowercased, plus-suffix removed, dots kept. A repeat payer signs up, gets the quests, earns normally, and never sees the credit. Nothing tells them.
@@ -54,6 +46,11 @@ Feature: Granted Loyalty Points credit
     When an admin issues the "promo-grant" campaign credit to the second member
     Then the second member's wallet shows 500 points of granted credit
 ```
+
+## Designs
+Canvas: [Design - Signup grant once per payer](https://claude.ai/artifact/example-canvas). One artboard, the wallet page with the granted credit hidden for a repeat payer.
+
+![Wallet page, repeat payer sees no granted credit](design/project/Main.dc.html)
 
 ## Domain
 `PayerKey` hashes the root so no plain email lands in a grain id or state. `GrantCreditResult` gains an outcome enum because today a deferred grant would be indistinguishable from an already-applied one.
@@ -142,4 +139,3 @@ Shared infra: `TestUser.Email` and an `AcmeEmail` header in `GraphQLTestClient` 
    - [x] **No backfill.** Test accounts only; a tester re-signing up with an alias being credited is acceptable there.
    - [ ] **One-off processor.** Walk ledger Grant rows, resolve each aggregate email, claim the key. Precedent: `BackfillUserAnniversariesProcessor`.
 3. Anything else to preserve or avoid?
-```

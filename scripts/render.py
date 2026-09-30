@@ -8,6 +8,9 @@ Usage:
 `--kind plan|review` picks the document mode; without it the kind is inferred from
 the ## section names, then from the front matter. `--template` defaults to the
 repository's assets/page.html.
+`--profile` names the kit profile; by default the project then user file is read.
+Its `branding` flag (default true) adds the Delivery Labs colours and the attribution
+footer; false renders the neutral palette with no footer.
 
 The markdown subset is deliberately small: ## sections, ### and #### subheads,
 paragraphs, bullet and numbered lists (one nesting level), pipe tables, fenced code
@@ -15,7 +18,11 @@ paragraphs, bullet and numbered lists (one nesting level), pipe tables, fenced c
 HTML comments in the source are dropped so skeleton hints never reach the page.
 Images (`![caption](context/frame.png)`, path relative to the source) are inlined as
 data URIs, downscaled to 1600px wide when Pillow is installed, and consecutive images
-form a grid.
+form a grid. A `.dc.html` target (an artboard read from a Design canvas) is embedded
+instead as a sandboxed iframe at the artboard's own size, scaled to the column by the
+page script and opened full size by the diagram dialog; its `support.js` line is
+dropped because the canvas runtime is not present, so only static artboards render
+faithfully.
 
 Plan mode: the "Context" section renders collapsed inside a <details> element, each
 section head carries an onion ring marking its architecture layer, and "Open
@@ -28,7 +35,8 @@ as long as the title is unchanged.
 Review mode: Verdict becomes stat tiles, Plan versus delivered and Findings render
 status pills, Changes pairs "#### title" with a ```diff fence into collapsed hunks
 and links backticked File cells to full per-file diffs pulled from git for --range
-(derived from the front matter when omitted), QA report renders scenario cards,
+(derived from the front matter when omitted), QA report renders scenario cards whose
+gherkin steps expand to the evidence captioned with their text,
 Rollout renders a persistent checklist, and Decision gets the approve /
 request-changes form.
 """
@@ -37,6 +45,7 @@ import base64
 import hashlib
 import html
 import io
+import json
 import mimetypes
 import re
 import subprocess
@@ -50,20 +59,58 @@ except ImportError:  # Pillow is optional; images are inlined at their original 
 
 DEFAULT_TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "page.html"
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kit_profile import add_profile_arg, resolve_profile  # noqa: E402
+from check import STEP_RE, is_video, step_key  # noqa: E402
+
+# Delivery Labs branding: the profile's `branding` flag (default true) switches it off.
+# Colours follow deliverylabs.co: indigo accents on a gray-900 dark ground. Only the
+# accent tokens change; warn/bad/ok keep their meaning.
+BRAND_URL = "https://deliverylabs.co/workflow-kit"
+BRAND_NAME = "Delivery Labs"
+BRAND_LIGHT = "--accent: #4F46E5; --accent-soft: #EEF2FF; --hl-kw: #4F46E5; --hl-ty: #6D28D9;"
+BRAND_DARK = ("--paper: #111827; --card: #1F2937; --line: #374151; --muted: #9CA3AF; --ink: #F3F4F6; "
+              "--accent: #818CF8; --accent-soft: #1E1B4B; --code-bg: #0B1120; --hl-kw: #A5B4FC; --hl-ty: #C4B5FD;")
+BRAND_STYLE = "\n".join([
+    "<style>",
+    ":root { " + BRAND_LIGHT + " }",
+    '@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ' + BRAND_DARK + " } }",
+    ':root[data-theme="dark"] { ' + BRAND_DARK + " }",
+    "</style>",
+])
+BRAND_FOOTER = (
+    '<footer class="attribution">'
+    f'<a class="wordmark" href="{BRAND_URL}">{BRAND_NAME}</a>'
+    '<span class="sep" aria-hidden="true">|</span>'
+    f'<span>Built with the <a href="{BRAND_URL}">dotnet-workflow-kit</a>.</span>'
+    '</footer>'
+)
+
 SOURCE_DIR = Path(".")
 REPO_DIR = Path(".")
 KIND = "plan"
 MAX_IMAGE_WIDTH = 1600
+MAX_DESIGN_BYTES = 2 * 1024 * 1024
+DESIGN_DEFAULT_SIZE = (1280, 800)
+SUPPORT_JS_RE = re.compile(r"[ \t]*<script[^>]*support\.js[^>]*>\s*</script>[ \t]*(?:\r?\n)?", re.I)
+PREVIEW_RE = re.compile(r'"\$preview"\s*:\s*\{([^}]*)\}')
 MAX_FILE_DIFF_LINES = 400
-SECRET_PATTERNS = re.compile(r"(appsettings[^/]*\.json|local\.settings\.json|\.tfvars|\.env(\.|$)|secrets?\.(json|ya?ml)|\.pfx|\.pem)$", re.I)
+SECRET_PATTERNS = re.compile(
+    r"(appsettings[^/]*\.json|local\.settings\.json|\.tfvars|(^|/)\.env(\.[^/]*)?|secrets?\.(json|ya?ml)"
+    r"|\.pfx|\.pem|\.p12|\.key|(^|/)id_(rsa|dsa|ecdsa|ed25519)|(^|/)\.npmrc|(^|/)\.pypirc|(^|/)credentials(\.[^/]*)?)$",
+    re.I,
+)
 META = {}
 DIFF_RANGE = None
 FILE_STATS = {}
 USED_FILES = []
 WARNINGS = []
+MEDIA_FILES = []
+HTTP_STATUS_RE = re.compile(r"^HTTP/\d(?:\.\d)?\s+(\d{3})\b")
+HEADER_RE = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]+:\s")
 
 NON_LAYER_SECTIONS = {
-    "Context", "Requirement", "Specs", "Tests", "Decisions",
+    "Context", "Requirement", "Specs", "Designs", "Tests", "Decisions",
     "Risks and rollout", "Open questions",
 }
 SHORT = {
@@ -104,7 +151,7 @@ def inline(text):
     text = re.sub(r"`([^`]+)`", stash, text)
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(r"(?<![*\w])\*(?!\s)(.+?)(?<!\s)\*(?!\w)", r"<em>\1</em>", text)
-    text = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', text)
+    text = re.sub(r"\[([^\]]+)\]\((https?://[^)\s\x22]+)\)", r'<a href="\2">\1</a>', text)
     return re.sub(r"\x00(\d+)\x00", lambda m: codes[int(m.group(1))], text)
 
 
@@ -131,10 +178,61 @@ def image_data_uri(path):
     return f"data:{mime};base64," + base64.b64encode(data).decode("ascii")
 
 
+def is_design(path):
+    return path.lower().endswith(".dc.html")
+
+
+def design_size(source):
+    """The artboard's $preview width and height, else the default desktop frame."""
+    m = PREVIEW_RE.search(source)
+    if m:
+        w = re.search(r'"width"\s*:\s*(\d+)', m.group(1))
+        h = re.search(r'"height"\s*:\s*(\d+)', m.group(1))
+        if w and h:
+            return int(w.group(1)), int(h.group(1))
+    return DESIGN_DEFAULT_SIZE
+
+
+def render_design(alt, path):
+    file = (SOURCE_DIR / path).resolve()
+    try:
+        source = file.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return f'<div class="figures"><figure class="missing"><figcaption>Missing artboard: {html.escape(path)}</figcaption></figure></div>'
+    if len(source.encode("utf-8")) > MAX_DESIGN_BYTES:
+        WARNINGS.append(f"artboard {path} is over {MAX_DESIGN_BYTES // (1024 * 1024)} MB; the page must stay under 16 MB")
+    source = SUPPORT_JS_RE.sub("", source)
+    width, height = design_size(source)
+    caption = html.escape(alt, quote=True)
+    return (
+        f'<figure class="design"><div class="design-frame">'
+        f'<iframe sandbox="" srcdoc="{html.escape(source, quote=True)}" title="{caption}" '
+        f'width="{width}" height="{height}" loading="lazy"></iframe></div>'
+        f'<figcaption><span>{inline(alt)}</span>'
+        f'<button type="button" class="diagram-open">Open full size</button></figcaption></figure>'
+    )
+
+
 def render_figures(lines):
-    out = ['<div class="figures">']
+    out = []
+    grid = []
     for line in lines:
         alt, path = IMAGE_RE.match(line.strip()).groups()
+        if is_design(path):
+            if grid:
+                out.append(render_image_grid(grid))
+                grid = []
+            out.append(render_design(alt, path))
+        else:
+            grid.append((alt, path))
+    if grid:
+        out.append(render_image_grid(grid))
+    return "".join(out)
+
+
+def render_image_grid(figures):
+    out = ['<div class="figures">']
+    for alt, path in figures:
         uri = image_data_uri(path)
         if uri is None:
             out.append(f'<figure class="missing"><figcaption>Missing image: {html.escape(path)}</figcaption></figure>')
@@ -315,20 +413,36 @@ def render_checklist(lines):
     return "".join(out)
 
 
-def read_fence(lines, i):
-    lang = LANG_ALIAS.get(lines[i][3:].strip().lower(), lines[i][3:].strip().lower())
+def fence_info(line):
+    """(lang, caption) from a fence opener: the first word is the language, the rest a caption."""
+    info = line.strip()[3:].strip().split(None, 1)
+    lang = info[0].lower() if info else ""
+    return LANG_ALIAS.get(lang, lang), (info[1].strip() if len(info) > 1 else "")
+
+
+def read_fence(lines, i, with_caption=False):
+    lang, caption = fence_info(lines[i])
     code, i = [], i + 1
     while i < len(lines) and not lines[i].startswith("```"):
         code.append(lines[i])
         i += 1
+    if with_caption:
+        return lang, caption, "\n".join(code), i + 1
     return lang, "\n".join(code), i + 1
 
 
 def render_code(lang, body):
     body = html.escape(body, quote=False)
     if lang == "mermaid":
-        return f'<pre class="mermaid">{body}</pre>'
-    cls = f' class="language-{lang}"' if lang else ""
+        # The Artifact runtime renders pre.mermaid natively; the figure wrapper survives that
+        # and is what the page script clicks to open the diagram full-size in a dialog.
+        return (
+            f'<figure class="diagram" title="Open full size">'
+            f'<pre class="mermaid">{body}</pre>'
+            f'<figcaption><button type="button" class="diagram-open">Open full size</button></figcaption>'
+            f"</figure>"
+        )
+    cls = f' class="language-{html.escape(lang, quote=True)}"' if lang else ""
     return f"<pre><code{cls}>{body}</code></pre>"
 
 
@@ -410,6 +524,8 @@ def render_blocks(lines, mode=None, state=None):
             continue
         para = []
         while i < len(lines) and lines[i].strip() and not re.match(r"^(```|#{3,4} |\s*[-*]\s|\s*\d+\.\s|\s*\||!\[)", lines[i]):
+            if para and mode == "qa" and re.match(r"^(Evidence|Classification|Not covered):", lines[i]):
+                break
             para.append(lines[i].strip())
             i += 1
         text = " ".join(para)
@@ -421,6 +537,172 @@ def render_blocks(lines, mode=None, state=None):
         else:
             out.append(f"<p>{inline(text)}</p>")
     return "\n".join(out)
+
+
+def pretty_json(text):
+    """A JSON body indented for reading; anything that does not parse stays as it was."""
+    try:
+        return json.dumps(json.loads(text), indent=2, ensure_ascii=False)
+    except ValueError:
+        return text
+
+
+def http_part(lines):
+    """Start line and headers, then the body pretty-printed when it is JSON."""
+    cut = 1
+    while cut < len(lines) and HEADER_RE.match(lines[cut]):
+        cut += 1
+    head, body = lines[:cut], lines[cut:]
+    text = "\n".join(head)
+    body_text = "\n".join(body).strip()
+    if body_text:
+        text += "\n\n" + pretty_json(body_text)
+    return text
+
+
+def render_http(body):
+    """An http fence as a request pane and a response pane, split at the first status
+    line. Without one the fence renders as a plain http block."""
+    lines = body.splitlines()
+    at = next((n for n, l in enumerate(lines) if HTTP_STATUS_RE.match(l)), None)
+    if at is None:
+        return f'<div class="evidence-item"><span class="qa-label">http</span>{render_code("http", body)}</div>'
+    request, response = lines[:at], lines[at:]
+    while request and not request[-1].strip():
+        request.pop()
+    status = int(HTTP_STATUS_RE.match(response[0]).group(1))
+    tone = "pass" if status < 300 else "fail" if status >= 400 else "info"
+    start = next((l.strip() for l in request if l.strip()), "")
+    return (
+        '<div class="evidence-item http-pair">'
+        f'<div class="http-pane"><div class="http-head"><span class="qa-label">Request</span>'
+        f'<code class="http-line">{html.escape(start)}</code></div>{render_code("http", http_part(request))}</div>'
+        f'<div class="http-pane"><div class="http-head"><span class="qa-label">Response</span>'
+        f'<span class="pill pill-{tone}">{status}</span></div>{render_code("http", http_part(response))}</div>'
+        "</div>"
+    )
+
+
+def render_evidence(item):
+    kind, caption, payload = item
+    if kind in ("image", "video"):
+        return render_media_grid([item])
+    if kind == "http":
+        return render_http(payload)
+    return f'<div class="evidence-item"><span class="qa-label">{html.escape(kind)}</span>{render_code(kind, payload)}</div>'
+
+
+def media_caption(caption):
+    m = STEP_RE.match(caption)
+    if not m:
+        return inline(caption)
+    keyword = caption.strip()[:len(m.group(1))]
+    return f'<span class="kw">{html.escape(keyword)}</span> {inline(caption.strip()[len(keyword):].strip())}'
+
+
+def render_media_grid(items):
+    """QA screenshots and videos as one visible grid. The files are referenced by their
+    relative path and published next to the page, never inlined: a video cannot be."""
+    out = ['<div class="figures qa-media">']
+    for kind, caption, path in items:
+        if not (SOURCE_DIR / path).is_file():
+            out.append(f'<figure class="missing"><figcaption>Missing {kind}: {html.escape(path)}</figcaption></figure>')
+            continue
+        if path not in MEDIA_FILES:
+            MEDIA_FILES.append(path)
+        src, alt = html.escape(path, quote=True), html.escape(caption, quote=True)
+        if kind == "video":
+            media = f'<video controls preload="metadata" playsinline src="{src}" aria-label="{alt}"></video>'
+            out.append(f'<figure class="video">{media}<figcaption>{media_caption(caption)}</figcaption></figure>')
+        else:
+            out.append(f'<figure class="shot"><img src="{src}" alt="{alt}" loading="lazy"><figcaption>{media_caption(caption)}</figcaption></figure>')
+    out.append("</div>")
+    return "".join(out)
+
+
+def render_steps(body, items, scenario):
+    """The scenario's gherkin as a step list. A step whose text a fence caption repeats
+    becomes a collapsed item holding that evidence; the rest stay plain lines. Screenshots
+    and videos, captioned with a step or the scenario title, show in one grid below."""
+    lines = body.splitlines()
+    steps = {step_key(l) for l in lines if STEP_RE.match(l)}
+    by_step, unmatched, media = {}, [], []
+    for item in items:
+        key = step_key(item[1])
+        if item[0] in ("image", "video") and (key in steps or key == step_key(scenario)):
+            media.append(item)
+        elif key in steps:
+            by_step.setdefault(key, []).append(item)
+        else:
+            unmatched.append(item)
+    out = ['<div class="steps">']
+    for line in lines:
+        if not line.strip():
+            continue
+        m = STEP_RE.match(line)
+        if not m:
+            out.append(f'<div class="step-other">{html.escape(line.strip())}</div>')
+            continue
+        keyword = line.strip()[:len(m.group(1))]
+        head = f'<span class="kw">{html.escape(keyword)}</span> {html.escape(line.strip()[len(keyword):].strip())}'
+        evidence = by_step.pop(step_key(line), None)
+        if evidence:
+            count = f'{len(evidence)} item{"s" if len(evidence) > 1 else ""}'
+            out.append(f'<details class="step"><summary><span>{head}</span><span class="ev-count">{count}</span></summary>'
+                       f'{"".join(render_evidence(e) for e in evidence)}</details>')
+        else:
+            out.append(f'<div class="step">{head}</div>')
+    out.append("</div>")
+    if media:
+        out.append(render_media_grid(media))
+    for item in unmatched:
+        WARNINGS.append(f"QA report: evidence '{item[1] or item[0]}' under '{scenario}' names no step; shown after the steps")
+        out.append(f'<details class="hunk evidence"><summary>{inline(item[1] or item[0])}</summary>{render_evidence(item)}</details>')
+    return "".join(out)
+
+
+def render_scenario(lines):
+    """One '#### ' scenario block: evidence fences and images after the gherkin are lifted
+    out of the flow and folded into the steps they name."""
+    title = lines[0][5:].strip()
+    gherkin, items, before, after, i = None, [], [], [], 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("```"):
+            start = i
+            lang, caption, body, i = read_fence(lines, i, with_caption=True)
+            if lang == "gherkin" and gherkin is None:
+                gherkin = body
+            elif gherkin is not None:
+                items.append((lang, caption, body))
+            else:
+                before.extend(lines[start:i])
+            continue
+        if gherkin is not None and IMAGE_RE.match(line.strip()):
+            alt, path = IMAGE_RE.match(line.strip()).groups()
+            items.append(("video" if is_video(path) else "image", alt, path))
+        else:
+            (after if gherkin is not None else before).append(line)
+        i += 1
+    if gherkin is None:
+        return render_blocks(lines, "qa")
+    name = re.sub(r"\s*`.*$", "", title)
+    return render_blocks(before, "qa") + render_steps(gherkin, items, name) + render_blocks(after, "qa")
+
+
+def render_qa(lines):
+    """QA report: split at '#### ' scenario headings (outside fences) and render each."""
+    segments, current, in_fence = [], [], False
+    for line in lines:
+        if line.startswith("```"):
+            in_fence = not in_fence
+        if line.startswith("#### ") and not in_fence and current:
+            segments.append(current)
+            current = []
+        current.append(line)
+    if current:
+        segments.append(current)
+    return "\n".join(render_scenario(s) if s[0].startswith("#### ") else render_blocks(s, "qa") for s in segments)
 
 
 def split_title(text):
@@ -571,7 +853,10 @@ def parse(text, kind=None):
     open_findings, output = [], []
     for name, lines in sections:
         mode = REVIEW_MODES.get(name)
-        body = render_blocks(lines, mode, open_findings if mode == "findings" else None)
+        if mode == "qa":
+            body = render_qa(lines)
+        else:
+            body = render_blocks(lines, mode, open_findings if mode == "findings" else None)
         if name == "Changes":
             body += render_file_diffs()
         if name == "Decision":
@@ -609,7 +894,7 @@ def layer_map(sections):
     return {name: idx for idx, name in enumerate(layers)}
 
 
-def build(meta, sections, template, count=0):
+def build(meta, sections, template, count=0, branded=True):
     nav, parts = [], []
     layers = layer_map(sections) if KIND == "plan" else {}
     for name, body in sections:
@@ -625,11 +910,16 @@ def build(meta, sections, template, count=0):
         )
     chip_keys = PLAN_CHIP_KEYS if KIND == "plan" else REVIEW_CHIP_KEYS
     chips = [render_chip(key, meta[key]) for key in chip_keys if meta.get(key)]
+    label = "Plan" if KIND == "plan" else "Review"
+    title = meta.get("title", "")
     page = template
     for key, value in {
         "KIND": KIND,
-        "KINDLABEL": "Plan" if KIND == "plan" else "Review",
-        "TITLE": html.escape(meta.get("title", "Plan" if KIND == "plan" else "Review")),
+        "KINDLABEL": label,
+        # The <title> names the artifact in the gallery, where a plan and its review would
+        # otherwise share a name; the h1 stays bare because the topbar already shows the kind.
+        "PAGETITLE": html.escape(f"{label} - {title}" if title else label),
+        "TITLE": html.escape(title or label),
         "TICKET": html.escape(meta.get("ticket", "")),
         "CHIPS": "".join(chips),
         "NAV": "".join(nav),
@@ -638,6 +928,8 @@ def build(meta, sections, template, count=0):
         "COUNT": str(len(sections)),
         "QUESTIONS": str(count if KIND == "plan" else 0),
         "OPEN": str(count if KIND == "review" else 0),
+        "BRAND_STYLE": BRAND_STYLE if branded else "",
+        "FOOTER": BRAND_FOOTER if branded else "",
     }.items():
         page = page.replace("{{" + key + "}}", value)
     return page
@@ -652,24 +944,37 @@ def main(kind=None, argv=None):
                     help="document mode; inferred from the sections and front matter when omitted")
     ap.add_argument("--range", help="review only: git diff range for per-file diffs; default origin/<base>...HEAD, or <sha>^..<sha> when state is merged")
     ap.add_argument("--repo", default=".", help="review only: repository root to run git in (default: current directory)")
+    add_profile_arg(ap)
     args = ap.parse_args(argv)
+    profile = resolve_profile(explicit=args.profile)
     global SOURCE_DIR, REPO_DIR, DIFF_RANGE
     SOURCE_DIR = Path(args.source).resolve().parent
     REPO_DIR = Path(args.repo).resolve()
     text = Path(args.source).read_text(encoding="utf-8")
     META.clear()
+    MEDIA_FILES.clear()
     META.update(parse_meta(text))
     document_kind = args.kind or infer_kind(META, re.findall(r"^## (.+?)\s*$", text, flags=re.M))
     if document_kind == "review":
         DIFF_RANGE = args.range or derive_range(META)
         load_file_stats()
     meta, sections, count = parse(text, document_kind)
-    page = build(meta, sections, Path(args.template).read_text(encoding="utf-8"), count)
+    page = build(meta, sections, Path(args.template).read_text(encoding="utf-8"), count,
+                 branded=bool(profile.get("branding", True)))
     Path(args.out).write_text(page, encoding="utf-8", newline="\n")
     if document_kind == "plan":
         print(f"wrote {args.out} ({len(page):,} bytes, {len(sections)} sections, {count} answerable questions)")
     else:
         print(f"wrote {args.out} ({len(page):,} bytes, {len(sections)} sections, {count} open findings in the decision form, {len(USED_FILES)} linked file diffs from {DIFF_RANGE})")
+        # Evidence media is referenced by relative path, so it is published beside the
+        # page: the list below is the Artifact tool's `files` argument, with root = the
+        # review's folder.
+        out_dir = Path(args.out).resolve().parent
+        manifest = out_dir / "review.files.json"
+        manifest.write_text(json.dumps(sorted(MEDIA_FILES), indent=2) + "\n", encoding="utf-8", newline="\n")
+        print(f"evidence files: {len(MEDIA_FILES)} ({manifest.name})")
+        if MEDIA_FILES and out_dir != SOURCE_DIR:
+            WARNINGS.append(f"--out is not beside {Path(args.source).name}; the page's evidence/ paths will not resolve until the files sit next to it")
     for warning in WARNINGS:
         print("warning: " + warning, file=sys.stderr)
     return 0

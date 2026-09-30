@@ -7,7 +7,7 @@ files instead of a published, interactive page.
 
 ## What still happens
 
-`visual-plan` and `visual-review` build the exact same `plan.html` and
+`plan` and `review` build the exact same `plan.html` and
 `review.html` either way. The section content, the word budgets, the mermaid diagram
 in the review, the per-file diff links, all of that comes from the same markdown and
 the same build scripts regardless of `artifacts`. The only thing that changes is the
@@ -20,6 +20,9 @@ open it yourself.
 Open the `.html` file directly from disk. Every section renders: Context, Requirement,
 Specs and the rest of the plan; Verdict, Changes, Findings and the rest of the review.
 The page looks the same as the published version because it is the same template.
+A plan's Designs section renders its artboards from the copies under
+`plans/<slug>/design/`, so they show locally too; only the canvas link needs an
+account.
 
 ## What cannot send
 

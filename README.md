@@ -5,9 +5,10 @@ implementation, review and QA hand-off. It builds plan and review pages with enf
 word budgets, so you can read the proposed work and the results before approving each.
 
 One project profile sets your architecture, tests, tracker and QA workflow. Use the
-six skills together or on their own, with or without a ticket tracker or the Artifact tool.
+six skills, start, plan, implement, test, review and next, together or on their own,
+with or without a ticket tracker or the Artifact tool.
 
-[Install](#install) | [Workflow](#workflow) | [Skills](#skills) | [/goal](#running-with-goal) | [Profile reference](#profile-reference) | [dotnet-claude-kit](#dotnet-claude-kit) | [Contributing](#contributing)
+[Install](#install) | [Workflow](#workflow) | [Skills](#skills) | [/goal](#running-with-goal) | [Branding](#branding) | [Profile reference](#profile-reference) | [dotnet-claude-kit](#dotnet-claude-kit) | [Jev](#jev) | [Contributing](#contributing)
 
 ## Install
 
@@ -41,76 +42,80 @@ python scripts/setup.py
 Start with a ticket ID, or a short slug when `tracker` is `none`:
 
 ```text
-/dotnet-workflow-kit:start-ticket 1234
+/dotnet-workflow-kit:start 1234
 ```
 
-Use the pipeline driver to continue:
+Use the pipeline driver to continue, or wrap it in a goal so it keeps going until
+the next gate:
 
 ```text
 /dotnet-workflow-kit:next
+/goal /next has stopped at a gate
 ```
 
 The driver checks the branch, PR and saved state, then runs the earliest unfinished
 stage. It pauses for plan answers or approval, the review decision, and blockers.
 Invoking it authorizes commits, pushes, a draft PR and configured deployment labels
-before the review checkpoint.
+before the review checkpoint. The kit never merges; a person approves every merge.
 
-| Stage | Result |
-|---|---|
-| 0. Start ticket | Create and push a branch; assign and activate the item when a tracker is configured. |
-| 1. Plan | Build the plan page; read your answers or approval. |
-| 2. Execute | Implement the plan, using the configured command when set. |
-| 3. Review | Run mega-review, clean up and verify the branch. |
-| 4. Draft PR | Open a draft against the base branch or stacked parent; check CI. |
-| 5. Resolve comments | Address review threads and check CI again. |
-| 6. QA | Run the scenarios in the configured environment; fix failures and rerun. |
-| 7. Review page | Present the final diff, findings and QA evidence for your decision. |
-| 8. Publish and hand off | After approval, post the QA report where configured and mark the PR ready. Follow the QA adapter for labels and tracker state. |
+| Stage | Who | Result |
+|---|---|---|
+| 0. Start | Agent | Create and push a branch; assign and activate the item when a tracker is configured. |
+| 1. Plan | Agent, then you | Build the plan page; you answer the open questions or approve. |
+| 2. Implement | Agent | Implement the plan one layer per commit, then run the reviewer sweep, fix findings and verify. |
+| 3. Test | Agent | Run the suites, then the plan's scenarios in the configured environment; fix failures and rerun. |
+| 4. Review | Agent, then you | Present the final diff, findings and QA evidence on one page; you approve or send it back. |
+| 5. Pull request | Agent, then you | Resolve threads and get checks green. After approval, post the QA report, apply labels and mark the PR ready. You merge. |
 
 Requesting changes returns the pipeline to implementation with your notes and
 per-finding fix or accept choices. The draft stays a draft until approval.
 
 ## Skills
 
-### visual-plan
+### start
+
+Use to start work from an ID, issue URL or untracked slug. It creates and pushes a
+branch from `base_branch` using `branch_pattern`. With a tracker, it assigns the item
+to `user` and moves it to the configured active state. It then renames the session
+when supported and hands off to plan.
+
+### plan
 
 Use for an implementation plan. It reads the ticket and codebase, then writes
 `plans/<id>-<slug>/plan.md` and builds `plan.html`. Sections follow your architecture,
 with test scenarios, decisions, risks and open questions. A script checks section
 budgets before publication.
 
+When `stack.frontend` is set and a ticket changes a screen that came with no design,
+the skill draws the screens first, with Claude Code's `/design` command or the Design
+canvas Artifact type, and embeds the artboards in a Designs section of the plan page
+next to a link to the editable canvas. Designs supplied by the tracker are used as they
+are and no canvas is made.
+
 On an Artifact page, choose answers and press **Send answers**, then tell the session
 "answered". The skill reads the stored choices, updates the plan and republishes it.
 
 ![Plan page showing Context, Specs and the Open questions form](docs/images/plan-page.png)
 
-### visual-review
+### implement
 
-Use to review a branch or PR. It combines the approved plan, actual diff,
-mega-review findings and QA evidence into `review.md` and `review.html`.
+Use to build an approved plan. It walks the plan's layers in order, one commit each,
+tests first when `testing.tdd` is strict, then runs the reviewer sweep: read-only
+reviewers in parallel, cleanup and verification in sequence. The built-in reviewers
+are `bug-hunt` and `conventions`; the profile can enable companion reviewers and a
+Codex second opinion. Findings are fixed on the branch before anything is tested, and
+missing tools appear in the skipped list with a reason. This skill edits files.
 
-The page includes verdict counts, plan versus delivered, a change diagram, file links
-to full diffs, findings, the QA report and a rollout checklist. Choose **Approve** or
-**Request changes**, press **Send decision**, then tell the session "decided".
-The skill reads the decision and each open finding's fix or accept choice.
+### test
 
-![Review page showing verdict tiles, the change diagram and decision form](docs/images/review-page.png)
-
-### start-ticket
-
-Use to start work from an ID, issue URL or untracked slug. It creates and pushes a
-branch from `base_branch` using `branch_pattern`. With a tracker, it assigns the item
-to `user` and moves it to the configured active state. It then renames the session
-when supported and hands off to visual-plan.
-
-### qa-report
-
-Use for a standalone QA report or testing instructions. If a review page already
-contains the QA report, this skill reuses that section.
+Use to run the Test stage and write up what was tested. It runs the build and the
+suites, then the approved plan's scenarios in `qa.environment`, opening the draft PR
+and applying `qa.deploy_label` when that environment needs a deployment. It then writes
+the QA report, or testing notes for a QA team.
 
 | Mode | Content | Posting |
 |---|---|---|
-| Report | Given/When/Then scenarios, Pass/Fail/Blocked results, evidence, summary and untested criteria. | After approval, post according to `qa.evidence`. |
+| Report | Given/When/Then scenarios, Pass/Fail/Blocked results, evidence (API request and response pairs, query results folded under the step each proves; screenshots and videos in a visible grid per scenario), summary and untested criteria. | After approval, post according to `qa.evidence`. |
 | Notes | What changed, steps per persona, test data, edge cases, scope, environment and flags. | After approval, post for `qa-team` according to `qa.evidence`; otherwise print in chat. |
 
 Reports cover acceptance runs against a real environment and manual checks. Unit and
@@ -118,25 +123,30 @@ integration suites do not count as QA evidence. Notes come from the approved pla
 Specs, or the diff when no plan exists. Select notes mode with:
 
 ```text
-/dotnet-workflow-kit:qa-report notes
+/dotnet-workflow-kit:test notes
 ```
 
-### mega-review
+### review
 
-Use before opening a PR. It runs read-only reviewers in parallel, then applies
-cleanup and runs verification in sequence. The built-in reviewers are `bug-hunt` and
-`conventions`. The profile can enable companion reviewers and a Codex second opinion.
+Use to review a branch or PR. It combines the approved plan, actual diff, sweep
+findings and QA evidence into `review.md` and `review.html`. When no sweep is fresh
+for the branch, it runs one first, so a branch nobody implemented in this session can
+still be reviewed.
 
-Missing tools appear in the skipped list with a reason. The result includes
-consolidated findings, cleanup changes and verification results. It saves findings
-for visual-review to reuse. This skill can edit files during cleanup.
+The page includes verdict counts, plan versus delivered, a change diagram (click it
+to open full size), file links
+to full diffs, findings, the QA report and a rollout checklist. Choose **Approve** or
+**Request changes**, press **Send decision**, then tell the session "decided".
+The skill reads the decision and each open finding's fix or accept choice.
+
+![Review page showing verdict tiles, the change diagram and decision form](docs/images/review-page.png)
 
 ### next
 
 Use to run the [workflow](#workflow) from the current stage. It reads live signals
 alongside `~/.claude/dotnet-workflow-kit/pipeline/<slug>.json` and updates stage completion.
-Live evidence overrides saved state; reviews and QA results older than new commits
-must run again.
+Live evidence overrides saved state; sweeps, test runs and reviews older than new
+commits must run again. State files written by 0.5.0 are migrated on first read.
 
 To inspect progress without running a stage:
 
@@ -144,31 +154,42 @@ To inspect progress without running a stage:
 /next status
 ```
 
+## Renamed in 0.6.0
+
+The skills now carry the names of the stages they run. Old names are not aliased;
+update any saved prompts or `/goal` text.
+
+| Before | Now |
+|---|---|
+| `start-ticket` | `start` |
+| `visual-plan` | `plan` |
+| Execute stage inside `next`, plus `mega-review` | `implement` (the sweep lives at `skills/review/sweep.md`) |
+| `qa-report`, plus the QA stage inside `next` | `test` |
+| `visual-review` | `review` |
+| Draft PR, Resolve comments and Publish and hand off stages | `next` stage 5, Pull request |
+
 ## Running with /goal
 
-If your Claude Code session supports the goal command, use it to keep the pipeline
-moving toward a stated checkpoint. Plan approval and the review decision still need
-your input.
-
-Start the ticket, then set a bounded goal:
+`/next` runs stage after stage inside one turn, but nothing restarts it if the turn
+ends early. To keep the pipeline moving until it reaches a gate, wrap it in a goal:
 
 ```text
-/dotnet-workflow-kit:start-ticket 1234
-/goal Run /next until it stops at the review checkpoint for ticket 1234 and has printed the review page link. Stop within 3 hours.
+/dotnet-workflow-kit:start 1234
+/goal /next has stopped at a gate
 ```
 
-At the plan page, send your answers and tell the session "answered", or approve the
-plan. At the review page, send your decision and tell the session "decided".
-Pages cannot wake the session themselves.
+The goal keeps `/next` running until it stops at the plan gate, the review
+checkpoint or a blocker. Every stop ends with "Gate reached: /next has stopped and
+needs your reply", which the goal evaluator reads as met, so the goal clears instead
+of re-prompting while you decide. Phrase the condition as reaching a gate: a goal
+such as `complete /next` is never met at a gate, because the pipeline is not
+finished while it waits for you, and the hook loops. At the plan page, send your
+answers and tell the session "answered", or approve the plan. At the review page,
+send your decision and tell the session "decided". Pages cannot wake the session
+themselves. After each gate, set the same goal again to continue.
 
-After approving, you can set a goal for hand-off:
-
-```text
-/goal Run /next until the hand-off stage reports done for ticket 1234. Stop within 1 hour.
-```
-
-Name an observable result and include a time bound. Tool permission prompts may
-still require input. When the pipeline reports a blocker, resolve it before continuing.
+Tool permission prompts may still require input. When the pipeline reports a
+blocker, resolve it before continuing.
 
 ## Without the Artifact tool
 
@@ -179,6 +200,12 @@ Local forms cannot save answers or decisions. Reply in chat with question number
 and choices, or with "approve" or "changes" and your finding decisions.
 Rollout checklist ticks do not persist; track rollout outside the kit.
 See [Running without the Artifact tool](docs/without-artifacts.md).
+
+## Branding
+
+The plan and review pages use the [Delivery Labs](https://deliverylabs.co/workflow-kit)
+colours and carry an attribution footer linking there. Set `branding` to `false` through
+setup, or in the profile file, to render the neutral palette with no footer.
 
 ## Profile reference
 
@@ -213,18 +240,25 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `tracker_states.active` | Free text | `""` | State when work starts; blank uses the adapter default. |
 | `tracker_states.qa_ready` | Free text | `""` | QA hand-off state; blank uses the adapter default. |
 | `artifacts` | `true`, `false` | `true` | Publish Artifacts, or build local HTML and take answers in chat. |
+| `branding` | `true`, `false` | `true` | Delivery Labs colours and an attribution footer on the plan and review pages; false renders the neutral palette with no footer. |
 | `stack.data` | `ef-core`, `dapper`, `cosmos`, `other` | `"ef-core"` | Data access conventions. |
 | `stack.api` | `minimal-api`, `controllers`, `graphql`, `grpc` | `"minimal-api"` | API contract style. |
 | `stack.messaging` | `masstransit`, `wolverine`, `service-bus`, `none` | `"none"` | Messaging conventions. |
 | `stack.errors` | `result`, `exceptions` | `"exceptions"` | Error handling conventions. |
 | `stack.local_run` | `aspire`, `docker`, `plain` | `"plain"` | How to start the system for local QA. |
-| `reviewers` | `bug-hunt`, `conventions`, `kit`, `security-scan`, `convention-learner`, `code-review-workflow` | `["bug-hunt", "conventions"]` | Review passes; the two built-ins always run. |
+| `stack.frontend` | `none`, `blazor`, `razor`, `react`, `angular`, `vue`, `javascript` | `"none"` | Whether the repo has a frontend and which kind; see the plan skill. |
+| `reviewers` | `bug-hunt`, `conventions`, `kit`, `security-scan`, `convention-learner`, `code-review-workflow` | `["bug-hunt", "conventions"]` | Reviewer sweep passes; the two built-ins always run. |
 | `pipeline.execute` | Free text | `""` | Execution command; blank implements the plan directly. |
 | `pipeline.resolve_comments` | Free text | `""` | Comment-resolution command; blank uses the SCM adapter. |
 | `pipeline.qa` | Free text | `""` | QA command; blank runs plan Specs manually per the QA adapter. |
 | `optional.dotnet-claude-kit` | `true`, `false` | `false` | Companion plugin availability. |
 | `optional.codex` | `true`, `false` | `false` | Enable the Codex second-opinion reviewer. |
 | `optional.roslyn-mcp` | `true`, `false` | `false` | Roslyn MCP availability for code-review-workflow. |
+| `optional.jev` | `true`, `false` | `false` | Jev availability: a `TYPESAFE_API_KEY` or a `jev` MCP server. Detected by setup. See [Jev](#jev). |
+| `jev.flag_at` | Number from 0 to 1 | `0.75` | Probability at or above which a scored check becomes a finding at the rule's severity. |
+| `jev.review_at` | Number from 0 to 1, at most `flag_at` | `0.4` | Probability at or above which a scored check is listed as low with "confirm by reading". |
+| `checks` | List of `{id, rule, severity, files}` | `[]` | Review checks the conventions reviewer enforces; `files` is an optional glob. Edited in the file, validated by `scripts/doctor.py`. |
+| `stage_checks` | Object of stage name to a list of `{id, prompt, on_fail}` | `{}` | Yes/no prompts a `/next` stage must pass before it is marked done. Stages: `start`, `plan`, `implement`, `test`, `review`, `pull_request`. `on_fail` is `fix` (default, keep working the stage) or `stop` (blocker). Edited in the file. |
 
 Validation requires a tracker when `qa.evidence` is `work-item`. Both `bug-hunt` and
 `conventions` remain in the reviewer list.
@@ -260,17 +294,67 @@ The workflow kit also runs without the companion. Built-in adapters still guide 
 pages; unavailable companion reviewers are recorded as skipped. The
 `code-review-workflow` reviewer also requires a Roslyn MCP server.
 
+## Jev
+
+[Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev) is TypeSafe's
+System One model: a fast, calibrated judge that returns probabilities, never text. With
+`optional.jev` true the kit uses it wherever a skill would otherwise decide on gut feel,
+and every call is skipped, never failed, when it is absent. Setup detects a
+`TYPESAFE_API_KEY` or a `jev` MCP server. Register the MCP at user scope so it loads in
+every project:
+
+```bash
+claude mcp add -s user jev -e TYPESAFE_API_KEY=<your key> -- npx -y @jkudish/jev-mcp
+```
+
+Add your own stage checks too. Each is a yes/no question a `/next` stage must answer yes to
+before it is marked done, judged on that stage's evidence. Jev scores them when enabled, and
+Claude answers them otherwise:
+
+```json
+"stage_checks": {
+  "implement": [{"id": "migration-reviewed", "prompt": "Does every new EF Core migration have a matching Down method?"}],
+  "test": [{"id": "e2e-ran", "prompt": "Does the test output show the Playwright suite ran and passed?", "on_fail": "stop"}]
+}
+```
+
+Add your own review checks to the profile; the conventions reviewer enforces them on
+every sweep, and with Jev `scripts/jev_checks.py` scores every added hunk against them
+first:
+
+```json
+"checks": [
+  {"id": "cancellation", "rule": "Every new async method that performs I/O accepts and forwards a CancellationToken", "severity": "high", "files": "**/*.cs"},
+  {"id": "clock", "rule": "Use the injected IClock, never DateTime.Now", "severity": "medium", "files": "src/**/*.cs"}
+]
+```
+
+| Stage | What Jev does |
+|---|---|
+| start, plan | Screens ticket text and linked items for injected instructions; ranks linked items so only the relevant ones are read. |
+| plan | Settles open questions from the research facts, or preselects the recommended option and names the fact that would decide it. |
+| implement | Classifies open sweep findings as fixable in scope or scope-changing. |
+| sweep | Scores profile checks and the CLAUDE.md rubric per hunk; deduplicates findings; gates the verdict's claims against the diff and test output. |
+| test | Buckets failing tests as regression, refactor fallout, flaky or environment before fixing. |
+| review | Verifies Plan versus delivered rows, QA Pass evidence and Verdict tiles. |
+| next | Classifies red CI jobs; screens, classifies and ranks review threads. |
+
+Diff hunks, claims, test output and ticket text are sent to api.typesafe.ai when a
+touchpoint runs; files matching the secret patterns never are. Set `optional.jev` to
+`false` when policy forbids it. [docs/jev.md](docs/jev.md) has the call shapes, the
+skipped wording and the checks reference.
+
 ## Contributing
 
 | Path | Contents |
 |---|---|
 | `.claude-plugin/` | Plugin and marketplace manifests. |
 | `commands/setup.md` | Setup command instructions. |
-| `skills/` | Six skills and their supporting files. |
+| `skills/` | Six skills, the reviewer sweep and their supporting files. |
 | `adapters/` | Tracker, source control, architecture, QA and stack instructions. |
 | `assets/` | Shared page shell. |
-| `scripts/` | Profile, setup, checks and rendering. |
-| `docs/` | Usage guides, writing rules and screenshots. |
+| `scripts/` | Profile, setup, checks, rendering and the Jev checks scorer. |
+| `docs/` | Usage guides, writing rules, the Jev reference and screenshots. |
 | `tests/` | Fixtures and automated checks. |
 
 Run the tests and plugin validation from the repository root before opening a PR:
