@@ -20,6 +20,16 @@ ready:
 gh pr create --base <base_branch> --draft --title "<title>" --body-file body.md
 ```
 
+The body describes this ticket's change only. Never name another pull request in it, not a
+parent, sibling or follow-up, and not the shape of a stack. The host already renders a
+stack's chain, and hand-written topology goes stale as layers merge and retarget. The same
+holds for anything written to the tracker.
+
+Commit messages carry no work item id and no `#123` reference, so the tracker shows the
+pull request alone and no commits. Merge with an explicit message (`git merge -m "Merge
+<base>"`), since the default embeds the branch name and its id, and drop the id from a
+squash merge's default title, which is the pull request title.
+
 Add the profile's `qa.handoff_label` and `qa.deploy_label` when either is set, since
 they are what moves the change to QA and to a deployed environment:
 
