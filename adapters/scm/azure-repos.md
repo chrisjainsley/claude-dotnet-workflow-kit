@@ -21,6 +21,15 @@ az repos pr create --repository example-repo --source-branch <branch> \
   --target-branch <base_branch> --draft true --title "<title>" --description "<body>"
 ```
 
+The body describes this ticket's change only. Never name another pull request in it, not a
+parent, sibling or follow-up, and not the shape of a stack. Hand-written topology goes stale
+as soon as a layer merges and the rest retarget, and where the host renders the chain itself
+the prose is duplicate. The same holds for anything written to the tracker.
+
+Commit messages carry no work item id and no `#123` reference, so the tracker shows the
+pull request alone and no commits. Merge with an explicit message (`git merge -m "Merge
+<base>"`), since the default embeds the branch name and its id.
+
 Azure Repos labels are called tags; add the profile's `qa.handoff_label` and
 `qa.deploy_label` when either is set:
 

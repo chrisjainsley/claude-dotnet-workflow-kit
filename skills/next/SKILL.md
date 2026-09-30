@@ -131,13 +131,14 @@ Then wait. When the user says "decided" or invokes the pipeline again, read the 
 
 ## Drafting the PR (stage 4)
 
-Push the branch, then let the scm adapter's steps create the draft: title from the ticket, body from the plan's Requirement and Specs, base set to `base_branch` or the stacked parent. Apply `qa.handoff_label` when `qa.owner` is `qa-team`. The PR stays a draft until the checkpoint is approved; marking it ready is a stage 8 action.
+Push the branch, then let the scm adapter's steps create the draft: title from the ticket, body from the plan's Requirement and Specs, base set to `base_branch` or the stacked parent. The body covers this ticket only and never names another pull request, a stacked parent included; the base is metadata, not prose. Apply `qa.handoff_label` when `qa.owner` is `qa-team`. The PR stays a draft until the checkpoint is approved; marking it ready is a stage 8 action.
 
 ## House rules
 
 - Never enter Claude's plan mode for this pipeline; the plan stage is a published page, not a mode.
 - Never remove `qa.handoff_label`, and never change the work item's state from a QA comment; only the tracker adapter's own steps do that.
 - Commit only when the current stage requires it, saying so if a commit happens outside stage 2.
+- Commit messages never contain a work item id or another PR or commit reference; only the PR title links the tracker. Merge the base in with an explicit `-m` message.
 - Use the profile's own label and environment names throughout, never a hardcoded literal.
 - Print the plan and review artifact links in the main reply, not only inside a subagent's transcript.
 - Investigate and re-run CI failures silently; report findings in chat, not as PR status comments.
@@ -147,6 +148,6 @@ Push the branch, then let the scm adapter's steps create the draft: title from t
 ## Traps
 
 - A review or QA marker older than the branch's latest commit is stale, not done; downgrade it and redo the stage rather than trust a marker describing an earlier diff.
-- Stacked layers: a stage measures only the work above its own parent, never above the ultimate base, and merging a layer merges everything below it, so the checkpoint must name the parent PRs that need to clear QA first.
+- Stacked layers: a stage measures only the work above its own parent, never above the ultimate base, and merging a layer merges everything below it, so the checkpoint must name the parent PRs that need to clear QA first. That belongs in the chat checkpoint alone; it never goes into the PR body or the tracker, where the host's own stack view is the source of truth.
 - With `artifacts: false`, the pages still render but cannot send a decision back to this session; take every decision in chat and still record it in the state file.
 - The pages cannot wake this session on their own; only "answered" or "decided" from the user, or a fresh invocation, triggers a re-read of a stored decision.
