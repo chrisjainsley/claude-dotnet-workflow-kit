@@ -19,6 +19,6 @@ export type PipelineRow = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'dotnet-workflow-kit': { rows: PipelineRow[]; isHidden: boolean; dismissed: string[]; activity: Activity | null; goalsSet: Record<string, string[]> }
+    'dotnet-workflow-kit': { rows: PipelineRow[]; isHidden: boolean; dismissed: string[]; activity: Activity | null; background: string[]; goalsSet: Record<string, string[]> }
   }
 }
