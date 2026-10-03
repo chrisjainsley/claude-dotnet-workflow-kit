@@ -378,8 +378,13 @@ async function refresh($: EngineInterface) {
       }
     }
 
+    // The cap below must never push a live item out for a finished one, so unfinished rows sort
+    // ahead of complete ones; the viewing session's own row always stays first.
     found.sort(
-      (a, b) => Number(b.row.isCurrentBranch) - Number(a.row.isCurrentBranch) || b.mtime - a.mtime,
+      (a, b) =>
+        Number(b.row.isCurrentBranch) - Number(a.row.isCurrentBranch) ||
+        Number(isComplete(a.row)) - Number(isComplete(b.row)) ||
+        b.mtime - a.mtime,
     )
     // Two files for one branch (keyed differently by two writers) are one item: keep the newest.
     const seen = new Set<string>()
@@ -689,7 +694,7 @@ export const register: Register = on => {
     const needsYou = list.filter(isWaiting)
     const running = list.filter(row => !isComplete(row) && !isWaiting(row))
     const done = list.filter(isComplete)
-    const dismiss = (slugs: string[]) => update($, dismissed, all => [...all, ...slugs])
+    const dismiss = (slugs: string[]) => update($, dismissed, all => [...new Set([...all, ...slugs])])
 
     const heading = (title: string, count: number, color?: string) => (
       <Text bold color={color} dimColor={!color}>
@@ -799,8 +804,8 @@ export const register: Register = on => {
             <Box flexDirection="row" justifyContent="space-between" alignItems="center">
               {heading('Done', done.length)}
               <Button
-                key="dismiss-done"
-                label="Clear all"
+                key="dismiss-all"
+                label="Dismiss all"
                 plain
                 dimColor
                 onPress={() => dismiss(done.map(row => row.slug))}

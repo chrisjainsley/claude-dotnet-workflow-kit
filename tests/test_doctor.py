@@ -111,3 +111,48 @@ def test_given_malformed_stage_checks_then_doctor_reports_instead_of_crashing(tm
         code, out = run_doctor(tmp_path, bad, "--skip-fixtures")
         assert code == 1, out
         assert "invalid:" in out and "Traceback" not in out
+
+
+def write_state(tmp_path, name, data):
+    state = tmp_path / ".claude" / "dotnet-workflow-kit" / "pipeline"
+    state.mkdir(parents=True, exist_ok=True)
+    (state / name).write_text(json.dumps(data), encoding="utf-8")
+
+
+GOOD_STATE = {"branch": "feat/x", "stages": {"start": {"done": True}, "plan": {"done": False}}}
+
+
+def test_given_well_formed_state_then_doctor_reports_it_ok(tmp_path):
+    write_state(tmp_path, "x.json", GOOD_STATE)
+    code, out = run_doctor(tmp_path, {}, "--skip-fixtures")
+    assert code == 0, out
+    assert "state files:" in out and "BAD" not in out
+
+
+def test_given_state_without_branch_then_doctor_flags_it(tmp_path):
+    write_state(tmp_path, "x.json", {"stages": GOOD_STATE["stages"]})
+    code, out = run_doctor(tmp_path, {}, "--skip-fixtures")
+    assert code == 1
+    assert "x.json: no `branch`" in out
+
+
+def test_given_stage_keys_outside_stages_then_doctor_flags_them(tmp_path):
+    write_state(tmp_path, "x.json", {**GOOD_STATE, "implement": {"done": True}, "sweep": {}})
+    code, out = run_doctor(tmp_path, {}, "--skip-fixtures")
+    assert code == 1
+    assert "implement, sweep sit outside `stages`" in out
+
+
+def test_given_closed_state_without_branch_then_doctor_allows_it(tmp_path):
+    write_state(tmp_path, "x.json", {"stages": GOOD_STATE["stages"], "closed": {"reason": "merged", "at": "2026-10-01T00:00:00Z"}})
+    code, out = run_doctor(tmp_path, {}, "--skip-fixtures")
+    assert code == 0, out
+
+
+def test_given_unreadable_state_then_doctor_flags_it(tmp_path):
+    state = tmp_path / ".claude" / "dotnet-workflow-kit" / "pipeline"
+    state.mkdir(parents=True)
+    (state / "x.json").write_text("{nope", encoding="utf-8")
+    code, out = run_doctor(tmp_path, {}, "--skip-fixtures")
+    assert code == 1
+    assert "x.json: not valid JSON" in out

@@ -187,7 +187,7 @@ Needs you, Running and Done. Open items are cards with their stages, status and 
 button that names the branch whose session to open; the item you are viewing has a
 purple edge and one waiting on you an amber one. A plugin cannot switch the app to
 another session, so Show points you to it instead. Finished items take one line each,
-with a cross to hide one and Clear all to hide the lot. A toast when another item
+with a cross to hide one and Dismiss all to hide the lot. A toast when another item
 reaches a gate is off by default, because the app's own notifications already cover a
 session waiting on you; the last row of the pane turns it on. `/progress` hides or
 shows the bar, and the cross on a finished item hides it.
