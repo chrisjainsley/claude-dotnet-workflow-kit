@@ -20,6 +20,10 @@ ready:
 gh pr create --base <base_branch> --draft --title "<title>" --body-file body.md
 ```
 
+Right after creating it, unless the profile sets `pipeline.open_pr_in_browser` to `false`, and when running in Claude desktop (the built-in browser tools
+`mcp__Claude_Browser__*` are available), open the PR's `url` in that browser with
+`mcp__Claude_Browser__navigate` instead of leaving the link in chat. Skip it elsewhere.
+
 The body describes this ticket's change only. Never name another pull request in it, not a
 parent, sibling or follow-up, and not the shape of a stack. The host already renders a
 stack's chain, and hand-written topology goes stale as layers merge and retarget. The same
