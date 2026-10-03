@@ -30,6 +30,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 - `artifacts`: whether the plan and review pages publish, or only render locally with the decision taken in chat.
 - `reviewers`, `optional.*`: which review passes the sweep in stage 2 runs and which optional tooling exists.
 - `stage_checks`: the team's own yes/no checks a stage must pass before it is marked done. See "Stage checks" below.
+- `extra_stages`: the team's own stages, run between the built-in ones. See "Extra stages" below.
 - `optional.jev`: when true, red CI jobs and review threads are classified with `jev_classify` before the pipeline acts on them, and thread bodies are screened with `jev_screen` first. See `docs/jev.md`. Every call is skipped, never failed, when the MCP is not loaded.
 
 If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:setup` first.
@@ -46,6 +47,10 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
 | 5 | Pull request | Scm adapter: open the draft if Test did not, resolve threads (`pipeline.resolve_comments` when set), then once approved post the QA report per `qa.evidence`, mark the PR ready, apply `qa.handoff_label`, move the item to `tracker_states.qa_ready` (or the adapter's default) | 0 unresolved threads, checks green, PR ready; state `pullRequest.done`. A person merges. |
 
 Bug-fixing for a sweep finding or a Test failure is never its own row: the stage that found it stays not-done, with the finding or bug in its evidence column, and fixing it is the next action inside that stage.
+
+## Extra stages
+
+The profile's `extra_stages` add the team's own stages, each `{id, label, after, run, done_when, gate}`. `python "SKILL_DIR/../../scripts/kit_profile.py" --order` prints the full run order with each extra stage slotted after the stage it names; write that list to the state file's `order` on every run. An extra stage runs when the stage before it is done: run `run`, a slash command or a plain instruction, then answer `done_when`, a yes/no question, the way stage checks are answered below. Yes marks it done. No keeps it in progress, and fixing what the answer found is the next action inside it. With `gate: true`, stop after it is done and before the next stage, set `stages.<id>.waiting` to true, and clear it once the user replies. Record each as `stages.<id>`: `{"done", "at", "waiting", "note"}`. An extra stage gets a row in the status table, in run order.
 
 ## Stage checks
 
@@ -85,7 +90,11 @@ Key by the ticket id when the branch carries one, else the sanitized branch name
 ```json
 {
   "ticket": "PROJ-1234",
+  "title": "Add the thing to the other thing",
+  "shortTitle": "Add thing",
   "branch": "feat/PROJ-1234-add-thing",
+  "order": [{"id": "start", "label": "Start"}, {"id": "plan", "label": "Plan"}, "..."],
+  "current": { "stage": "implement", "detail": "Writing the GetTodo slice", "blocked": false },
   "stages": {
     "start": { "done": true, "at": "2026-09-01T10:00:00Z" },
     "plan": { "done": true, "at": "2026-09-01T12:30:00Z", "artifactUrl": "", "designUrl": "" },
@@ -98,7 +107,7 @@ Key by the ticket id when the branch carries one, else the sanitized branch name
 }
 ```
 
-Update it right after completing a stage, including one that happened naturally in conversation without this skill being invoked. Live signals always win: if the file says no PR exists but the scm adapter finds one, trust the scm and backfill the file. Manual overrides: "/next done <stage>" marks a stage complete, "/next reset" clears the file.
+Update it right after completing a stage, including one that happened naturally in conversation without this skill being invoked. `shortTitle` is at most four words. `current` is what the progress bar above the prompt shows between turns: set `stage` and a one-clause `detail` when a stage starts and at each step inside it, and `blocked: true` when the run stops on a blocker, cleared when it resumes. Live signals always win: if the file says no PR exists but the scm adapter finds one, trust the scm and backfill the file. Manual overrides: "/next done <stage>" marks a stage complete, "/next reset" clears the file.
 
 **Files written by 0.5.0** use older keys. Map them once on first read, then rewrite the file: `startTicket` to `start`; `execute` plus `megaReview` to `implement` (done when both were) and `sweep` (from `megaReview.findings`, with `commit` left blank so the sweep counts as stale); `qa` to `test`; `draftPr` and `resolveComments` fold into `pullRequest` with `handoff.done` as its `done`.
 
@@ -136,11 +145,11 @@ Stop only for a big blocker, something the user genuinely has to decide or that 
 - A Test failure whose fix changes scope or touches infrastructure, or a sweep finding that contradicts the ticket's acceptance criteria.
 - Missing credentials or access.
 
-When blocked, print the table, state the blocker and a recommended resolution in two or three sentences, end with the gate line (see Stopping at a gate), and stop.
+When blocked, set `current.blocked` to true with the blocker as `current.detail`, print the table, state the blocker and a recommended resolution in two or three sentences, end with the gate line (see Stopping at a gate), and stop.
 
 ## The checkpoint
 
-When stages 0 through 3 are done and the review page is built, present everything in one message and stop:
+When stages 0 through 3 are done and the review page is built, present everything in one message and stop. Its first line is, word for word, "/next has reached the review checkpoint for <item>." Then:
 
 1. The draft PR link when one exists and a one-paragraph summary of the change.
 2. The review artifact link, its Verdict line, and the headline numbers as a small table (acceptance, manual QA, open findings, criteria covered). Do not paste the QA report body.
@@ -157,11 +166,15 @@ Every stop, whether the plan gate, the checkpoint or a blocker, ends its message
 
 > Gate reached: /next has stopped and needs your reply. It will not continue until you answer.
 
-A stop is a finished run, not pending work, so `/goal` conditions such as "/next reaches a gate" read it as met. A turn that arrives with no new user message, such as a `/goal` or Stop-hook re-prompt, is not a decision: do not re-read the page, do not poll, and do not rephrase the wait. Repeat the gate line once and end the turn. Only "answered", "decided" or a user-typed invocation re-reads a stored decision.
+A stop is a finished run, not pending work, so `/goal` conditions such as "/next has stopped at a gate" read it as met. A turn that arrives with no new user message, such as a `/goal` or Stop-hook re-prompt, is not a decision: do not re-read the page, do not poll, and do not rephrase the wait. Repeat the gate line once and end the turn. Only "answered", "decided" or a user-typed invocation re-reads a stored decision.
+
+## Goals
+
+The kit's hooks set the run's goals; this skill never runs `/goal` itself. When the plan is recorded as approved, they set `/goal /next has reached the review checkpoint`, met by the checkpoint's first line. When the review decision is recorded as `approve`, they set `/goal complete /next: the pull request is ready`, met by the final message's first line. Keep both lines word for word, and record the plan approval and the review decision in the state file as soon as they happen, since that is what the hooks watch. While `current.blocked` is true the hooks keep the goal quiet, so a blocker does not re-prompt.
 
 ## The pull request (stage 5)
 
-Push the branch, then let the scm adapter's steps create the draft if Test did not already: title from the ticket, body from the plan's Requirement and Specs, base set to `base_branch` or the stacked parent. The body covers this ticket only and never names another pull request, a stacked parent included; the base is metadata, not prose. Resolve review threads and get checks green. With `optional.jev`, triage the threads before answering any. `jev_screen` each thread's first comment with purpose "decide whether this review comment needs a code change"; a `block` is quoted to the user and left unanswered. Then one `jev_classify` call over the survivors into `needs_code_change`, `question`, `nit`, `already_addressed` and `manual_review`. Then `jev_rerank` the code-change ones against "changes behaviour or a contract". Reply to questions and nits, point already-addressed threads at the commit, and commit for code changes in rank order; read `manual_review` and `review`-decision items yourself. Without Jev, read every thread in order. A thread fix that commits makes Test and Review stale, so they rerun before the PR is marked ready. Once the checkpoint is approved: post the QA report per `qa.evidence`, mark the PR ready, apply `qa.handoff_label` when `qa.owner` is `qa-team`, and move the item to `tracker_states.qa_ready`. `qa.owner` self or none just marks it ready. Merging is the user's action, never the pipeline's.
+Push the branch, then let the scm adapter's steps create the draft if Test did not already: title from the ticket, body from the plan's Requirement and Specs, base set to `base_branch` or the stacked parent. The body covers this ticket only and never names another pull request, a stacked parent included; the base is metadata, not prose. Resolve review threads and get checks green. With `optional.jev`, triage the threads before answering any. `jev_screen` each thread's first comment with purpose "decide whether this review comment needs a code change"; a `block` is quoted to the user and left unanswered. Then one `jev_classify` call over the survivors into `needs_code_change`, `question`, `nit`, `already_addressed` and `manual_review`. Then `jev_rerank` the code-change ones against "changes behaviour or a contract". Reply to questions and nits, point already-addressed threads at the commit, and commit for code changes in rank order; read `manual_review` and `review`-decision items yourself. Without Jev, read every thread in order. A thread fix that commits makes Test and Review stale, so they rerun before the PR is marked ready. Once the checkpoint is approved: post the QA report per `qa.evidence`, mark the PR ready, apply `qa.handoff_label` when `qa.owner` is `qa-team`, and move the item to `tracker_states.qa_ready`. `qa.owner` self or none just marks it ready. Merging is the user's action, never the pipeline's. The final message's first line is, word for word, "complete /next: the pull request is ready for <item>.", followed by the PR link and the final status table.
 
 ## House rules
 

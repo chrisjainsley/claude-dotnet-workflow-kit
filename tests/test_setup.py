@@ -277,3 +277,14 @@ def test_given_rerun_then_existing_stage_checks_survive(tmp_path):
     assert run_setup(tmp_path, "--profile", str(second), "--no-install")[0] == 0
     data = json.loads(project_profile_path(tmp_path).read_text(encoding="utf-8"))
     assert data["stage_checks"] == stage
+
+
+def test_given_rerun_then_existing_extra_stages_survive(tmp_path):
+    extra = [{"id": "security", "label": "Security", "after": "implement",
+              "run": "/dotnet-claude-kit:security-scan", "done_when": "Did the scan report no high findings?"}]
+    first = write_answers(tmp_path, {"extra_stages": extra}, "first.json")
+    assert run_setup(tmp_path, "--profile", str(first), "--no-install")[0] == 0
+    second = write_answers(tmp_path, {"testing": {"tdd": "strict"}}, "second.json")
+    assert run_setup(tmp_path, "--profile", str(second), "--no-install")[0] == 0
+    data = json.loads(project_profile_path(tmp_path).read_text(encoding="utf-8"))
+    assert data["extra_stages"] == extra

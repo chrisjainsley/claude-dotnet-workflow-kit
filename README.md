@@ -8,7 +8,7 @@ One project profile sets your architecture, tests, tracker and QA workflow. Use 
 six skills, start, plan, implement, test, review and next, together or on their own,
 with or without a ticket tracker or the Artifact tool.
 
-[Install](#install) | [Workflow](#workflow) | [Skills](#skills) | [/goal](#running-with-goal) | [Branding](#branding) | [Profile reference](#profile-reference) | [dotnet-claude-kit](#dotnet-claude-kit) | [Jev](#jev) | [Contributing](#contributing)
+[Install](#install) | [Workflow](#workflow) | [Skills](#skills) | [Progress bar](#progress-bar) | [/goal](#running-with-goal) | [Branding](#branding) | [Profile reference](#profile-reference) | [dotnet-claude-kit](#dotnet-claude-kit) | [Jev](#jev) | [Contributing](#contributing)
 
 ## Install
 
@@ -168,25 +168,41 @@ update any saved prompts or `/goal` text.
 | `visual-review` | `review` |
 | Draft PR, Resolve comments and Publish and hand off stages | `next` stage 5, Pull request |
 
+## Progress bar
+
+The kit ships a Claude Code mod that draws a progress bar above the prompt, in the
+terminal and the desktop Code tab. It shows one row per work item: the ticket id and a
+short title, a bar with a segment per stage, the current stage, the percentage and what
+Claude is doing right now. The bar reads the pipeline state file that `start`, `plan`
+and `next` write, so it follows the current branch's item and any other unfinished
+item on a branch of the same repository touched in the last day. A stage waiting on you
+turns amber. `/progress` hides or shows the bar, and the cross on a row hides that row.
+
+The bar turns on by itself once the plugin is installed: mods load in every new session,
+with nothing to enable. It stays empty until a work item is started. An organisation's
+managed settings can block user-installed mods, for example with `allowManagedModsOnly`.
+
 ## Running with /goal
 
 `/next` runs stage after stage inside one turn, but nothing restarts it if the turn
-ends early. To keep the pipeline moving until it reaches a gate, wrap it in a goal:
+ends early. The kit's hooks wrap each half of the run in a goal for you:
+
+| When | The hooks set |
+|---|---|
+| The plan is approved | `/goal /next has reached the review checkpoint` |
+| The review is approved | `/goal complete /next: the pull request is ready` |
+
+Each goal is met by the message `/next` ends that half with, so it clears on its own
+instead of re-prompting while you decide. While `/next` is stopped on a blocker the
+hooks keep the goal quiet until you answer. At the plan page, send your answers and
+tell the session "answered", or approve the plan. At the review page, send your
+decision and tell the session "decided". Pages cannot wake the session themselves.
+
+Without function hooks, set a goal yourself after each gate:
 
 ```text
-/dotnet-workflow-kit:start 1234
 /goal /next has stopped at a gate
 ```
-
-The goal keeps `/next` running until it stops at the plan gate, the review
-checkpoint or a blocker. Every stop ends with "Gate reached: /next has stopped and
-needs your reply", which the goal evaluator reads as met, so the goal clears instead
-of re-prompting while you decide. Phrase the condition as reaching a gate: a goal
-such as `complete /next` is never met at a gate, because the pipeline is not
-finished while it waits for you, and the hook loops. At the plan page, send your
-answers and tell the session "answered", or approve the plan. At the review page,
-send your decision and tell the session "decided". Pages cannot wake the session
-themselves. After each gate, set the same goal again to continue.
 
 Tool permission prompts may still require input. When the pipeline reports a
 blocker, resolve it before continuing.
@@ -258,6 +274,7 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `jev.flag_at` | Number from 0 to 1 | `0.75` | Probability at or above which a scored check becomes a finding at the rule's severity. |
 | `jev.review_at` | Number from 0 to 1, at most `flag_at` | `0.4` | Probability at or above which a scored check is listed as low with "confirm by reading". |
 | `checks` | List of `{id, rule, severity, files}` | `[]` | Review checks the conventions reviewer enforces; `files` is an optional glob. Edited in the file, validated by `scripts/doctor.py`. |
+| `extra_stages` | List of `{id, label, after, run, done_when, gate}` | `[]` | The team's own `/next` stages. `after` names a built-in stage other than `pull_request`, or an earlier extra stage; `run` is a slash command or an instruction; `done_when` is the yes/no question that marks it done; `gate: true` stops for you after it. `label` is at most 12 characters and shows on the progress bar. Edited in the file. |
 | `stage_checks` | Object of stage name to a list of `{id, prompt, on_fail}` | `{}` | Yes/no prompts a `/next` stage must pass before it is marked done. Stages: `start`, `plan`, `implement`, `test`, `review`, `pull_request`. `on_fail` is `fix` (default, keep working the stage) or `stop` (blocker). Edited in the file. |
 
 Validation requires a tracker when `qa.evidence` is `work-item`. Both `bug-hunt` and
@@ -316,6 +333,17 @@ Claude answers them otherwise:
   "implement": [{"id": "migration-reviewed", "prompt": "Does every new EF Core migration have a matching Down method?"}],
   "test": [{"id": "e2e-ran", "prompt": "Does the test output show the Playwright suite ran and passed?", "on_fail": "stop"}]
 }
+```
+
+Add your own stages to the pipeline. `/next` runs each after the stage it names, and the
+progress bar gets a segment for it:
+
+```json
+"extra_stages": [
+  {"id": "security", "label": "Security", "after": "implement",
+   "run": "/dotnet-claude-kit:security-scan",
+   "done_when": "Did the scan report no high or critical findings?"}
+]
 ```
 
 Add your own review checks to the profile; the conventions reviewer enforces them on
