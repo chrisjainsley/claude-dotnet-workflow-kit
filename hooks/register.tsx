@@ -360,8 +360,13 @@ async function refresh($: EngineInterface) {
       }
     }
 
+    // The cap below must never push a live item out for a finished one, so unfinished rows sort
+    // ahead of complete ones; the viewing session's own row always stays first.
     found.sort(
-      (a, b) => Number(b.row.isCurrentBranch) - Number(a.row.isCurrentBranch) || b.mtime - a.mtime,
+      (a, b) =>
+        Number(b.row.isCurrentBranch) - Number(a.row.isCurrentBranch) ||
+        Number(isComplete(a.row)) - Number(isComplete(b.row)) ||
+        b.mtime - a.mtime,
     )
     // Two files for one branch (keyed differently by two writers) are one item: keep the newest.
     const seen = new Set<string>()
@@ -675,9 +680,20 @@ export const register: Register = on => {
         {list.length === 0 ? <Text dimColor>No work items in this repository yet. /start begins one.</Text> : null}
         {groups.map(group => (
           <Box key={group.title} flexDirection="column" gap={1}>
-            <Text bold color={group.color} dimColor={!group.color}>
-              {group.title} · {group.items.length}
-            </Text>
+            <Box flexDirection="row" gap={1}>
+              <Text bold color={group.color} dimColor={!group.color}>
+                {group.title} · {group.items.length}
+              </Text>
+              {group.title === 'Done' ? (
+                <Button
+                  key="dismiss-all"
+                  label="Dismiss all"
+                  plain
+                  dimColor
+                  onPress={() => update($, dismissed, slugs => [...new Set([...slugs, ...group.items.map(row => row.slug)])])}
+                />
+              ) : null}
+            </Box>
             {group.items.map(row => (
               <Box key={row.slug} flexDirection="column">
                 <Box flexDirection="row" gap={1}>

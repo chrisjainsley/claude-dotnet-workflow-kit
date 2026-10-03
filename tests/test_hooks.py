@@ -70,6 +70,18 @@ def test_given_hooks_then_the_closing_script_runs_on_a_slow_timer():
     assert "const CLOSE_MS = 10 * 60 * 1000" in text
 
 
+def test_given_more_rows_than_the_cap_then_live_items_sort_ahead_of_complete_ones():
+    text = register_text()
+    sort = text[text.index("found.sort("):text.index("const seen = new Set")]
+    assert sort.index("isCurrentBranch") < sort.index("isComplete(a.row)") < sort.index("b.mtime - a.mtime")
+
+
+def test_given_done_group_then_dismiss_all_hides_every_done_row():
+    text = register_text()
+    assert 'label="Dismiss all"' in text
+    assert "...group.items.map(row => row.slug)" in text
+
+
 def test_given_progress_done_then_the_current_item_closes_by_hand():
     text = register_text()
     assert "e.args.trim() === 'done'" in text
