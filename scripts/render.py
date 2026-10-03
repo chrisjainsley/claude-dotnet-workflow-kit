@@ -723,10 +723,27 @@ def split_option(text):
     return recommended, label.rstrip("."), detail
 
 
+PLAN_DECISION = (
+    '<fieldset class="d plan-decision"><legend>Decision</legend>'
+    '<label class="opt"><input type="radio" name="verdict" value="approve"><span class="opt-body"><span class="opt-label">Approve</span>'
+    '<span class="opt-detail">Take these answers and start implementing straight away.</span></span></label>'
+    '<label class="opt"><input type="radio" name="verdict" value="changes"><span class="opt-body"><span class="opt-label">Revise the plan</span>'
+    '<span class="opt-detail">Say what in the notes; the plan is rebuilt and comes back for approval.</span></span></label>'
+    '<textarea name="notes" rows="3" placeholder="Notes for the plan, optional on approve"></textarea>'
+    "</fieldset>"
+)
+
+
 def render_questions(lines):
+    """The Open questions section as one form: a fieldset per question, then the plan decision."""
     first = next((l for l in lines if l.strip()), "")
     if not LIST_RE.match(first):
-        return render_blocks(lines), 0
+        return (
+            render_blocks(lines)
+            + '<form class="qform" id="qform" autocomplete="off">' + PLAN_DECISION
+            + '<div class="qfoot"><span class="qstatus" id="qstatus"></span>'
+            '<button type="submit" id="qsend">Send decision</button></div></form>'
+        ), 0
     i = next(n for n, l in enumerate(lines) if l.strip())
     items, _ = parse_list(lines, i)
     out = ['<form class="qform" id="qform" autocomplete="off">']
@@ -755,6 +772,7 @@ def render_questions(lines):
         else:
             out.append(f'<textarea name="{qid}" rows="3" placeholder="Constraints, accounts to use, files that must not move..."></textarea>')
         out.append("</fieldset>")
+    out.append(PLAN_DECISION)
     out.append(
         '<div class="qfoot"><span class="qcount" id="qcount"></span>'
         '<span class="qstatus" id="qstatus"></span>'

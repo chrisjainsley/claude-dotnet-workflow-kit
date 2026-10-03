@@ -40,7 +40,7 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
 | # | Stage | How it's done | Done when |
 |---|-------|----------------|-----------|
 | 0 | Start | `/dotnet-workflow-kit:start` | Branch matching `branch_pattern` exists, item active per the tracker adapter; with `tracker: none`, the branch alone is enough |
-| 1 | Plan | `/dotnet-workflow-kit:plan` | Plan page produced and the user has answered or approved it; state `plan.artifactUrl`, plus `plan.designUrl` when the plan made a Design canvas. **Gate: the user answers or approves.** |
+| 1 | Plan | `/dotnet-workflow-kit:plan` | Plan page produced and the user has approved it; state `plan.artifactUrl`, plus `plan.designUrl` when the plan made a Design canvas. **Gate: the user approves.** Approve continues straight to Implement in the same turn; Revise rebuilds the plan and stops at the gate again. |
 | 2 | Implement | `/dotnet-workflow-kit:implement`, or `pipeline.execute` when set followed by the sweep | Commits exist on the branch beyond the base; state `sweep.commit` is HEAD with findings fixed or accepted |
 | 3 | Test | `/dotnet-workflow-kit:test`, or `pipeline.qa` when set; the draft PR is opened and `qa.deploy_label` applied when `qa.environment` needs a deployment | Suites green, the plan's scenarios pass; state `test.done` |
 | 4 | Review | `/dotnet-workflow-kit:review`, built after Test so it reflects the final diff; do not post to the tracker yet | State `review.artifactUrl` and `review.decision`. **Gate: the checkpoint.** |
@@ -158,7 +158,7 @@ When stages 0 through 3 are done and the review page is built, present everythin
 
 The review link goes in the checkpoint message itself as a plain URL; a link only inside a subagent's transcript does not count as delivered.
 
-Then wait. When the user says "decided" or invokes the pipeline again, read the decision with the Artifact tool: `read_db`, `db_op: "list"`, `collection: "review"`, url from `review.artifactUrl`. The `decision` document carries `verdict` (`approve` or `changes`) and `notes`; `finding-<n>` documents carry `action` (`fix` or `accept`) per open finding. Approve continues to stage 5. Changes returns to stage 2 with the notes and the per-finding fix or accept choices, then rebuilds and republishes the review to the same URL before re-presenting only what changed. With `artifacts: false`, take the verdict in chat instead.
+Then wait. When the user says "decided", a "Review decision" artifact comment arrives from the page, or the user invokes the pipeline again, read the decision with the Artifact tool: `read_db`, `db_op: "list"`, `collection: "review"`, url from `review.artifactUrl`. The `decision` document carries `verdict` (`approve` or `changes`) and `notes`; `finding-<n>` documents carry `action` (`fix` or `accept`) per open finding. Approve continues to stage 5 in the same turn, with no further confirmation. Changes returns to stage 2 with the notes and the per-finding fix or accept choices, then rebuilds and republishes the review to the same URL before re-presenting only what changed. With `artifacts: false`, take the verdict in chat instead.
 
 ## Stopping at a gate
 
@@ -166,7 +166,7 @@ Every stop, whether the plan gate, the checkpoint or a blocker, ends its message
 
 > Gate reached: /next has stopped and needs your reply. It will not continue until you answer.
 
-A stop is a finished run, not pending work, so `/goal` conditions such as "/next has stopped at a gate" read it as met. A turn that arrives with no new user message, such as a `/goal` or Stop-hook re-prompt, is not a decision: do not re-read the page, do not poll, and do not rephrase the wait. Repeat the gate line once and end the turn. Only "answered", "decided" or a user-typed invocation re-reads a stored decision.
+A stop is a finished run, not pending work, so `/goal` conditions such as "/next has stopped at a gate" read it as met. A turn that arrives with no new user message, such as a `/goal` or Stop-hook re-prompt, is not a decision: do not re-read the page, do not poll, and do not rephrase the wait. Repeat the gate line once and end the turn. Only "answered", "decided", a "Plan decision" or "Review decision" artifact comment from the page, or a user-typed invocation re-reads a stored decision. An approve read this way resumes the run at once.
 
 ## Goals
 
@@ -194,4 +194,4 @@ Push the branch, then let the scm adapter's steps create the draft if Test did n
 - A sweep, test or review marker older than the branch's latest commit is stale, not done; downgrade it and redo the stage rather than trust a marker describing an earlier diff.
 - Stacked layers: a stage measures only the work above its own parent, never above the ultimate base, and merging a layer merges everything below it, so the checkpoint must name the parent PRs that need to clear QA first. That belongs in the chat checkpoint alone; it never goes into the PR body or the tracker, where the host's own stack view is the source of truth.
 - With `artifacts: false`, the pages still render but cannot send a decision back to this session; take every decision in chat and still record it in the state file.
-- The pages cannot wake this session on their own; only "answered" or "decided" from the user, or a fresh invocation, triggers a re-read of a stored decision.
+- The pages wake this session only through Send to Claude, which needs the `comments` capability and a session watching the page. Otherwise "answered" or "decided" from the user, or a fresh invocation, triggers a re-read of a stored decision.

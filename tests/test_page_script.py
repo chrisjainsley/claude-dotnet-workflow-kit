@@ -75,3 +75,44 @@ def test_given_evidence_review_then_inline_script_parses(tmp_path):
             [node, "--check", str(path)], capture_output=True, text=True, encoding="utf-8", errors="replace"
         )
         assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_given_page_template_then_both_forms_send_to_claude_with_a_chat_fallback():
+    script = "\n".join(inline_scripts())
+    assert "use('comments')" in script
+    assert script.count("await sendToClaude(") == 2
+    assert "canSendToClaude()" in script
+    assert script.count('Tell Claude "decided"') == 2
+
+
+def test_given_plan_and_review_skills_then_they_declare_comments_beside_db():
+    root = Path(__file__).resolve().parents[1]
+    for skill in ("plan", "review"):
+        text = (root / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
+        assert '{"db": {}, "comments": {}}' in text, skill
+
+
+def test_given_plan_source_then_the_form_ends_with_an_approve_or_revise_decision(tmp_path, plan_fixture_path):
+    out_path = tmp_path / "plan.html"
+    code, out, err = run_py(RENDER_PY, plan_fixture_path, "--out", out_path)
+    assert code == 0, out + err
+    page = out_path.read_text(encoding="utf-8")
+    form = page[page.index('<form class="qform"'):]
+    form = form[: form.index("</form>")]
+    assert 'class="d plan-decision"' in form
+    assert 'name="verdict" value="approve"' in form
+    assert 'name="verdict" value="changes"' in form
+
+
+def test_given_plan_with_no_open_questions_then_the_decision_form_still_renders(tmp_path, plan_fixture_path):
+    text = Path(plan_fixture_path).read_text(encoding="utf-8")
+    head, _, _ = text.partition("## Open questions")
+    source = tmp_path / "plan.md"
+    source.write_text(head + "## Open questions\nNone.\n", encoding="utf-8")
+    out_path = tmp_path / "plan.html"
+    code, out, err = run_py(RENDER_PY, source, "--out", out_path)
+    assert code == 0, out + err
+    page = out_path.read_text(encoding="utf-8")
+    assert '<form class="qform" id="qform"' in page
+    assert 'class="d plan-decision"' in page
+    assert 'class="q"' not in page

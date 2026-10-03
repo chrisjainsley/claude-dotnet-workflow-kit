@@ -36,6 +36,9 @@ to store what you do on them, so without it they render but cannot save anything
   persist; reloading the page resets it.
 - The review's **decision form**. You can see the approve and request-changes options
   and the per-finding fix or accept radios, but submitting them has nowhere to go.
+- The **Send to Claude** step. With Artifacts, submitting either form also posts the
+  choices to the session as an artifact comment, so the run carries on by itself. A
+  local page has no session to reach.
 
 ## Answer in chat instead
 

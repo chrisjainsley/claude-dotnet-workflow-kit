@@ -53,3 +53,24 @@ def test_given_state_fields_the_bar_reads_then_skills_write_them():
 def test_given_repo_then_hooks_name_no_owner_paths():
     text = register_text()
     assert "dev-mods" not in text, "hooks must not point at a local dev-mods folder"
+
+
+def test_given_hooks_then_closed_items_read_done_and_leave_after_a_day():
+    text = register_text()
+    assert "!!data.closed || stageDone(stages, stage.id)" in text
+    assert "now - Date.parse(data.closed.at) > REMOVE_MS" in text
+    assert "const REMOVE_MS = 24 * 60 * 60 * 1000" in text
+
+
+def test_given_hooks_then_the_closing_script_runs_on_a_slow_timer():
+    text = register_text()
+    assert "/scripts/close_items.py" in text
+    assert (REPO_ROOT / "scripts" / "close_items.py").is_file()
+    assert "$.clock.every(CLOSE_MS, () => void closeItems($))" in text
+    assert "const CLOSE_MS = 10 * 60 * 1000" in text
+
+
+def test_given_progress_done_then_the_current_item_closes_by_hand():
+    text = register_text()
+    assert "e.args.trim() === 'done'" in text
+    assert "reason: 'manual'" in text
