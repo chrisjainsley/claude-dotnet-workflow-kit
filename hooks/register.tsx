@@ -43,6 +43,19 @@ const CLOSE_MS = 10 * 60 * 1000
 const CLOSED_LABELS: Record<string, string> = { merged: 'Merged', closed: 'PR closed', archived: 'Archived', manual: 'Done' }
 
 const COLOR = { done: '#c4c0ff', active: '#8e86f8', waiting: '#f59e0b', todo: '#6b7280' }
+// The Sessions pane's cards: a purple edge on the item being viewed, an amber one on an item
+// waiting on you, with a faint tint of the same where the surface can draw one.
+const CARD = {
+  border: '#3a3836',
+  currentBorder: '#5d52a3',
+  currentTint: '#9d8cff14',
+  currentText: '#c9bfff',
+  waitingBorder: '#8a6a33',
+  waitingTint: '#e9ae4f14',
+  check: '#6fbf73',
+}
+// A card's stage segments: done stages muted, the active one bright, those ahead a dark track.
+const SEGMENT = { done: '#5d52a3', active: '#9d8cff', waitingDone: '#8a6a33', waiting: '#e9ae4f', todo: '#3a3836' }
 
 type Stage = {
   done?: boolean
@@ -182,6 +195,11 @@ const same = (a: string, b: string) =>
 const rowName = (row: PipelineRow) =>
   (row.ticket && same(row.ticket, row.title) ? row.ticket : [row.ticket, row.title].filter(Boolean).join(' ')) ||
   row.slug
+// The ticket and title apart, for the pane's cards; a slug-style ticket stands in for the title.
+const nameParts = (row: PipelineRow) =>
+  row.ticket && same(row.ticket, row.title)
+    ? { ticket: '', title: row.ticket }
+    : { ticket: row.ticket, title: row.title || row.slug }
 const pct = (row: PipelineRow) => Math.round((row.doneCount / row.labels.length) * 100)
 const isComplete = (row: PipelineRow) => row.activeIndex === -1
 const isWaiting = (row: PipelineRow) => !isComplete(row) && row.statuses[row.activeIndex] === 'waiting'
@@ -658,81 +676,148 @@ export const register: Register = on => {
     )
   })
 
-  // Every item in this repository, grouped by what it needs from the person.
+  // Every item in this repository, grouped by what it needs from the person: open items as cards
+  // with their stages, finished ones as a single line each.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button } = $.ui.resolve(e)
+    const elements = $.ui.resolve(e)
+    const { Box, Text, Button } = elements
+    const Svg = 'Svg' in elements ? elements.Svg : undefined
+    const isTerminal = e.surface === 'terminal'
     const hiddenSlugs = await read($, dismissed)
     const list = (await read($, rows)).filter(row => !hiddenSlugs.includes(row.slug))
     const shouldNotify = await read($, notifyOthers)
-    const groups = [
-      { title: 'Needs you', color: COLOR.waiting, items: list.filter(isWaiting) },
-      { title: 'Running', color: undefined, items: list.filter(row => !isComplete(row) && !isWaiting(row)) },
-      { title: 'Done', color: undefined, items: list.filter(isComplete) },
-    ].filter(group => group.items.length > 0)
+    const needsYou = list.filter(isWaiting)
+    const running = list.filter(row => !isComplete(row) && !isWaiting(row))
+    const done = list.filter(isComplete)
+    const dismiss = (slugs: string[]) => update($, dismissed, all => [...all, ...slugs])
+
+    const heading = (title: string, count: number, color?: string) => (
+      <Text bold color={color} dimColor={!color}>
+        {title.toUpperCase()} · {count}
+      </Text>
+    )
+
+    const stages = (row: PipelineRow) => {
+      const alt = `${stageLabel(row)}, ${pct(row)}% complete`
+      if (Svg) return <Svg source={segmentsSvg(row)} alt={alt} height={SEGMENT_HEIGHT} />
+
+      return (
+        <Text wrap="truncate-end">
+          {row.statuses.map((s, i) => (
+            <Text key={`${row.slug}-${i}`} color={segmentColor(row, s)}>
+              {s === 'todo' ? '▱▱▱ ' : '▰▰▰ '}
+            </Text>
+          ))}
+        </Text>
+      )
+    }
+
+    const card = (row: PipelineRow) => {
+      const waiting = isWaiting(row)
+      const name = nameParts(row)
+      const border = waiting ? CARD.waitingBorder : row.isCurrentBranch ? CARD.currentBorder : CARD.border
+      const tint = isTerminal ? undefined : waiting ? CARD.waitingTint : row.isCurrentBranch ? CARD.currentTint : undefined
+
+      return (
+        <Box
+          key={`card-${row.slug}`}
+          flexDirection="column"
+          gap={isTerminal ? 0 : 1}
+          paddingX={1}
+          paddingY={isTerminal ? 0 : 1}
+          borderStyle="round"
+          borderColor={border}
+          backgroundColor={tint}
+        >
+          <Box flexDirection="row" gap={1} alignItems="center">
+            {name.ticket ? <Text dimColor>{name.ticket}</Text> : null}
+            <Box flexGrow={1} flexShrink={1} minWidth={0}>
+              <Text bold wrap="truncate-end">
+                {name.title}
+              </Text>
+            </Box>
+            {row.isCurrentBranch ? <Text color={CARD.currentText}>Viewing</Text> : null}
+          </Box>
+          {stages(row)}
+          <Box flexDirection="row" gap={1} alignItems="center">
+            <Box flexGrow={1} flexShrink={1} minWidth={0}>
+              <Text wrap="truncate-end">
+                <Text color={waiting ? COLOR.waiting : CARD.currentText}>{stageLabel(row)}</Text>
+                {row.detail ? <Text dimColor>{` · ${row.detail.replace(/^Waiting on you: /, '')}`}</Text> : null}
+              </Text>
+            </Box>
+            {row.isCurrentBranch ? null : (
+              <Button
+                key={`show-${row.slug}`}
+                label="Show"
+                variant={waiting ? 'primary' : undefined}
+                onPress={() =>
+                  $.ui.toast(`${rowName(row)} is on ${row.branch || 'another branch'}: open its session from the list`)
+                }
+              />
+            )}
+          </Box>
+        </Box>
+      )
+    }
+
+    const doneLine = (row: PipelineRow) => {
+      const name = nameParts(row)
+
+      return (
+        <Box key={`done-${row.slug}`} flexDirection="row" gap={1} alignItems="center" paddingX={1}>
+          <Text color={CARD.check}>✓</Text>
+          {name.ticket ? <Text dimColor>{name.ticket}</Text> : null}
+          <Box flexGrow={1} flexShrink={1} minWidth={0}>
+            <Text dimColor wrap="truncate-end">
+              {name.title}
+            </Text>
+          </Box>
+          <Text dimColor>{row.detail || 'Done'}</Text>
+          <Button key={`dismiss-${row.slug}`} label="✕" plain dimColor onPress={() => dismiss([row.slug])} />
+        </Box>
+      )
+    }
 
     return (
       <Box flexDirection="column" gap={1}>
         {list.length === 0 ? <Text dimColor>No work items in this repository yet. /start begins one.</Text> : null}
-        {groups.map(group => (
-          <Box key={group.title} flexDirection="column" gap={1}>
-            <Text bold color={group.color} dimColor={!group.color}>
-              {group.title} · {group.items.length}
-            </Text>
-            {group.items.map(row => (
-              <Box key={row.slug} flexDirection="column">
-                <Box flexDirection="row" gap={1}>
-                  <Text color={dotColor(row)}>●</Text>
-                  <Box flexGrow={1} flexShrink={1} minWidth={0}>
-                    <Text wrap="truncate-end" bold={row.isCurrentBranch}>
-                      {rowName(row)}
-                    </Text>
-                  </Box>
-                  {row.isCurrentBranch ? <Text dimColor>viewing</Text> : null}
-                </Box>
-                <Box flexDirection="row">
-                  {row.statuses.map((s, i) => (
-                    <Text key={`${row.slug}-${i}`} color={s === 'todo' ? COLOR.todo : COLOR[s]} dimColor={s === 'todo'}>
-                      {s === 'todo' ? '▱▱▱ ' : '▰▰▰ '}
-                    </Text>
-                  ))}
-                </Box>
-                <Text
-                  color={isWaiting(row) ? COLOR.waiting : undefined}
-                  dimColor={!isWaiting(row)}
-                  wrap="truncate-end"
-                >
-                  {[stageLabel(row), row.detail].filter(Boolean).join(' · ')}
-                </Text>
-                {!row.isCurrentBranch && !isComplete(row) ? (
-                  <Button
-                    key={`show-${row.slug}`}
-                    label="Show"
-                    plain
-                    onPress={() =>
-                      $.ui.toast(`${rowName(row)} is on ${row.branch || 'another branch'}: open its session from the list`)
-                    }
-                  />
-                ) : null}
-                {isComplete(row) ? (
-                  <Button
-                    key={`dismiss-${row.slug}`}
-                    label="Dismiss"
-                    plain
-                    dimColor
-                    onPress={() => update($, dismissed, slugs => [...slugs, row.slug])}
-                  />
-                ) : null}
-              </Box>
-            ))}
+        {needsYou.length > 0 ? (
+          <Box key="needs-you" flexDirection="column" gap={1}>
+            {heading('Needs you', needsYou.length, COLOR.waiting)}
+            {needsYou.map(card)}
           </Box>
-        ))}
-        <Button
-          key="notify-others"
-          label={`Toast when another item needs me: ${shouldNotify ? 'on' : 'off'}`}
-          plain
-          dimColor
-          onPress={() => update($, notifyOthers, isOn => !isOn)}
-        />
+        ) : null}
+        {running.length > 0 ? (
+          <Box key="running" flexDirection="column" gap={1}>
+            {heading('Running', running.length)}
+            {running.map(card)}
+          </Box>
+        ) : null}
+        {done.length > 0 ? (
+          <Box key="done" flexDirection="column" gap={isTerminal ? 0 : 1}>
+            <Box flexDirection="row" justifyContent="space-between" alignItems="center">
+              {heading('Done', done.length)}
+              <Button
+                key="dismiss-done"
+                label="Clear all"
+                plain
+                dimColor
+                onPress={() => dismiss(done.map(row => row.slug))}
+              />
+            </Box>
+            {done.map(doneLine)}
+          </Box>
+        ) : null}
+        <Box marginTop={1}>
+          <Button
+            key="notify-others"
+            label={`Notify me when another session needs me: ${shouldNotify ? 'On' : 'Off'}`}
+            plain
+            dimColor
+            onPress={() => update($, notifyOthers, isOn => !isOn)}
+          />
+        </Box>
       </Box>
     )
   })
@@ -748,6 +833,31 @@ async function toggleSessions($: EngineInterface): Promise<boolean> {
   await $.ui.open({ id: PANE, title: 'Sessions' })
 
   return true
+}
+
+function segmentColor(row: PipelineRow, status: StageStatus): string {
+  if (status === 'done') return isWaiting(row) ? SEGMENT.waitingDone : SEGMENT.done
+
+  return SEGMENT[status]
+}
+
+const SEGMENT_WIDTH = 360
+const SEGMENT_HEIGHT = 4
+
+// A card's stages as thin rounded segments with a small gap between each.
+function segmentsSvg(row: PipelineRow): string {
+  const gap = 3
+  const total = row.statuses.length
+  const w = (SEGMENT_WIDTH - gap * (total - 1)) / total
+  const bars = row.statuses.map(
+    (s, i) =>
+      `<rect x="${(i * (w + gap)).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${SEGMENT_HEIGHT}" rx="2" fill="${segmentColor(row, s)}"/>`,
+  )
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${SEGMENT_WIDTH}" height="${SEGMENT_HEIGHT}" ` +
+    `viewBox="0 0 ${SEGMENT_WIDTH} ${SEGMENT_HEIGHT}" preserveAspectRatio="none">${bars.join('')}</svg>`
+  )
 }
 
 function escapeXml(text: string) {

@@ -183,12 +183,14 @@ bar reads the pipeline state file that `start`, `plan` and `next` write.
 Other items on branches of the same repository, touched in the last day, appear as a
 `+N` chip at the end of the bar; it turns amber when one of them is waiting on you.
 Pressing the chip, or `/sessions`, opens the Sessions pane: every item grouped as
-Needs you, Running and Done, each with its stages, status and a Show button that names
-the branch whose session to open. A plugin cannot switch the app to another session,
-so Show points you to it instead. A toast when another item reaches a gate is off by
-default, because the app's own notifications already cover a session waiting on you;
-the last row of the pane turns it on. `/progress` hides or shows the bar, and the cross
-on a finished item hides it.
+Needs you, Running and Done. Open items are cards with their stages, status and a Show
+button that names the branch whose session to open; the item you are viewing has a
+purple edge and one waiting on you an amber one. A plugin cannot switch the app to
+another session, so Show points you to it instead. Finished items take one line each,
+with a cross to hide one and Clear all to hide the lot. A toast when another item
+reaches a gate is off by default, because the app's own notifications already cover a
+session waiting on you; the last row of the pane turns it on. `/progress` hides or
+shows the bar, and the cross on a finished item hides it.
 
 An item closes by itself when its pull request merges or closes, or when the worktree it
 was started in is gone, as it is once a worktree chat is archived; `/progress done`
