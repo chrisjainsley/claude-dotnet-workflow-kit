@@ -74,7 +74,7 @@ DEFAULTS = {
     "branding": True,
     "stack": {"data": "ef-core", "api": "minimal-api", "messaging": "none", "errors": "exceptions", "local_run": "plain", "frontend": "none"},
     "reviewers": list(BUILT_IN_REVIEWERS),
-    "pipeline": {"execute": "", "resolve_comments": "", "qa": "", "open_pr_in_browser": True},
+    "pipeline": {"execute": "", "resolve_comments": "", "qa": "", "open_pr_in_browser": True, "auto_fix_pr": True},
     "optional": {"dotnet-claude-kit": False, "codex": False, "roslyn-mcp": False, "jev": False},
     "jev": {"flag_at": 0.75, "review_at": 0.4},
     "checks": [],
