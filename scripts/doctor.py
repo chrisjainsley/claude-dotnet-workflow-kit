@@ -9,6 +9,7 @@ and why; and, unless --skip-fixtures, that the plan and review checkers still pa
 shipped fixtures. Exit 1 on any problem. Needs only Python; never calls the claude CLI.
 """
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -121,9 +122,43 @@ def fixture_report():
     return results
 
 
+STAGE_KEYS = {"start", "plan", "implement", "sweep", "test", "review", "pullRequest"}
+
+
+def state_report(directory):
+    """Flag pipeline state files the progress bar and Sessions pane would silently drop.
+
+    The mod ties an item to its repository by `branch` and reads stage data only under
+    `stages`, so a file missing either never shows.
+    """
+    problems = []
+    for path in sorted(Path(directory).glob("*.json")) if Path(directory).is_dir() else []:
+        if "-checks" in path.name or path.name.endswith("-rules.json"):
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            problems.append(f"{path.name}: not valid JSON")
+            continue
+        if not isinstance(data, dict):
+            problems.append(f"{path.name}: not a state object")
+            continue
+        if data.get("closed"):
+            continue  # a closed item leaves the pane within a day, so its shape no longer matters
+        stray = sorted(STAGE_KEYS & data.keys())
+        if stray:
+            problems.append(f"{path.name}: {', '.join(stray)} sit outside `stages`, so the bar ignores them")
+        if not data.get("stages"):
+            problems.append(f"{path.name}: no `stages`, so the bar never shows it")
+        if not data.get("branch"):
+            problems.append(f"{path.name}: no `branch`, so other sessions cannot match it to their repository")
+    return problems
+
+
 def main(argv=None):
     ap = add_profile_arg(argparse.ArgumentParser(description=__doc__.splitlines()[0]))
     ap.add_argument("--skip-fixtures", action="store_true")
+    ap.add_argument("--state-dir", default=None, help="pipeline state directory (default ~/.claude/dotnet-workflow-kit/pipeline)")
     args = ap.parse_args(argv)
     profile = resolve_profile(explicit=args.profile)
     problems = validate(profile)
@@ -152,6 +187,14 @@ def main(argv=None):
         for stage, checks in gated:
             stops = sum(c["on_fail"] == "stop" for c in checks)
             print(f"  {stage:<14} {len(checks)} check{'s' if len(checks) != 1 else ''}" + (f", {stops} stop on fail" if stops else ""))
+
+    state_problems = state_report(args.state_dir or Path.home() / ".claude" / "dotnet-workflow-kit" / "pipeline")
+    print("state files:")
+    for problem in state_problems:
+        print(f"  BAD {problem}")
+    if not state_problems:
+        print("  ok")
+    problems += state_problems
 
     if not args.skip_fixtures:
         print("fixtures:")

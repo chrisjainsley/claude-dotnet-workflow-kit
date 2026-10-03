@@ -115,7 +115,7 @@ run continues.
    the Jev block. Record `sweep.gate` as `{"action", "reason_codes", "safe_to_apply"}`.
    Without the MCP, write `skipped: jev MCP not loaded` in the Jev block.
 10. **Write the pipeline state.** Save the consolidated findings to
-   `~/.claude/dotnet-workflow-kit/pipeline/<slug>.json` under the key `sweep`, as
+   `~/.claude/dotnet-workflow-kit/pipeline/<slug>.json` under the key `stages.sweep`, as
    `{"at": "<ISO time>", "commit": "<HEAD sha>", "findings": [...], "skipped": [...],
    "checks": "<path or empty>", "gate": {...} or omitted}`, one entry per reviewer in
    each finding and skipped list. The `review` skill reads this key and copies it

@@ -71,8 +71,8 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
    decisions yourself too; a classification is a hint about scope, not a verdict on
    the code.
 6. **Write the pipeline state.** In `~/.claude/dotnet-workflow-kit/pipeline/<slug>.json`
-   set `implement` to `{"done": true, "at": "<ISO time>", "commits": <n>}`; the sweep
-   step has already written `sweep`.
+   set `stages.implement` to `{"done": true, "at": "<ISO time>", "commits": <n>}`; the sweep
+   step has already written `stages.sweep`. If the file does not exist yet (the session never ran `/start`), create it first in the full shape under `/next`'s State file section, with `branch` (`git branch --show-current`), `title`, `shortTitle` and `order`. The progress bar and the Sessions pane match an item to its repository by `branch` and read only keys under `stages`, so a file without them never shows.
 7. **Report in chat:** commits made, the sweep verdict, findings fixed and open, and the
    verification result. Then hand off to `/dotnet-workflow-kit:test`, or back to the
    pipeline when it invoked this skill.
