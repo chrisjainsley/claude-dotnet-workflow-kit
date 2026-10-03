@@ -28,6 +28,11 @@ const MAX_ROWS = 3
 // Other items show beside the current branch's only while someone touched them recently.
 const RECENT_MS = 24 * 60 * 60 * 1000
 const POLL_MS = 4000
+// A closed item's row goes a day after it closed; scripts/close_items.py deletes its file then.
+const REMOVE_MS = 24 * 60 * 60 * 1000
+// Asking GitHub or Azure about each PR is a network call, so it runs far less often than the poll.
+const CLOSE_MS = 10 * 60 * 1000
+const CLOSED_LABELS: Record<string, string> = { merged: 'Merged', closed: 'PR closed', archived: 'Archived', manual: 'Done' }
 
 const COLOR = { done: '#c4c0ff', active: '#8e86f8', waiting: '#f59e0b', todo: '#6b7280' }
 
@@ -39,7 +44,11 @@ type Stage = {
   decision?: string
   note?: string
 }
+type Closed = { reason: string; at: string }
 type StateFile = {
+  closed?: Closed
+  worktree?: boolean
+  repo?: string
   ticket?: string
   title?: string
   shortTitle?: string
@@ -112,7 +121,8 @@ function shortTitle(title: string): string {
 function toRow(slug: string, data: StateFile, branch: string): PipelineRow {
   const stages = data.stages ?? {}
   const list = stageList(data)
-  const flags = list.map(stage => stageDone(stages, stage.id))
+  // A closed item counts every stage as done, whatever the stage flags say.
+  const flags = list.map(stage => !!data.closed || stageDone(stages, stage.id))
   const activeIndex = flags.indexOf(false)
   const active = activeIndex === -1 ? undefined : list[activeIndex].id
   const activeStage = active ? stages[active === 'pull_request' ? 'pullRequest' : active] : undefined
@@ -128,7 +138,9 @@ function toRow(slug: string, data: StateFile, branch: string): PipelineRow {
     return isWaiting ? 'waiting' : 'active'
   })
 
-  const detail = isPlanGate
+  const detail = data.closed
+    ? (CLOSED_LABELS[data.closed.reason] ?? 'Done')
+    : isPlanGate
     ? 'Waiting on you: answer or approve the plan'
     : isCheckpoint
       ? 'Waiting on you: review checkpoint'
@@ -312,6 +324,7 @@ async function refresh($: EngineInterface) {
         }
         const data = hit.data
         if (!data?.stages || Object.keys(data.stages).length === 0) continue
+        if (data.closed && now - Date.parse(data.closed.at) > REMOVE_MS) continue
         const row = toRow(name.slice(0, -5), data, branch)
         const isFinished = row.activeIndex === -1
         const isRecent = now - entry.mtimeMs < RECENT_MS
@@ -358,20 +371,66 @@ async function refresh($: EngineInterface) {
   }
 }
 
+let isClosing = false
+
+// Runs scripts/close_items.py for this repository: closes merged, closed and archived items
+// and deletes those closed over a day ago. A missing Python or a failed run only logs.
+async function closeItems($: EngineInterface) {
+  if (isClosing) return
+  isClosing = true
+  try {
+    const repo = await currentRepo($)
+    if (!repo) return
+    const script = `${$.plugin.root.replace(/\\/g, '/')}/scripts/close_items.py`
+    const dir = `${await homeDir($)}/.claude/dotnet-workflow-kit/pipeline`
+    for (const python of ['python', 'python3']) {
+      try {
+        const result = await $.process.run([python, script, '--repo', repo.commonDir, '--dir', dir], { timeoutMs: 120000 })
+        if (result.exitCode !== 0) $.ui.log(`dotnet-workflow-kit: close_items: ${result.stderr.trim()}`)
+        for (const line of result.stdout.split('\n').filter(Boolean)) $.ui.toast(line)
+        break
+      } catch {
+        // This name is not on PATH; try the next.
+      }
+    }
+    await refresh($)
+  } finally {
+    isClosing = false
+  }
+}
+
+// `/progress done`: closes the current branch's item by hand, for work that ends without a PR.
+async function closeCurrent($: EngineInterface): Promise<string> {
+  const current = (await read($, rows)).find(row => row.isCurrentBranch)
+  if (!current) return 'No pipeline item for this branch.'
+  const path = `${await homeDir($)}/.claude/dotnet-workflow-kit/pipeline/${current.slug}.json`
+  const data = JSON.parse(await $.fs.read(path)) as StateFile
+  if (!data.closed) {
+    data.closed = { reason: 'manual', at: new Date(await $.clock.now()).toISOString().replace(/\.\d{3}Z$/, 'Z') }
+    await $.fs.write(path, `${JSON.stringify(data, null, 2)}\n`)
+  }
+  await refresh($)
+
+  return `${current.ticket || current.title} is done; its row goes in a day.`
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     watchingSince = await $.clock.now()
     await $.command.register({
       name: 'progress',
-      description: 'Show or hide the workflow progress bar',
+      description: 'Show or hide the workflow progress bar; "done" closes this branch\'s item',
     })
     await refresh($)
     $.clock.every(POLL_MS, () => void refresh($))
+    $.clock.after(1000, () => void closeItems($))
+    $.clock.every(CLOSE_MS, () => void closeItems($))
 
     return next(e)
   })
 
-  on('command.run', { command: 'progress' }, async $ => {
+  on('command.run', { command: 'progress' }, async ($, e) => {
+    if (e.args.trim() === 'done') return { text: await closeCurrent($) }
     const hidden = await update($, isHidden, h => !h)
     await refresh($)
 
