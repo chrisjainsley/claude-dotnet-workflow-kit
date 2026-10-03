@@ -6,6 +6,7 @@ export type PipelineRow = {
   slug: string
   ticket: string
   title: string
+  branch: string
   isCurrentBranch: boolean
   labels: string[]
   isPlanApproved: boolean
@@ -19,6 +20,6 @@ export type PipelineRow = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'dotnet-workflow-kit': { rows: PipelineRow[]; isHidden: boolean; dismissed: string[]; activity: Activity | null; goalsSet: Record<string, string[]> }
+    'dotnet-workflow-kit': { rows: PipelineRow[]; isHidden: boolean; dismissed: string[]; activity: Activity | null; goalsSet: Record<string, string[]>; notifyOthers: boolean }
   }
 }
