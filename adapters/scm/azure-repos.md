@@ -21,7 +21,7 @@ az repos pr create --repository example-repo --source-branch <branch> \
   --target-branch <base_branch> --draft true --title "<title>" --description "<body>"
 ```
 
-Right after creating it, when running in Claude desktop (the built-in browser tools
+Right after creating it, unless the profile sets `pipeline.open_pr_in_browser` to `false`, and when running in Claude desktop (the built-in browser tools
 `mcp__Claude_Browser__*` are available), open the PR's web page in that browser with
 `mcp__Claude_Browser__navigate` instead of leaving the link in chat. Skip it elsewhere.
 

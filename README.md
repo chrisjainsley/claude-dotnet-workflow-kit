@@ -275,6 +275,7 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `pipeline.execute` | Free text | `""` | Execution command; blank implements the plan directly. |
 | `pipeline.resolve_comments` | Free text | `""` | Comment-resolution command; blank uses the SCM adapter. |
 | `pipeline.qa` | Free text | `""` | QA command; blank runs plan Specs manually per the QA adapter. |
+| `pipeline.open_pr_in_browser` | `true`, `false` | `true` | In Claude desktop, open a newly created PR in the Claude browser pane. Set `false` to only report the link. |
 | `optional.dotnet-claude-kit` | `true`, `false` | `false` | Companion plugin availability. |
 | `optional.codex` | `true`, `false` | `false` | Enable the Codex second-opinion reviewer. |
 | `optional.roslyn-mcp` | `true`, `false` | `false` | Roslyn MCP availability for code-review-workflow. |

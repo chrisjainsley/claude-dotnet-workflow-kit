@@ -132,7 +132,7 @@ Statuses are plain words: done, in progress, todo, blocked. Keep evidence to a c
 
 ## Running without input
 
-Invoking the pipeline is standing approval for everything up to the checkpoint, including commits, pushing the branch, opening the draft PR, and applying `qa.deploy_label`. A draft PR is a safe intermediate: nothing is announced to anyone. Whichever stage opens the PR, in Claude desktop it is then opened in the Claude browser, as the scm adapter says. Never pause for a per-stage confirmation; announce each stage with a one-liner and report a one-line delta between stages, not the full table.
+Invoking the pipeline is standing approval for everything up to the checkpoint, including commits, pushing the branch, opening the draft PR, and applying `qa.deploy_label`. A draft PR is a safe intermediate: nothing is announced to anyone. Whichever stage opens the PR, in Claude desktop it is then opened in the Claude browser, as the scm adapter says, unless `pipeline.open_pr_in_browser` is `false`. Never pause for a per-stage confirmation; announce each stage with a one-liner and report a one-line delta between stages, not the full table.
 
 Sweep findings get fixed, not queued for permission, unless a fix would change the ticket's scope. Test failures likewise: fix and re-run until green.
 
