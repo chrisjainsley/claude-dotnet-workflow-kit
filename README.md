@@ -92,8 +92,11 @@ canvas Artifact type, and embeds the artboards in a Designs section of the plan 
 next to a link to the editable canvas. Designs supplied by the tracker are used as they
 are and no canvas is made.
 
-On an Artifact page, choose answers and press **Send answers**, then tell the session
-"answered". The skill reads the stored choices, updates the plan and republishes it.
+On an Artifact page, choose answers, pick **Approve** or **Revise the plan** and press
+**Send answers**. The page passes the choices to the session, which folds them into the
+plan; on Approve it goes straight on to Implement. If the page says to tell Claude
+"decided", the session could not be reached; say it in chat and the skill reads the
+stored choices.
 
 ![Plan page showing Context, Specs and the Open questions form](docs/images/plan-page.png)
 
@@ -136,8 +139,9 @@ still be reviewed.
 The page includes verdict counts, plan versus delivered, a change diagram (click it
 to open full size), file links
 to full diffs, findings, the QA report and a rollout checklist. Choose **Approve** or
-**Request changes**, press **Send decision**, then tell the session "decided".
-The skill reads the decision and each open finding's fix or accept choice.
+**Request changes** and press **Send decision**. The page passes the decision to the
+session, which reads it with each open finding's fix or accept choice; on Approve it
+goes straight on to the pull request stage. Say "decided" in chat if the page asks.
 
 ![Review page showing verdict tiles, the change diagram and decision form](docs/images/review-page.png)
 
@@ -200,9 +204,9 @@ ends early. The kit's hooks wrap each half of the run in a goal for you:
 
 Each goal is met by the message `/next` ends that half with, so it clears on its own
 instead of re-prompting while you decide. While `/next` is stopped on a blocker the
-hooks keep the goal quiet until you answer. At the plan page, send your answers and
-tell the session "answered", or approve the plan. At the review page, send your
-decision and tell the session "decided". Pages cannot wake the session themselves.
+hooks keep the goal quiet until you answer. Sending from the plan or review page wakes
+the session through Send to Claude, and an approval carries the run on by itself. When a
+page cannot reach the session, it says so; tell the session "decided" instead.
 
 Without function hooks, set a goal yourself after each gate:
 

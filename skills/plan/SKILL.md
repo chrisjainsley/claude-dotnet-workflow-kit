@@ -114,14 +114,14 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
    Never hand-edit `plan.html`; it is regenerated from `plan.md` every time.
 10. **Publish.** With `artifacts: true`, use the Artifact tool: `file_path` is `plan.html`,
    `favicon` 🧅 on the first publish only, `description` one sentence naming the ticket,
-   `capabilities` `{"db": {}, "comments": {}}`: `db` stores the answers and `comments`
-   lets the form's Send button pass them to this session as an artifact comment. Invoke the
-   `artifact-design` and `artifact-capabilities` skills because the tool asks for them,
-   then leave the CSS and script alone. Republishing the same file path keeps the URL
-   and the stored answers. The publish result says whether this session watches the
-   page; from a new session, run `ArtifactComments` `watch` on the URL first, or the
-   button falls back to asking for "answered". With `artifacts: false`, tell the user the path of
-   `plan.html` to open in a browser; the form still renders but cannot send, so take
+   `capabilities` `{"db": {}, "comments": {}}`: `db` stores the answers and decision,
+   and `comments` lets the form's Send button pass them to this session as an artifact
+   comment. Invoke the `artifact-design` and `artifact-capabilities` skills because the
+   tool asks for them, then leave the CSS and script alone. Republishing the same file
+   path keeps the URL and the stored answers. The publish result says whether this
+   session watches the page; from a new session, run `ArtifactComments` `watch` on the
+   URL first, or the button falls back to asking for "decided". With
+   `artifacts: false`, tell the user the path of `plan.html` to open in a browser; the form still renders but cannot send, so take
    answers in chat by question number.
 11. **Record the page** in the pipeline state file
     (`~/.claude/dotnet-workflow-kit/pipeline/<slug>.json`, keyed as `/next` keys it):

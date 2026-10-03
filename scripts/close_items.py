@@ -4,14 +4,16 @@
     python close_items.py --repo <git common dir> [--dir <pipeline dir>] [--now <ISO time>]
 
 An item closes when its pull request merged or closed (asked of `gh`, or `az` for an
-Azure Repos URL), or when it was started in a worktree that no longer exists, which is
+Azure Repos URL), or when the worktree it was started in no longer exists, which is
 what archiving a worktree session leaves behind. A closed item records
-`closed: {reason, at}` in its state file; one day after `closed.at` the file is deleted.
-Only items of the repository at --repo are checked; deleting covers every closed file.
-A missing CLI or a failed call skips that item. Prints one line per change.
+`closed: {reason, at, prAt}` in its state file, `at` being when this script saw it
+close; one day after `closed.at` the file is deleted. Only items of the repository at
+--repo are checked; deleting covers every closed file. A missing CLI, a failed call or
+a malformed file skips that item. Prints one line per change.
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -23,7 +25,10 @@ DEFAULT_DIR = Path.home() / ".claude" / "dotnet-workflow-kit" / "pipeline"
 
 
 def parse_time(text):
-    return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    """An ISO time as an aware datetime; naive times read as UTC, extra fraction digits are cut."""
+    text = re.sub(r"(\.\d{6})\d+", r"\1", text.replace("Z", "+00:00"))
+    moment = datetime.fromisoformat(text)
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
 def iso(moment):
@@ -33,7 +38,7 @@ def iso(moment):
 def run(argv, cwd=None):
     """stdout of a command, or None when it is missing or fails."""
     try:
-        result = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", timeout=60)
+        result = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, encoding="utf-8", timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         return None
     return result.stdout if result.returncode == 0 else None
@@ -71,18 +76,22 @@ def pr_state(url):
 
 
 def git_lines(repo, *args):
+    """The command's output lines, or None when git failed."""
     out = run(["git", "--git-dir", str(repo), *args])
-    return out.splitlines() if out else []
+    return None if out is None else out.splitlines()
 
 
 def local_branches(repo):
-    return set(git_lines(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads"))
+    return set(git_lines(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads") or [])
 
 
 def worktree_branches(repo):
-    """Branches checked out in a worktree that still exists on disk."""
+    """Branches checked out in a worktree that still exists on disk, or None when git failed."""
+    lines = git_lines(repo, "worktree", "list", "--porcelain")
+    if lines is None:
+        return None
     found, path = set(), None
-    for line in git_lines(repo, "worktree", "list", "--porcelain"):
+    for line in lines:
         if line.startswith("worktree "):
             path = line[9:]
         elif line.startswith("branch refs/heads/") and path and Path(path).exists():
@@ -94,15 +103,32 @@ def same_repo(a, b):
     return Path(a).resolve() == Path(b).resolve()
 
 
-def closing_reason(data, repo, worktrees, now):
+def worktree_gone(data, worktrees):
+    """Whether the worktree the item started in is gone; never true when it cannot be told."""
+    recorded = data.get("worktree")
+    if isinstance(recorded, str) and recorded:
+        return not Path(recorded).exists()
+    # Files from before the path was recorded carry only `true`: judge by the branch.
+    return recorded is True and worktrees is not None and bool(data.get("branch")) and data["branch"] not in worktrees
+
+
+def closing_reason(data, worktrees):
+    """(reason, the PR's own close time or None), or None while the item is open."""
     url = pr_url(data)
     if url:
         state = pr_state(url)
         if state and state[0] in ("merged", "closed"):
-            return state[0], state[1] or iso(now)
-    if data.get("worktree") is True and data.get("branch") and data["branch"] not in worktrees:
-        return "archived", iso(now)
+            return state
+    if worktree_gone(data, worktrees):
+        return "archived", None
     return None
+
+
+def write_json(path, data):
+    """Replaces the file in one step, so a reader never sees it half written."""
+    temp = path.with_name(path.name + ".tmp")
+    temp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    os.replace(temp, path)
 
 
 def close_items(directory, repo, now):
@@ -112,24 +138,32 @@ def close_items(directory, repo, now):
         if "-checks" in path.name:
             continue
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        closed = data.get("closed")
-        if closed:
-            if now - parse_time(closed["at"]) > REMOVE_AFTER:
-                path.unlink()
-                changes.append(f"removed {path.name}")
-            continue
-        mine = same_repo(data["repo"], repo) if data.get("repo") else data.get("branch") in branches
-        if not mine:
-            continue
-        found = closing_reason(data, repo, worktrees, now)
-        if found:
-            data["closed"] = {"reason": found[0], "at": found[1]}
-            path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-            changes.append(f"closed {path.name}: {found[0]}")
+            change = close_one(path, repo, branches, worktrees, now)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            continue  # A half-written or foreign file: leave it for the next run.
+        if change:
+            changes.append(change)
     return changes
+
+
+def close_one(path, repo, branches, worktrees, now):
+    data = json.loads(path.read_text(encoding="utf-8"))
+    closed = data.get("closed")
+    if closed:
+        if now - parse_time(closed["at"]) > REMOVE_AFTER:
+            path.unlink()
+            return f"removed {path.name}"
+        return None
+    mine = same_repo(data["repo"], repo) if data.get("repo") else data.get("branch") in branches
+    if not mine:
+        return None
+    found = closing_reason(data, worktrees)
+    if not found:
+        return None
+    # The day counts from when the item was seen closed, so a PR merged long ago still shows done for a day.
+    data["closed"] = {"reason": found[0], "at": iso(now), **({"prAt": found[1]} if found[1] else {})}
+    write_json(path, data)
+    return f"closed {path.name}: {found[0]}"
 
 
 def main(argv=None):

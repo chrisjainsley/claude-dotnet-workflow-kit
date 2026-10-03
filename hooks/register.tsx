@@ -385,7 +385,7 @@ async function closeItems($: EngineInterface) {
     const dir = `${await homeDir($)}/.claude/dotnet-workflow-kit/pipeline`
     for (const python of ['python', 'python3']) {
       try {
-        const result = await $.process.run([python, script, '--repo', repo.commonDir, '--dir', dir], { timeoutMs: 120000 })
+        const result = await $.process.run([python, script, '--repo', repo.commonDir, '--dir', dir], { timeoutMs: 300000 })
         if (result.exitCode !== 0) $.ui.log(`dotnet-workflow-kit: close_items: ${result.stderr.trim()}`)
         for (const line of result.stdout.split('\n').filter(Boolean)) $.ui.toast(line)
         break
@@ -404,7 +404,12 @@ async function closeCurrent($: EngineInterface): Promise<string> {
   const current = (await read($, rows)).find(row => row.isCurrentBranch)
   if (!current) return 'No pipeline item for this branch.'
   const path = `${await homeDir($)}/.claude/dotnet-workflow-kit/pipeline/${current.slug}.json`
-  const data = JSON.parse(await $.fs.read(path)) as StateFile
+  let data: StateFile
+  try {
+    data = JSON.parse(await $.fs.read(path)) as StateFile
+  } catch {
+    return `Could not read ${current.slug}.json; nothing was changed.`
+  }
   if (!data.closed) {
     data.closed = { reason: 'manual', at: new Date(await $.clock.now()).toISOString().replace(/\.\d{3}Z$/, 'Z') }
     await $.fs.write(path, `${JSON.stringify(data, null, 2)}\n`)
