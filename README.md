@@ -286,6 +286,7 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `pipeline.resolve_comments` | Free text | `""` | Comment-resolution command; blank uses the SCM adapter. |
 | `pipeline.qa` | Free text | `""` | QA command; blank runs plan Specs manually per the QA adapter. |
 | `pipeline.open_pr_in_browser` | `true`, `false` | `true` | In Claude desktop, open a newly created PR in the Claude browser pane. Set `false` to only report the link. |
+| `pipeline.auto_fix_pr` | `true`, `false` | `true` | In Claude desktop, turn on CI auto-fix and comment handling for a newly created PR, so the session wakes on CI failures, conflicts and review comments. Set `false` to leave it off. |
 | `optional.dotnet-claude-kit` | `true`, `false` | `false` | Companion plugin availability. |
 | `optional.codex` | `true`, `false` | `false` | Enable the Codex second-opinion reviewer. |
 | `optional.roslyn-mcp` | `true`, `false` | `false` | Roslyn MCP availability for code-review-workflow. |

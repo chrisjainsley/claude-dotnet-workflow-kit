@@ -24,6 +24,8 @@ Right after creating it, unless the profile sets `pipeline.open_pr_in_browser` t
 `mcp__Claude_Browser__*` are available), open the PR's `url` in that browser with
 `mcp__Claude_Browser__navigate` instead of leaving the link in chat. Skip it elsewhere.
 
+Then, unless the profile sets `pipeline.auto_fix_pr` to `false`, and when running in Claude desktop (the `mcp__ccd_pr__*` tools are available), turn on CI auto-fix for the new PR. Call `mcp__ccd_pr__get_status` and, if it does not report the PR, `mcp__ccd_pr__bind_pr`. Then call `mcp__ccd_pr__set_monitor` with `auto_fix: true`, `address_comments: true` and the PR's url, so the session wakes on CI failures, merge conflicts and review comments. Load the tools through ToolSearch first if they are deferred. If the call is declined or the tools are missing, say so in one line and carry on.
+
 The body describes this ticket's change only. Never name another pull request in it, not a
 parent, sibling or follow-up, and not the shape of a stack. The host already renders a
 stack's chain, and hand-written topology goes stale as layers merge and retarget. The same
