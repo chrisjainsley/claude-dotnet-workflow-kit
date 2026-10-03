@@ -11,6 +11,9 @@ const rows = atom({ plugin: 'dotnet-workflow-kit', key: 'rows' } as const, [])
 const isHidden = atom({ plugin: 'dotnet-workflow-kit', key: 'isHidden' } as const, false)
 const dismissed = atom({ plugin: 'dotnet-workflow-kit', key: 'dismissed' } as const, [])
 const activity = atom({ plugin: 'dotnet-workflow-kit', key: 'activity' } as const, null)
+// What the session still has running in the background when its turn ends, so the bar keeps
+// moving while Claude waits on a shell, subagent or workflow to wake it.
+const background = atom({ plugin: 'dotnet-workflow-kit', key: 'background' } as const, [])
 // Goals already set, per item: survives reloads so a phase's goal is set once.
 const goalsSet = atom({ plugin: 'dotnet-workflow-kit', key: 'goalsSet' } as const, {})
 // Whether this session toasts when another item reaches a gate; off, since the app notifies too.
@@ -433,6 +436,8 @@ export const register: Register = on => {
   // While /next is blocked, a goal re-prompt would only repeat the blocker; skip the goal's
   // Stop hook so the goal stays set but quiet until the person answers.
   on('classic.Stop', async ($, e, next) => {
+    const pending = (e.background_tasks ?? []).filter(t => t.status === 'running' || t.status === 'pending')
+    await update($, background, () => pending.map(t => clip(t.description || t.command || t.type)))
     await refresh($)
     const current = (await read($, rows)).find(row => row.isCurrentBranch)
     if (current?.isBlocked) return {}
@@ -460,7 +465,16 @@ export const register: Register = on => {
 
     // The row shows live tool activity while Claude works, otherwise the file's detail.
     const live = await read($, activity)
-    const doing = (one: PipelineRow) => (e.props.isWorking && live && !isWaiting(one) ? live.text : one.detail)
+    const tasks = e.props.isWorking ? [] : await read($, background)
+    const isBusy = e.props.isWorking || tasks.length > 0
+    const doing = (one: PipelineRow) =>
+      isWaiting(one)
+        ? one.detail
+        : e.props.isWorking && live
+          ? live.text
+          : tasks.length > 0
+            ? `Waiting on ${tasks.length === 1 ? tasks[0] : `${tasks.length} background tasks`}`
+            : one.detail
     const chipLabel =
       others.length === 0 ? '' : othersWaiting > 0 ? `+${others.length} · ${othersWaiting} needs you` : `+${others.length}`
     const openPane = () => void toggleSessions($)
@@ -557,7 +571,7 @@ export const register: Register = on => {
         </Box>
         <Box flexShrink={1} minWidth={0}>
           <Svg
-            source={barSvg(row, e.props.isWorking)}
+            source={barSvg(row, isBusy)}
             alt={`${rowName(row)}: ${stageLabel(row)}, ${pct(row)}% complete${doing(row) ? `, ${doing(row)}` : ''}`}
             width={BAR_WIDTH}
             height={BAR_HEIGHT}
