@@ -10,6 +10,9 @@ const rows = atom({ plugin: 'dotnet-workflow-kit', key: 'rows' } as const, [])
 const isHidden = atom({ plugin: 'dotnet-workflow-kit', key: 'isHidden' } as const, false)
 const dismissed = atom({ plugin: 'dotnet-workflow-kit', key: 'dismissed' } as const, [])
 const activity = atom({ plugin: 'dotnet-workflow-kit', key: 'activity' } as const, null)
+// What the session still has running in the background when its turn ends, so the bar keeps
+// moving while Claude waits on a shell, subagent or workflow to wake it.
+const background = atom({ plugin: 'dotnet-workflow-kit', key: 'background' } as const, [])
 // Goals already set, per item: survives reloads so a phase's goal is set once.
 const goalsSet = atom({ plugin: 'dotnet-workflow-kit', key: 'goalsSet' } as const, {})
 
@@ -393,6 +396,8 @@ export const register: Register = on => {
   // While /next is blocked, a goal re-prompt would only repeat the blocker; skip the goal's
   // Stop hook so the goal stays set but quiet until the person answers.
   on('classic.Stop', async ($, e, next) => {
+    const pending = (e.background_tasks ?? []).filter(t => t.status === 'running' || t.status === 'pending')
+    await update($, background, () => pending.map(t => clip(t.description || t.command || t.type)))
     await refresh($)
     const current = (await read($, rows)).find(row => row.isCurrentBranch)
     if (current?.isBlocked) return {}
@@ -425,10 +430,16 @@ export const register: Register = on => {
         : `${row.labels[row.activeIndex]} ${row.activeIndex + 1}/${row.labels.length}`
     // The current branch's row shows live tool activity while Claude works, otherwise the file's detail.
     const live = await read($, activity)
+    const tasks = e.props.isWorking ? [] : await read($, background)
+    const isBusy = e.props.isWorking || tasks.length > 0
     const doing = (row: PipelineRow) =>
-      row.isCurrentBranch && e.props.isWorking && live && row.statuses[row.activeIndex] !== 'waiting'
-        ? live.text
-        : row.detail
+      !row.isCurrentBranch || row.statuses[row.activeIndex] === 'waiting'
+        ? row.detail
+        : e.props.isWorking && live
+          ? live.text
+          : tasks.length > 0
+            ? `Waiting on ${tasks.length === 1 ? tasks[0] : `${tasks.length} background tasks`}`
+            : row.detail
     const dotColor = (row: PipelineRow) =>
       row.activeIndex === -1
         ? COLOR.done
@@ -506,7 +517,7 @@ export const register: Register = on => {
             </Box>
             <Box flexShrink={1} minWidth={0}>
               <Svg
-                source={barSvg(row, e.props.isWorking)}
+                source={barSvg(row, isBusy)}
                 alt={`${name(row)}: ${stageLabel(row)}, ${pct(row)}% complete${doing(row) ? `, ${doing(row)}` : ''}`}
                 width={BAR_WIDTH}
                 height={BAR_HEIGHT}
