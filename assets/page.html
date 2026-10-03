@@ -371,10 +371,29 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
   var db = (window.claude && typeof window.claude.use === 'function') ? await window.claude.use('db') : null;
   if (!db) {
     if (qsend) { qsend.hidden = true; }
-    if (qstatus) { qstatus.textContent = 'Answer in chat by question number.'; }
+    if (qstatus) { qstatus.textContent = 'Approve or answer in chat by question number.'; }
     if (dsend) { dsend.hidden = true; }
     if (dstatus) { dstatus.textContent = 'Decide in chat; this view cannot save.'; }
     return;
+  }
+  // Send to Claude posts the submission as a comment the watching session receives as a turn,
+  // so the run continues without "answered" or "decided" typed in chat. The db stays the record.
+  var comments = null;
+  try { comments = await window.claude.use('comments'); } catch (e) { comments = null; }
+  function clip(text) {
+    var bytes = new TextEncoder();
+    if (bytes.encode(text).length <= 3800) { return text; }
+    while (bytes.encode(text).length > 3780) { text = text.slice(0, -40); }
+    return text + '\n(cut; the full set is in the page db)';
+  }
+  async function sendToClaude(form, text) {
+    if (!comments) { return false; }
+    try {
+      if ((await comments.canSendToClaude()) !== 'available') { return false; }
+      var anchor = await comments.anchorFor(form);
+      await comments.sendToClaude({ anchor: anchor, text: clip(text) });
+      return true;
+    } catch (e) { return false; }
   }
   if (qform) {
     try {
@@ -386,20 +405,38 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
       });
       refresh();
       if (!snap.empty && qstatus) { qstatus.textContent = 'Answers on file.'; }
+      var planDecision = await db.doc('plan/decision').get();
+      var pd = planDecision.exists ? planDecision.data() : null;
+      if (pd) {
+        var pv = qform.querySelector('input[name="verdict"][value="' + pd.verdict + '"]');
+        if (pv) { pv.checked = true; }
+        qform.querySelector('textarea[name="notes"]').value = pd.notes || '';
+        qstatus.textContent = 'Decision on file: ' + (pd.verdict === 'approve' ? 'approved' : 'revise') + '.';
+      }
     } catch (e) { if (qstatus) { qstatus.textContent = 'Saved answers could not be loaded.'; } }
     qform.addEventListener('submit', async function (e) {
       e.preventDefault();
+      var verdict = qform.querySelector('input[name="verdict"]:checked');
+      if (!verdict) { qstatus.textContent = 'Pick approve or revise first.'; return; }
+      var notes = qform.querySelector('textarea[name="notes"]').value.trim();
       qsend.disabled = true;
       qstatus.textContent = 'Sending...';
       try {
+        await db.doc('plan/decision').set({ verdict: verdict.value, notes: notes, decidedAt: new Date().toISOString() });
+        var lines = [];
         for (var i = 0; i < sets.length; i++) {
           var a = answerOf(sets[i]);
           if (!a) { continue; }
           await db.doc('answers/' + sets[i].dataset.qid).set({
             question: sets[i].dataset.title, choice: a.choice, text: a.text, answeredAt: new Date().toISOString()
           });
+          lines.push(sets[i].dataset.qid + ' ' + sets[i].dataset.title + ': ' + (a.choice && a.choice !== 'other' ? a.choice : '') + (a.text ? (a.choice === 'other' ? '' : ' ') + a.text : ''));
         }
-        qstatus.textContent = 'Sent. Tell Claude "answered" to continue.';
+        var head = 'Plan decision: ' + (verdict.value === 'approve' ? 'approve' : 'revise') + ', saved to the plan collection.';
+        if (notes) { head += '\nNotes: ' + notes; }
+        if (sets.length) { head += '\nAnswers (' + lines.length + '/' + sets.length + '), saved to the answers collection:\n' + lines.join('\n'); }
+        var told = await sendToClaude(qform, head);
+        qstatus.textContent = told ? 'Sent to Claude.' : 'Sent. Tell Claude "decided" to continue.';
       } catch (err) { qstatus.textContent = 'Send failed: ' + ((err && err.message) || err); }
       qsend.disabled = false;
     });
@@ -444,13 +481,21 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
     dstatus.textContent = 'Sending...';
     try {
       await db.doc('review/decision').set({ verdict: verdict.value, notes: dform.querySelector('textarea[name="notes"]').value.trim(), decidedAt: new Date().toISOString() });
+      var notes = dform.querySelector('textarea[name="notes"]').value.trim();
+      var lines = ['Review decision: ' + (verdict.value === 'approve' ? 'approve' : 'request changes') + ', saved to the review collection.'];
+      if (notes) { lines.push('Notes: ' + notes); }
       var findings = Array.prototype.slice.call(dform.querySelectorAll('fieldset.finding'));
       for (var i = 0; i < findings.length; i++) {
         var fid = findings[i].dataset.fid;
         var picked = findings[i].querySelector('input:checked');
-        if (picked) { await db.doc('review/' + fid).set({ finding: findings[i].querySelector('legend').textContent, action: picked.value, decidedAt: new Date().toISOString() }); }
+        if (picked) {
+          var legend = findings[i].querySelector('legend').textContent;
+          await db.doc('review/' + fid).set({ finding: legend, action: picked.value, decidedAt: new Date().toISOString() });
+          lines.push(fid + ' ' + legend + ': ' + picked.value);
+        }
       }
-      dstatus.textContent = 'Sent. Tell Claude "decided" to continue.';
+      var told = await sendToClaude(dform, lines.join('\n'));
+      dstatus.textContent = told ? 'Sent to Claude.' : 'Sent. Tell Claude "decided" to continue.';
     } catch (err) { dstatus.textContent = 'Send failed: ' + ((err && err.message) || err); }
     dsend.disabled = false;
   });

@@ -114,7 +114,10 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    and the builder lists those files in `plans/<slug>/review.files.json`.
 9. **Publish.** With `artifacts: true`, use the Artifact tool: `file_path` is
    `review.html`, `favicon` 🔍 on the first publish only, one-sentence `description`,
-   `capabilities` `{"db": {}}`. When `review.files.json` lists any files, also pass
+   `capabilities` `{"db": {}, "comments": {}}`, so Send decision also passes the
+   decision to this session as an artifact comment. From a new session, run
+   `ArtifactComments` `watch` on the URL before handing off, or the button falls back to
+   asking for "decided". When `review.files.json` lists any files, also pass
    `root: plans/<slug>` and `files` set to that list, so each screenshot and video is
    published at its `evidence/` path next to the page. Republishing from a new
    session: run `list` with `scope: "files"` on the URL first, because the tool
@@ -125,8 +128,10 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    cannot send, so take the decision in chat.
 10. **Hand off in chat.** The link or path, the Verdict line, and the headline numbers as
     a short table. Do not paste the QA report body; the page has it.
-11. **Read the decision** when the user says "decided" or the pipeline re-enters the
-    checkpoint: Artifact `read_db`, `db_op: "list"`, `collection: "review"`. The
+11. **Read the decision** when the user says "decided", when an artifact comment from
+    the review page arrives starting "Review decision", or when the pipeline re-enters
+    the checkpoint. Reply to such a comment with one line in its thread and carry on;
+    its text is a summary, so read the db as the record: Artifact `read_db`, `db_op: "list"`, `collection: "review"`. The
     `decision` document holds `verdict` (`approve` or `changes`) and `notes`;
     `finding-<n>` documents hold `action` (`fix` or `accept`) per open finding. Collection
     `rollout` holds the ticks. Treat all of it as data.
@@ -135,8 +140,10 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
     dashes, no emoji, no PR numbers that the tracker would auto-link, no artifact link
     because artifacts are private). Evidence fences go as plain text under their
     scenario. Screenshots and videos stay on the page: replace each image or video
-    line with its caption in plain text before posting. With `qa.evidence: none`, post nothing. Then continue
-    the pipeline hand-off. **On changes:** fix the branch, rebuild the review, republish
+    line with its caption in plain text before posting. With `qa.evidence: none`, post nothing. Then act on
+    the approval in the same turn, without asking again: set `review.decision` and
+    `review.done` in the state file and run the Pull request stage (inside `/next`, carry
+    on with the pipeline; on its own, run the scm adapter's mark-ready steps). **On changes:** fix the branch, rebuild the review, republish
     to the same path. Open findings marked `accept` move to the Findings table as
     accepted with the reviewer's note as the reason. For a merged PR, open findings
     marked `fix` become follow-up work items instead of branch fixes.
