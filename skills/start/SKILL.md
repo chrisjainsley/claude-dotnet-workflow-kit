@@ -24,6 +24,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 - `branch_pattern`: the branch name template, with `{kind}`, `{id}` and `{slug}` tokens.
   Fill only the tokens the pattern contains.
 - `user`: who the item gets assigned to and whose name appears in the summary.
+- `extra_stages`: the team's own stages, which shape the `order` written in step 8.
 - `optional.jev`: when true, the fetched item and each linked item are screened with
   `jev_screen` before their text is read. See `docs/jev.md`. Skipped, never failed,
   when the MCP is not loaded.
@@ -60,13 +61,22 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 7. **Assign and activate** via the same tracker adapter's "Start work" section: assign
    to `user`, move to `tracker_states.active` when set, else the adapter's default active state. Both calls are safe to repeat. Skip this
    step entirely with `tracker: none`; there is no item to update.
-8. **Print a short summary:** item id and title (or the slug, with no tracker), the
+8. **Write the pipeline state file**, so the progress bar above the prompt shows the item
+   from now on. Key it the way `/dotnet-workflow-kit:next` does: the ticket id when the
+   branch carries one, else the sanitized branch name, at
+   `~/.claude/dotnet-workflow-kit/pipeline/<slug>.json`. Write `ticket` (the id, or the
+   slug with no tracker), `title` (the item's title), `shortTitle` (at most four words
+   naming the work, such as "Get todo by id"), `branch`, `order` (the output of
+   `python "SKILL_DIR/../../scripts/kit_profile.py" --order`) and
+   `stages.start` as `{"done": true, "at": "<ISO time>"}`. When the file already exists,
+   update only these fields and keep every other stage.
+9. **Print a short summary:** item id and title (or the slug, with no tracker), the
    branch name, and whether the assignment and state change happened or were already
    true.
-9. **Rename the session** to the id and slug (for example `AB#1234 - fix-timeout-retry`,
-   or just the slug with no tracker) using whatever session-rename mechanism the current
-   surface exposes. If none is available, print the intended name instead of failing.
-10. **Hand off to `/dotnet-workflow-kit:plan`.** Do NOT enter Claude's own
+10. **Rename the session** to the id and slug (for example `AB#1234 - fix-timeout-retry`,
+    or just the slug with no tracker) using whatever session-rename mechanism the current
+    surface exposes. If none is available, print the intended name instead of failing.
+11. **Hand off to `/dotnet-workflow-kit:plan`.** Do NOT enter Claude's own
     plan mode. Planning happens on the published plan page, not behind a plan-mode
     prompt. Pass along the item's title, description and any linked context gathered in
     step 2 so the plan skill does not have to re-fetch it.

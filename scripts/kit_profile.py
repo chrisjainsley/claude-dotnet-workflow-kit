@@ -9,6 +9,7 @@ it; skills and the check/build scripts only read it.
     profile = resolve_profile(Path.cwd())
 
 Run directly to print the resolved profile:  python kit_profile.py [--profile <file>]
+or only the stage order /next runs:          python kit_profile.py --order
 """
 import argparse
 import json
@@ -51,6 +52,10 @@ CHECK_FILES_DEFAULT = "**/*"
 STAGES = ("start", "plan", "implement", "test", "review", "pull_request")
 STAGE_CHECK_KEYS = ("id", "prompt", "on_fail")
 STAGE_ON_FAIL = ("fix", "stop")
+STAGE_LABELS = {"start": "Start", "plan": "Plan", "implement": "Implement", "test": "Test",
+                "review": "Review", "pull_request": "PR"}
+EXTRA_STAGE_KEYS = ("id", "label", "after", "run", "done_when", "gate")
+EXTRA_STAGE_LABEL_MAX = 12
 
 DEFAULTS = {
     "schema": SCHEMA,
@@ -74,6 +79,7 @@ DEFAULTS = {
     "jev": {"flag_at": 0.75, "review_at": 0.4},
     "checks": [],
     "stage_checks": {},
+    "extra_stages": [],
 }
 
 # Which dotnet-claude-kit skills an answer needs. Setup offers the install when any is missing.
@@ -203,6 +209,7 @@ def validate(profile):
     problems += validate_jev(profile)
     problems += validate_checks(profile)
     problems += validate_stage_checks(profile)
+    problems += validate_extra_stages(profile)
     return problems
 
 
@@ -284,6 +291,68 @@ def validate_stage_checks(profile):
             if check.get("on_fail", "fix") not in STAGE_ON_FAIL:
                 problems.append(f"{label}: on_fail must be one of {', '.join(STAGE_ON_FAIL)}; got {check.get('on_fail')!r}")
     return problems
+
+
+def validate_extra_stages(profile):
+    problems = []
+    extras = profile.get("extra_stages")
+    if not isinstance(extras, list):
+        return ["extra_stages must be a list"]
+    known = list(STAGES)
+    for index, stage in enumerate(extras):
+        label = f"extra_stages[{index}]"
+        if not isinstance(stage, dict):
+            problems.append(f"{label} must be an object")
+            continue
+        unknown = sorted(k for k in stage if k not in EXTRA_STAGE_KEYS)
+        if unknown:
+            problems.append(f"{label}: unknown keys {', '.join(unknown)}; allowed: {', '.join(EXTRA_STAGE_KEYS)}")
+        stage_id = stage.get("id")
+        if not isinstance(stage_id, str) or not CHECK_ID.match(stage_id):
+            problems.append(f"{label}: id must match {CHECK_ID.pattern}; got {stage_id!r}")
+        elif stage_id in STAGES:
+            problems.append(f"{label}: id {stage_id!r} is a built-in stage")
+        elif stage_id in known:
+            problems.append(f"{label}: duplicate id {stage_id!r}")
+        stage_label = stage.get("label")
+        if not isinstance(stage_label, str) or not stage_label.strip() or len(stage_label.strip()) > EXTRA_STAGE_LABEL_MAX:
+            problems.append(f"{label}: label must be 1 to {EXTRA_STAGE_LABEL_MAX} characters; got {stage_label!r}")
+        if stage.get("after") not in known:
+            problems.append(f"{label}: after must name a built-in or earlier extra stage; got {stage.get('after')!r}")
+        if stage.get("after") == "pull_request":
+            problems.append(f"{label}: after cannot be pull_request; the pipeline ends there")
+        for key in ("run", "done_when"):
+            if not isinstance(stage.get(key), str) or not stage[key].strip():
+                problems.append(f"{label}: {key} must be non-empty text")
+        if not isinstance(stage.get("gate", False), bool):
+            problems.append(f"{label}: gate must be true or false")
+        if isinstance(stage_id, str):
+            known.append(stage_id)
+    return problems
+
+
+def extra_stages(profile):
+    """The profile's extra stages with gate defaulted to false. Malformed entries are
+    skipped here; validate() is what reports them."""
+    extras = profile.get("extra_stages")
+    return [
+        {"id": s["id"], "label": s["label"].strip(), "after": s["after"], "run": s["run"].strip(),
+         "done_when": s["done_when"].strip(), "gate": s.get("gate") is True}
+        for s in (extras if isinstance(extras, list) else [])
+        if isinstance(s, dict) and all(isinstance(s.get(k), str) for k in ("id", "label", "after", "run", "done_when"))
+    ]
+
+
+def pipeline_order(profile):
+    """Every stage in run order as {id, label}: the built-ins with each extra stage slotted
+    after the stage it names. This is the list /next writes to the state file's `order`."""
+    order = [{"id": stage, "label": STAGE_LABELS[stage]} for stage in STAGES]
+    for stage in extra_stages(profile):
+        ids = [entry["id"] for entry in order]
+        if stage["after"] not in ids or stage["id"] in ids:
+            continue
+        order.insert(ids.index(stage["after"]) + 1, {"id": stage["id"], "label": stage["label"]})
+    return order
 
 
 def stage_checks(profile, stage):
@@ -384,9 +453,13 @@ def add_profile_arg(parser):
 
 def main():
     ap = add_profile_arg(argparse.ArgumentParser(description=__doc__.splitlines()[0]))
+    ap.add_argument("--order", action="store_true", help="print only the pipeline's stage order as JSON")
     args = ap.parse_args()
     profile = resolve_profile(explicit=args.profile)
     problems = validate(profile)
+    if args.order:
+        print(json.dumps(pipeline_order(profile)))
+        return 1 if problems else 0
     print(json.dumps({k: v for k, v in profile.items() if not k.startswith("_")}, indent=2))
     print(f"source: {profile['_source']}", file=sys.stderr)
     if profile["_filled"]:

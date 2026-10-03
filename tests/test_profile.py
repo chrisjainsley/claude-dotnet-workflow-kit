@@ -217,3 +217,56 @@ def test_given_valid_stage_checks_then_on_fail_defaults_to_fix():
         {"id": "green", "prompt": "Did every suite pass?", "on_fail": "fix"},
         {"id": "e2e", "prompt": "Did e2e run?", "on_fail": "stop"},
     ]
+
+
+SECURITY = {"id": "security", "label": "Security", "after": "implement",
+            "run": "/dotnet-claude-kit:security-scan", "done_when": "Did the scan report no high findings?"}
+
+
+def test_given_defaults_then_order_is_the_six_built_in_stages():
+    order = profile_mod.pipeline_order(fresh_defaults())
+    assert [s["id"] for s in order] == list(profile_mod.STAGES)
+    assert order[-1] == {"id": "pull_request", "label": "PR"}
+
+
+def test_given_extra_stages_then_slotted_after_their_anchor_in_file_order():
+    prof = fresh_defaults()
+    prof["extra_stages"] = [SECURITY, {**SECURITY, "id": "perf", "label": "Perf", "after": "security", "gate": True}]
+    assert profile_mod.validate(prof) == []
+    assert [s["id"] for s in profile_mod.pipeline_order(prof)] == [
+        "start", "plan", "implement", "security", "perf", "test", "review", "pull_request"]
+    assert profile_mod.extra_stages(prof)[0]["gate"] is False
+    assert profile_mod.extra_stages(prof)[1]["gate"] is True
+
+
+@pytest.mark.parametrize(
+    "extra,fragment",
+    [
+        ({**SECURITY, "id": "test"}, "is a built-in stage"),
+        ({**SECURITY, "id": "Sec urity"}, "id must match"),
+        ({**SECURITY, "label": "A label far too long"}, "label must be 1 to 12"),
+        ({**SECURITY, "after": "deploy"}, "after must name a built-in or earlier extra stage"),
+        ({**SECURITY, "after": "pull_request"}, "after cannot be pull_request"),
+        ({**SECURITY, "run": " "}, "run must be non-empty"),
+        ({**SECURITY, "done_when": None}, "done_when must be non-empty"),
+        ({**SECURITY, "gate": "yes"}, "gate must be true or false"),
+        ({**SECURITY, "prompt": "x"}, "unknown keys prompt"),
+    ],
+)
+def test_given_bad_extra_stage_then_rejected(extra, fragment):
+    prof = fresh_defaults()
+    prof["extra_stages"] = [extra]
+    problems = profile_mod.validate(prof)
+    assert any(fragment in p for p in problems), problems
+
+
+def test_given_extra_stage_after_a_later_extra_then_rejected():
+    prof = fresh_defaults()
+    prof["extra_stages"] = [{**SECURITY, "id": "perf", "after": "security"}, SECURITY]
+    assert any("after must name a built-in or earlier extra stage" in p for p in profile_mod.validate(prof))
+
+
+def test_given_duplicate_extra_stage_ids_then_rejected():
+    prof = fresh_defaults()
+    prof["extra_stages"] = [SECURITY, SECURITY]
+    assert any("duplicate id 'security'" in p for p in profile_mod.validate(prof))
