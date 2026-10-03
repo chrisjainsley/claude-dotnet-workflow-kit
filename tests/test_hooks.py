@@ -79,7 +79,7 @@ def test_given_more_rows_than_the_cap_then_live_items_sort_ahead_of_complete_one
 def test_given_done_group_then_dismiss_all_hides_every_done_row():
     text = register_text()
     assert 'label="Dismiss all"' in text
-    assert "...group.items.map(row => row.slug)" in text
+    assert "dismiss(done.map(row => row.slug))" in text
 
 
 def test_given_progress_done_then_the_current_item_closes_by_hand():
