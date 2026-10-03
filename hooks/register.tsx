@@ -1,6 +1,7 @@
-// The kit's progress bar: one row per work item above the prompt, drawn from the pipeline
-// state files `start`, `plan` and `next` write under ~/.claude/dotnet-workflow-kit/pipeline.
-// It also sets the run's /goal when the plan and then the review are approved.
+// The kit's progress bar: the current branch's work item above the prompt, drawn from the pipeline
+// state files `start`, `plan` and `next` write under ~/.claude/dotnet-workflow-kit/pipeline, and a
+// Sessions pane listing every item in this repository. It also sets the run's /goal when the plan
+// and then the review are approved.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
@@ -15,6 +16,10 @@ const activity = atom({ plugin: 'dotnet-workflow-kit', key: 'activity' } as cons
 const background = atom({ plugin: 'dotnet-workflow-kit', key: 'background' } as const, [])
 // Goals already set, per item: survives reloads so a phase's goal is set once.
 const goalsSet = atom({ plugin: 'dotnet-workflow-kit', key: 'goalsSet' } as const, {})
+// Whether this session toasts when another item reaches a gate; off, since the app notifies too.
+const notifyOthers = atom({ plugin: 'dotnet-workflow-kit', key: 'notifyOthers' } as const, false)
+
+const PANE = 'sessions'
 
 // The kit's own pipeline; a state file's `order` replaces it when a team adds stages.
 const DEFAULT_ORDER = ['start', 'plan', 'implement', 'test', 'review', 'pull_request']
@@ -27,8 +32,8 @@ const DEFAULT_LABELS: Record<string, string> = {
   pull_request: 'PR',
   pullRequest: 'PR',
 }
-const MAX_ROWS = 3
-// Other items show beside the current branch's only while someone touched them recently.
+const MAX_ROWS = 12
+// Other items show in the Sessions pane only while someone touched them recently.
 const RECENT_MS = 24 * 60 * 60 * 1000
 const POLL_MS = 4000
 
@@ -122,13 +127,13 @@ function toRow(slug: string, data: StateFile, branch: string): PipelineRow {
   const isPlanGate = active === 'plan' && !!activeStage?.artifactUrl
   const isCheckpoint = active === 'review' && !!activeStage?.artifactUrl && !activeStage?.decision
   const isCustomGate = activeStage?.waiting === true
-  const isWaiting = isPlanGate || isCheckpoint || isCustomGate
+  const isGate = isPlanGate || isCheckpoint || isCustomGate
 
   const statuses: StageStatus[] = flags.map((done, i): StageStatus => {
     if (done) return 'done'
     if (i !== activeIndex) return 'todo'
 
-    return isWaiting ? 'waiting' : 'active'
+    return isGate ? 'waiting' : 'active'
   })
 
   const detail = isPlanGate
@@ -143,6 +148,7 @@ function toRow(slug: string, data: StateFile, branch: string): PipelineRow {
     slug,
     ticket: ticketId(data.ticket),
     title: data.shortTitle || shortTitle(data.title || titleFromBranch(data.branch ?? '')),
+    branch: data.branch ?? '',
     isCurrentBranch: !!branch && data.branch === branch,
     labels: list.map(stage => stage.label),
     isPlanApproved: stageDone(stages, 'plan'),
@@ -157,6 +163,20 @@ function toRow(slug: string, data: StateFile, branch: string): PipelineRow {
 
 const basename = (path: unknown) => String(path ?? '').replace(/^.*[\\/]/, '')
 const clip = (text: string, max = 60) => (text.length > max ? `${text.slice(0, max - 1)}…` : text)
+
+// A slug-style ticket ("todo-by-id") already says what the title says; show it once.
+const same = (a: string, b: string) =>
+  a.toLowerCase().replace(/[^a-z0-9]/g, '') === b.toLowerCase().replace(/[^a-z0-9]/g, '')
+const rowName = (row: PipelineRow) =>
+  (row.ticket && same(row.ticket, row.title) ? row.ticket : [row.ticket, row.title].filter(Boolean).join(' ')) ||
+  row.slug
+const pct = (row: PipelineRow) => Math.round((row.doneCount / row.labels.length) * 100)
+const isComplete = (row: PipelineRow) => row.activeIndex === -1
+const isWaiting = (row: PipelineRow) => !isComplete(row) && row.statuses[row.activeIndex] === 'waiting'
+const stageLabel = (row: PipelineRow) =>
+  isComplete(row) ? 'Complete' : `${row.labels[row.activeIndex]} ${row.activeIndex + 1}/${row.labels.length}`
+const dotColor = (row: PipelineRow) =>
+  isComplete(row) ? COLOR.done : isWaiting(row) ? COLOR.waiting : COLOR.active
 
 // What a tool call says Claude is doing, in a few words; undefined for calls not worth showing.
 function describe(e: Record<string, unknown>): string | undefined {
@@ -239,6 +259,7 @@ let isRefreshing = false
 // Parsed state files by name, reused while the file's mtime is unchanged.
 const cache = new Map<string, { mtime: number; data: StateFile | null }>()
 let lastDone: Record<string, boolean[]> | null = null
+let lastWaiting: Record<string, boolean> | null = null
 
 async function homeDir($: EngineInterface) {
   const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
@@ -316,12 +337,10 @@ async function refresh($: EngineInterface) {
         const data = hit.data
         if (!data?.stages || Object.keys(data.stages).length === 0) continue
         const row = toRow(name.slice(0, -5), data, branch)
-        const isFinished = row.activeIndex === -1
         const isRecent = now - entry.mtimeMs < RECENT_MS
-        // Other items show only when recent, unfinished and on a branch of this same repository.
+        // Other items show only when recent and on a branch of this same repository.
         const isHere =
-          row.isCurrentBranch ||
-          (!isFinished && isRecent && !!repo && (await hasBranch($, repo, data.branch ?? '', packed)))
+          row.isCurrentBranch || (isRecent && !!repo && (await hasBranch($, repo, data.branch ?? '', packed)))
         if (isHere) found.push({ row, mtime: entry.mtimeMs, branch: data.branch ?? '' })
       } catch {
         // A half-written or foreign file: skip it this round.
@@ -336,16 +355,27 @@ async function refresh($: EngineInterface) {
     const unique = found.filter(f => !f.branch || (!seen.has(f.branch) && !!seen.add(f.branch)))
     const next = unique.slice(0, MAX_ROWS).map(f => f.row)
 
+    // Every session runs this module, so each toasts only its own item's stages; another item's
+    // gate toasts only when the person turned that on in the Sessions pane.
+    const shouldNotifyOthers = await read($, notifyOthers)
     const done: Record<string, boolean[]> = {}
+    const waiting: Record<string, boolean> = {}
     for (const row of next) {
       done[row.slug] = row.statuses.map(s => s === 'done')
+      waiting[row.slug] = isWaiting(row)
       const before = lastDone?.[row.slug]
-      if (!before) continue
-      row.statuses.forEach((s, i) => {
-        if (s === 'done' && !before[i]) $.ui.toast(`${row.ticket || row.title}: ${row.labels[i]} done`)
-      })
+      if (row.isCurrentBranch && before) {
+        row.statuses.forEach((s, i) => {
+          if (s === 'done' && !before[i]) $.ui.toast(`${row.ticket || row.title}: ${row.labels[i]} done`)
+        })
+      }
+      const isNewGate = !!lastWaiting && waiting[row.slug] && !lastWaiting[row.slug]
+      if (!row.isCurrentBranch && shouldNotifyOthers && isNewGate) {
+        $.ui.toast(`${rowName(row)}: ${row.detail || 'waiting on you'}`)
+      }
     }
     lastDone = done
+    lastWaiting = waiting
 
     await setGoals($, next, Object.fromEntries(found.map(f => [f.row.slug, f.mtime])))
 
@@ -368,6 +398,10 @@ export const register: Register = on => {
       name: 'progress',
       description: 'Show or hide the workflow progress bar',
     })
+    await $.command.register({
+      name: 'sessions',
+      description: 'Show or hide the pane listing every work item in this repository',
+    })
     await refresh($)
     $.clock.every(POLL_MS, () => void refresh($))
 
@@ -379,6 +413,12 @@ export const register: Register = on => {
     await refresh($)
 
     return { text: hidden ? 'Workflow progress bar hidden.' : 'Workflow progress bar shown.' }
+  })
+
+  on('command.run', { command: 'sessions' }, async $ => {
+    const isOpen = await toggleSessions($)
+
+    return { text: isOpen ? 'Sessions pane opened.' : 'Sessions pane closed.' }
   })
 
   on('tool.call', async ($, e, next) => {
@@ -412,132 +452,238 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // The band shows only this session's item; a chip counts the others and opens the Sessions pane.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const hiddenSlugs = await read($, dismissed)
-    const list = (await read($, rows)).filter(row => !hiddenSlugs.includes(row.slug))
-    if (e.props.hasSurvey || list.length === 0 || (await read($, isHidden))) {
+    const all = (await read($, rows)).filter(one => !hiddenSlugs.includes(one.slug))
+    const row = all.find(one => one.isCurrentBranch)
+    const others = all.filter(one => !one.isCurrentBranch && !isComplete(one))
+    const othersWaiting = others.filter(isWaiting).length
+    if (e.props.hasSurvey || (!row && others.length === 0) || (await read($, isHidden))) {
       return next(e)
     }
 
-    // A slug-style ticket ("todo-by-id") already says what the title says; show it once.
-    const same = (a: string, b: string) => a.toLowerCase().replace(/[^a-z0-9]/g, '') === b.toLowerCase().replace(/[^a-z0-9]/g, '')
-    const name = (row: PipelineRow) =>
-      (row.ticket && same(row.ticket, row.title) ? row.ticket : [row.ticket, row.title].filter(Boolean).join(' ')) || row.slug
-    const pct = (row: PipelineRow) => Math.round((row.doneCount / row.labels.length) * 100)
-    const stageLabel = (row: PipelineRow) =>
-      row.activeIndex === -1
-        ? 'Complete'
-        : `${row.labels[row.activeIndex]} ${row.activeIndex + 1}/${row.labels.length}`
-    // The current branch's row shows live tool activity while Claude works, otherwise the file's detail.
+    // The row shows live tool activity while Claude works, otherwise the file's detail.
     const live = await read($, activity)
     const tasks = e.props.isWorking ? [] : await read($, background)
     const isBusy = e.props.isWorking || tasks.length > 0
-    const doing = (row: PipelineRow) =>
-      !row.isCurrentBranch || row.statuses[row.activeIndex] === 'waiting'
-        ? row.detail
+    const doing = (one: PipelineRow) =>
+      isWaiting(one)
+        ? one.detail
         : e.props.isWorking && live
           ? live.text
           : tasks.length > 0
             ? `Waiting on ${tasks.length === 1 ? tasks[0] : `${tasks.length} background tasks`}`
-            : row.detail
-    const dotColor = (row: PipelineRow) =>
-      row.activeIndex === -1
-        ? COLOR.done
-        : row.statuses[row.activeIndex] === 'waiting'
-          ? COLOR.waiting
-          : COLOR.active
+            : one.detail
+    const chipLabel =
+      others.length === 0 ? '' : othersWaiting > 0 ? `+${others.length} · ${othersWaiting} needs you` : `+${others.length}`
+    const openPane = () => void toggleSessions($)
 
     if (e.surface === 'terminal') {
-      const { Box, Text } = $.ui.resolve(e)
+      const { Box, Text, Button } = $.ui.resolve(e)
       const cols = e.props.bodyColumns
-      const stages = Math.max(...list.map(row => row.labels.length))
+      const chip = chipLabel ? (
+        <Box flexShrink={0} gap={1}>
+          {othersWaiting > 0 ? <Text color={COLOR.waiting}>●</Text> : null}
+          <Button key="sessions-chip" label={chipLabel} plain dimColor={othersWaiting === 0} onPress={openPane} />
+        </Box>
+      ) : null
+      if (!row) {
+        return (
+          <Box width={cols} justifyContent="flex-end">
+            {chip}
+          </Box>
+        )
+      }
+
       const nameWidth = Math.max(10, Math.min(28, Math.floor(cols * 0.22)))
-      const stageWidth = Math.max(...list.map(row => stageLabel(row).length))
+      const stageWidth = stageLabel(row).length
+      const chipWidth = chipLabel ? chipLabel.length + 4 : 0
       const doingMin = cols >= 90 ? 24 : 0
-      // dot, name, bar, stage, percent and four one-cell gaps, then the activity text.
-      const room = cols - 2 - nameWidth - stageWidth - 4 - 4 - doingMin
-      const segment = Math.max(1, Math.min(6, Math.floor(room / stages)))
+      // dot, name, bar, stage, percent, chip and their one-cell gaps, then the activity text.
+      const room = cols - 2 - nameWidth - stageWidth - 4 - 5 - chipWidth - doingMin
+      const segment = Math.max(1, Math.min(6, Math.floor(room / row.labels.length)))
 
       return (
-        <Box flexDirection="column">
-          {list.map(row => (
-            <Box key={row.slug} gap={1} width={cols}>
-              <Box flexShrink={0}>
-                <Text color={dotColor(row)}>●</Text>
-              </Box>
-              <Box width={nameWidth} flexShrink={0}>
-                <Text wrap="truncate-end" bold={row.isCurrentBranch}>
-                  {name(row)}
+        <Box gap={1} width={cols}>
+          <Box flexShrink={0}>
+            <Text color={dotColor(row)}>●</Text>
+          </Box>
+          <Box width={nameWidth} flexShrink={0}>
+            <Text wrap="truncate-end" bold>
+              {rowName(row)}
+            </Text>
+          </Box>
+          <Box width={segment * row.labels.length} flexShrink={0}>
+            <Text wrap="truncate-end">
+              {row.statuses.map(s => (
+                <Text color={s === 'todo' ? COLOR.todo : COLOR[s]} dimColor={s === 'todo'}>
+                  {(s === 'todo' ? '░' : s === 'done' ? '█' : '▓').repeat(segment)}
                 </Text>
-              </Box>
-              <Box width={segment * row.labels.length} flexShrink={0}>
-                <Text wrap="truncate-end">
-                  {row.statuses.map(s => (
-                    <Text color={s === 'todo' ? COLOR.todo : COLOR[s]} dimColor={s === 'todo'}>
-                      {(s === 'todo' ? '░' : s === 'done' ? '█' : '▓').repeat(segment)}
-                    </Text>
-                  ))}
-                </Text>
-              </Box>
-              <Box width={stageWidth} flexShrink={0}>
-                <Text color={dotColor(row)} wrap="truncate-end">
-                  {stageLabel(row)}
-                </Text>
-              </Box>
-              <Box width={4} flexShrink={0}>
-                <Text dimColor>{String(pct(row)).padStart(3)}%</Text>
-              </Box>
-              {doingMin > 0 && doing(row) ? (
-                <Box flexGrow={1} flexShrink={1} minWidth={0}>
-                  <Text dimColor wrap="truncate-end">
-                    {doing(row)}
-                  </Text>
-                </Box>
-              ) : null}
+              ))}
+            </Text>
+          </Box>
+          <Box width={stageWidth} flexShrink={0}>
+            <Text color={dotColor(row)} wrap="truncate-end">
+              {stageLabel(row)}
+            </Text>
+          </Box>
+          <Box width={4} flexShrink={0}>
+            <Text dimColor>{String(pct(row)).padStart(3)}%</Text>
+          </Box>
+          {doingMin > 0 && doing(row) ? (
+            <Box flexGrow={1} flexShrink={1} minWidth={0}>
+              <Text dimColor wrap="truncate-end">
+                {doing(row)}
+              </Text>
             </Box>
-          ))}
+          ) : null}
+          {chip}
         </Box>
       )
     }
 
     const { Box, Text, Svg, Button } = $.ui.resolve(e)
+    const chip = chipLabel ? (
+      <Box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
+        {othersWaiting > 0 ? <Text color={COLOR.waiting}>●</Text> : null}
+        <Button key="sessions-chip" label={`${chipLabel} ›`} plain dimColor={othersWaiting === 0} onPress={openPane} />
+      </Box>
+    ) : null
+    if (!row) {
+      return (
+        <Box flexDirection="row" justifyContent="flex-end">
+          {chip}
+        </Box>
+      )
+    }
 
     return (
-      <Box flexDirection="column" gap={1}>
-        {list.map(row => (
-          <Box key={row.slug} flexDirection="row" alignItems="center" gap={2}>
-            <Text color={dotColor(row)}>●</Text>
-            <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
-              <Text wrap="truncate-end">{name(row)}</Text>
-              {doing(row) ? (
-                <Text dimColor wrap="truncate-end">
-                  {doing(row)}
-                </Text>
-              ) : null}
-            </Box>
-            <Box flexShrink={1} minWidth={0}>
-              <Svg
-                source={barSvg(row, isBusy)}
-                alt={`${name(row)}: ${stageLabel(row)}, ${pct(row)}% complete${doing(row) ? `, ${doing(row)}` : ''}`}
-                width={BAR_WIDTH}
-                height={BAR_HEIGHT}
-              />
-            </Box>
-            <Box flexShrink={0}>
-              <Text dimColor>{pct(row)}%</Text>
-            </Box>
-            <Button
-              key={`dismiss-${row.slug}`}
-              label="✕"
-              plain
-              dimColor
-              onPress={() => update($, dismissed, slugs => [...slugs, row.slug])}
-            />
-          </Box>
-        ))}
+      <Box flexDirection="row" alignItems="center" gap={2}>
+        <Text color={dotColor(row)}>●</Text>
+        <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
+          <Text wrap="truncate-end">{rowName(row)}</Text>
+          {doing(row) ? (
+            <Text dimColor wrap="truncate-end">
+              {doing(row)}
+            </Text>
+          ) : null}
+        </Box>
+        <Box flexShrink={1} minWidth={0}>
+          <Svg
+            source={barSvg(row, isBusy)}
+            alt={`${rowName(row)}: ${stageLabel(row)}, ${pct(row)}% complete${doing(row) ? `, ${doing(row)}` : ''}`}
+            width={BAR_WIDTH}
+            height={BAR_HEIGHT}
+          />
+        </Box>
+        <Box flexShrink={0}>
+          <Text dimColor>{pct(row)}%</Text>
+        </Box>
+        {chip}
+        {isComplete(row) ? (
+          <Button
+            key={`dismiss-${row.slug}`}
+            label="✕"
+            plain
+            dimColor
+            onPress={() => update($, dismissed, slugs => [...slugs, row.slug])}
+          />
+        ) : null}
       </Box>
     )
   })
+
+  // Every item in this repository, grouped by what it needs from the person.
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const { Box, Text, Button } = $.ui.resolve(e)
+    const hiddenSlugs = await read($, dismissed)
+    const list = (await read($, rows)).filter(row => !hiddenSlugs.includes(row.slug))
+    const shouldNotify = await read($, notifyOthers)
+    const groups = [
+      { title: 'Needs you', color: COLOR.waiting, items: list.filter(isWaiting) },
+      { title: 'Running', color: undefined, items: list.filter(row => !isComplete(row) && !isWaiting(row)) },
+      { title: 'Done', color: undefined, items: list.filter(isComplete) },
+    ].filter(group => group.items.length > 0)
+
+    return (
+      <Box flexDirection="column" gap={1}>
+        {list.length === 0 ? <Text dimColor>No work items in this repository yet. /start begins one.</Text> : null}
+        {groups.map(group => (
+          <Box key={group.title} flexDirection="column" gap={1}>
+            <Text bold color={group.color} dimColor={!group.color}>
+              {group.title} · {group.items.length}
+            </Text>
+            {group.items.map(row => (
+              <Box key={row.slug} flexDirection="column">
+                <Box flexDirection="row" gap={1}>
+                  <Text color={dotColor(row)}>●</Text>
+                  <Box flexGrow={1} flexShrink={1} minWidth={0}>
+                    <Text wrap="truncate-end" bold={row.isCurrentBranch}>
+                      {rowName(row)}
+                    </Text>
+                  </Box>
+                  {row.isCurrentBranch ? <Text dimColor>viewing</Text> : null}
+                </Box>
+                <Box flexDirection="row">
+                  {row.statuses.map((s, i) => (
+                    <Text key={`${row.slug}-${i}`} color={s === 'todo' ? COLOR.todo : COLOR[s]} dimColor={s === 'todo'}>
+                      {s === 'todo' ? '▱▱▱ ' : '▰▰▰ '}
+                    </Text>
+                  ))}
+                </Box>
+                <Text
+                  color={isWaiting(row) ? COLOR.waiting : undefined}
+                  dimColor={!isWaiting(row)}
+                  wrap="truncate-end"
+                >
+                  {[stageLabel(row), row.detail].filter(Boolean).join(' · ')}
+                </Text>
+                {!row.isCurrentBranch && !isComplete(row) ? (
+                  <Button
+                    key={`show-${row.slug}`}
+                    label="Show"
+                    plain
+                    onPress={() =>
+                      $.ui.toast(`${rowName(row)} is on ${row.branch || 'another branch'}: open its session from the list`)
+                    }
+                  />
+                ) : null}
+                {isComplete(row) ? (
+                  <Button
+                    key={`dismiss-${row.slug}`}
+                    label="Dismiss"
+                    plain
+                    dimColor
+                    onPress={() => update($, dismissed, slugs => [...slugs, row.slug])}
+                  />
+                ) : null}
+              </Box>
+            ))}
+          </Box>
+        ))}
+        <Button
+          key="notify-others"
+          label={`Toast when another item needs me: ${shouldNotify ? 'on' : 'off'}`}
+          plain
+          dimColor
+          onPress={() => update($, notifyOthers, isOn => !isOn)}
+        />
+      </Box>
+    )
+  })
+}
+
+// Opens the Sessions pane, or closes it when it is already up; resolves to whether it is now open.
+async function toggleSessions($: EngineInterface): Promise<boolean> {
+  if ((await $.ui.panes()).some(pane => pane.id === PANE)) {
+    await $.ui.close({ id: PANE })
+
+    return false
+  }
+  await $.ui.open({ id: PANE, title: 'Sessions' })
+
+  return true
 }
 
 function escapeXml(text: string) {
@@ -566,21 +712,21 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
   const H = BAR_HEIGHT
   const r = H / 2
   const total = row.labels.length
-  const isComplete = row.activeIndex === -1
-  const isWaiting = !isComplete && row.statuses[row.activeIndex] === 'waiting'
+  const isFinished = isComplete(row)
+  const isGate = isWaiting(row)
   // Motion only while Claude is working on a stage, never at a gate or once finished.
-  const isAnimated = isWorking && !isComplete && !isWaiting
+  const isAnimated = isWorking && !isFinished && !isGate
 
-  const stage = isComplete ? 'Done' : row.labels[row.activeIndex]
-  const count = isComplete ? `${total}/${total}` : `${row.activeIndex + 1}/${total}`
+  const stage = isFinished ? 'Done' : row.labels[row.activeIndex]
+  const count = isFinished ? `${total}/${total}` : `${row.activeIndex + 1}/${total}`
   const pillW = Math.round(stage.length * 7.4 + count.length * 6.6 + 30)
   const head = (row.doneCount / total) * W
   const pillX = Math.min(W - pillW, Math.max(0, head - pillW * 0.4))
-  const fillEnd = isComplete ? W : pillX + pillW / 2
+  const fillEnd = isFinished ? W : pillX + pillW / 2
 
-  const pillFill = isWaiting ? '#f2b04c' : '#8e86f8'
-  const pillText = isWaiting ? '#2b1d05' : '#ffffff'
-  const dots = isWaiting ? ['#f2b04c', '#f7cd86', '#8a7a62'] : ['#8e86f8', '#c4c0ff', '#6e6a8c']
+  const pillFill = isGate ? '#f2b04c' : '#8e86f8'
+  const pillText = isGate ? '#2b1d05' : '#ffffff'
+  const dots = isGate ? ['#f2b04c', '#f7cd86', '#8a7a62'] : ['#8e86f8', '#c4c0ff', '#6e6a8c']
 
   const parts: string[] = []
   const random = seeded(row.slug)

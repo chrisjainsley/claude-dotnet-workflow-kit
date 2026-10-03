@@ -171,12 +171,20 @@ update any saved prompts or `/goal` text.
 ## Progress bar
 
 The kit ships a Claude Code mod that draws a progress bar above the prompt, in the
-terminal and the desktop Code tab. It shows one row per work item: the ticket id and a
-short title, a bar with a segment per stage, the current stage, the percentage and what
-Claude is doing right now. The bar reads the pipeline state file that `start`, `plan`
-and `next` write, so it follows the current branch's item and any other unfinished
-item on a branch of the same repository touched in the last day. A stage waiting on you
-turns amber. `/progress` hides or shows the bar, and the cross on a row hides that row.
+terminal and the desktop Code tab. It shows the work item on the session's own branch:
+the ticket id and a short title, a bar with a segment per stage, the current stage, the
+percentage and what Claude is doing right now. A stage waiting on you turns amber. The
+bar reads the pipeline state file that `start`, `plan` and `next` write.
+
+Other items on branches of the same repository, touched in the last day, appear as a
+`+N` chip at the end of the bar; it turns amber when one of them is waiting on you.
+Pressing the chip, or `/sessions`, opens the Sessions pane: every item grouped as
+Needs you, Running and Done, each with its stages, status and a Show button that names
+the branch whose session to open. A plugin cannot switch the app to another session,
+so Show points you to it instead. A toast when another item reaches a gate is off by
+default, because the app's own notifications already cover a session waiting on you;
+the last row of the pane turns it on. `/progress` hides or shows the bar, and the cross
+on a finished item hides it.
 
 The bar turns on by itself once the plugin is installed: mods load in every new session,
 with nothing to enable. It stays empty until a work item is started. An organisation's
