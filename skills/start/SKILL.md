@@ -68,8 +68,11 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    slug with no tracker), `title` (the item's title), `shortTitle` (at most four words
    naming the work, such as "Get todo by id"), `branch`, `order` (the output of
    `python "SKILL_DIR/../../scripts/kit_profile.py" --order`) and
-   `stages.start` as `{"done": true, "at": "<ISO time>"}`. When the file already exists,
-   update only these fields and keep every other stage.
+   `stages.start` as `{"done": true, "at": "<ISO time>"}`. When the session runs in a git
+   worktree (its `.git` is a file, not a folder), also write `worktree: true` and `repo`,
+   the absolute path `git rev-parse --git-common-dir` prints: the progress bar closes
+   the item once that worktree is gone, which is what archiving the chat leaves. When the
+   file already exists, update only these fields and keep every other stage.
 9. **Print a short summary:** item id and title (or the slug, with no tracker), the
    branch name, and whether the assignment and state change happened or were already
    true.

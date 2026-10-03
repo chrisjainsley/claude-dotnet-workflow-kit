@@ -178,6 +178,12 @@ and `next` write, so it follows the current branch's item and any other unfinish
 item on a branch of the same repository touched in the last day. A stage waiting on you
 turns amber. `/progress` hides or shows the bar, and the cross on a row hides that row.
 
+An item closes by itself when its pull request merges or closes, or when the worktree it
+was started in is gone, as it is once a worktree chat is archived; `/progress done`
+closes the current branch's item by hand. A closed item shows every stage done, and a
+day later its row goes and `scripts/close_items.py` deletes its state file. The PR check
+asks `gh` (or `az` for Azure Repos) every ten minutes.
+
 The bar turns on by itself once the plugin is installed: mods load in every new session,
 with nothing to enable. It stays empty until a work item is started. An organisation's
 managed settings can block user-installed mods, for example with `allowManagedModsOnly`.
