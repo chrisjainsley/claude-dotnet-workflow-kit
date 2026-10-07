@@ -86,3 +86,17 @@ def test_given_progress_done_then_the_current_item_closes_by_hand():
     text = register_text()
     assert "e.args.trim() === 'done'" in text
     assert "reason: 'manual'" in text
+
+
+def test_given_branch_no_skill_touched_then_the_bar_adopts_it_and_skills_take_it_over():
+    text = register_text()
+    assert "if (repo && !named.has(repo.branch) && (await adopt($, dir, repo))) return" in text
+    assert "adopted: true" in text
+    assert "if (!slug || (await $.fs.exists(path))) return false" in text, "adopt must never overwrite a file"
+    assert ".replace(/-checks/g, '_checks')" in text, "an adopted file must not be named like a checks file"
+    assert "stages: { start: { done: true, at } }" in text
+    assert "['main', 'master']" in text and "base_branch" in text
+    for label in ("deleted:", "idle:"):
+        assert label in text, f"CLOSED_LABELS must name the {label} reason close_items.py writes"
+    for name in ("start", "plan", "next"):
+        assert "adopted" in skill_text(name), f"{name} must take over an adopted file"

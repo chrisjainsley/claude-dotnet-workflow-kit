@@ -5,7 +5,10 @@
 
 An item closes when its pull request merged or closed (asked of `gh`, or `az` for an
 Azure Repos URL), or when the worktree it was started in no longer exists, which is
-what archiving a worktree session leaves behind. A closed item records
+what archiving a worktree session leaves behind. An item the progress bar adopted
+(`adopted: true`, a branch no skill has taken over) also closes when its branch is
+deleted, or when its file has gone untouched for a week, and its file is deleted at
+once when a skill wrote another file for the same branch. A closed item records
 `closed: {reason, at, prAt}` in its state file, `at` being when this script saw it
 close; one day after `closed.at` the file is deleted. Only items of the repository at
 --repo are checked; deleting covers every closed file. A missing CLI, a failed call or
@@ -21,6 +24,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REMOVE_AFTER = timedelta(days=1)
+# The progress bar rewrites an adopted item's file while its session works, so a week untouched is idle.
+IDLE_AFTER = timedelta(days=7)
 DEFAULT_DIR = Path.home() / ".claude" / "dotnet-workflow-kit" / "pipeline"
 
 
@@ -112,7 +117,7 @@ def worktree_gone(data, worktrees):
     return recorded is True and worktrees is not None and bool(data.get("branch")) and data["branch"] not in worktrees
 
 
-def closing_reason(data, worktrees):
+def closing_reason(data, worktrees, branches=None, idle=False):
     """(reason, the PR's own close time or None), or None while the item is open."""
     url = pr_url(data)
     if url:
@@ -121,6 +126,12 @@ def closing_reason(data, worktrees):
             return state
     if worktree_gone(data, worktrees):
         return "archived", None
+    if data.get("adopted") is True:
+        # An empty set means git failed, so a deleted branch cannot be told.
+        if branches and data.get("branch") and data["branch"] not in branches:
+            return "deleted", None
+        if idle:
+            return "idle", None
     return None
 
 
@@ -134,11 +145,12 @@ def write_json(path, data):
 def close_items(directory, repo, now):
     """Close this repository's finished items, then delete closed files past a day. Returns the changes."""
     changes, branches, worktrees = [], local_branches(repo), worktree_branches(repo)
+    taken = kit_branches(directory, repo, branches)
     for path in sorted(Path(directory).glob("*.json")):
         if "-checks" in path.name:
             continue
         try:
-            change = close_one(path, repo, branches, worktrees, now)
+            change = close_one(path, repo, branches, worktrees, now, taken)
         except (OSError, ValueError, TypeError, KeyError, AttributeError):
             continue  # A half-written or foreign file: leave it for the next run.
         if change:
@@ -146,7 +158,23 @@ def close_items(directory, repo, now):
     return changes
 
 
-def close_one(path, repo, branches, worktrees, now):
+def kit_branches(directory, repo, branches):
+    """Branches of this repository a skill wrote a file for, which an adopted file for the same branch duplicates."""
+    found = set()
+    for path in Path(directory).glob("*.json"):
+        if "-checks" in path.name:
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            mine = same_repo(data["repo"], repo) if data.get("repo") else data.get("branch") in branches
+            if data.get("adopted") is not True and data.get("branch") and mine:
+                found.add(data["branch"])
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            continue
+    return found
+
+
+def close_one(path, repo, branches, worktrees, now, taken=frozenset()):
     data = json.loads(path.read_text(encoding="utf-8"))
     closed = data.get("closed")
     if closed:
@@ -157,7 +185,11 @@ def close_one(path, repo, branches, worktrees, now):
     mine = same_repo(data["repo"], repo) if data.get("repo") else data.get("branch") in branches
     if not mine:
         return None
-    found = closing_reason(data, worktrees)
+    if data.get("adopted") is True and data.get("branch") in taken:
+        path.unlink()
+        return f"removed {path.name}: taken over"
+    idle = now - datetime.fromtimestamp(path.stat().st_mtime, timezone.utc) > IDLE_AFTER
+    found = closing_reason(data, worktrees, branches, idle)
     if not found:
         return None
     # The day counts from when the item was seen closed, so a PR merged long ago still shows done for a day.
