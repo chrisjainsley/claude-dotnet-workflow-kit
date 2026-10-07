@@ -645,10 +645,14 @@ export const register: Register = on => {
       )
     }
 
+    // Never wraps: the name column and the bar share what the fixed cluster on the right leaves,
+    // and the bar's drawing scales down to its slot rather than spilling over the name.
     return (
-      <Box flexDirection="row" alignItems="center" gap={2}>
-        <Text color={dotColor(row)}>●</Text>
-        <Box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0}>
+      <Box flexDirection="row" flexWrap="nowrap" alignItems="center" gap={2}>
+        <Box flexShrink={0}>
+          <Text color={dotColor(row)}>●</Text>
+        </Box>
+        <Box flexDirection="column" flexGrow={1} flexShrink={1} width="35%" minWidth={0}>
           <Text wrap="truncate-end">{rowName(row)}</Text>
           {doing(row) ? (
             <Text dimColor wrap="truncate-end">
@@ -656,27 +660,25 @@ export const register: Register = on => {
             </Text>
           ) : null}
         </Box>
-        <Box flexShrink={1} minWidth={0}>
+        <Box flexShrink={1} width={BAR_WIDTH} minWidth={0} overflow="hidden">
           <Svg
             source={barSvg(row, isBusy)}
             alt={`${rowName(row)}: ${stageLabel(row)}, ${pct(row)}% complete${doing(row) ? `, ${doing(row)}` : ''}`}
-            width={BAR_WIDTH}
-            height={BAR_HEIGHT}
           />
         </Box>
-        <Box flexShrink={0}>
+        <Box flexDirection="row" flexWrap="nowrap" alignItems="center" gap={2} flexShrink={0}>
           <Text dimColor>{pct(row)}%</Text>
+          {chip}
+          {isComplete(row) ? (
+            <Button
+              key={`dismiss-${row.slug}`}
+              label="✕"
+              plain
+              dimColor
+              onPress={() => update($, dismissed, slugs => [...slugs, row.slug])}
+            />
+          ) : null}
         </Box>
-        {chip}
-        {isComplete(row) ? (
-          <Button
-            key={`dismiss-${row.slug}`}
-            label="✕"
-            plain
-            dimColor
-            onPress={() => update($, dismissed, slugs => [...slugs, row.slug])}
-          />
-        ) : null}
       </Box>
     )
   })
