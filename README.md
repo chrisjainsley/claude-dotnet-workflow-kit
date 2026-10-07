@@ -180,6 +180,11 @@ the ticket id and a short title, a bar with a segment per stage, the current sta
 percentage and what Claude is doing right now. A stage waiting on you turns amber. The
 bar reads the pipeline state file that `start`, `plan` and `next` write.
 
+Every session on a branch other than `main`, `master` or the profile's `base_branch`
+shows, whether or not it ran a skill. For a branch no skill has touched, the mod writes
+the state file itself, marked `adopted`, with Start done and a title taken from the
+branch name; the first `start`, `plan` or `next` run on that branch takes the file over.
+
 Other items on branches of the same repository, touched in the last day, appear as a
 `+N` chip at the end of the bar; it turns amber when one of them is waiting on you.
 Pressing the chip, or `/sessions`, opens the Sessions pane: every item grouped as
@@ -194,7 +199,8 @@ shows the bar, and the cross on a finished item hides it.
 
 An item closes by itself when its pull request merges or closes, or when the worktree it
 was started in is gone, as it is once a worktree chat is archived; `/progress done`
-closes the current branch's item by hand. A closed item shows every stage done, and a
+closes the current branch's item by hand. An adopted item no skill took over also closes
+when its branch is deleted or after a week with no session working on it. A closed item shows every stage done, and a
 day later its row goes and `scripts/close_items.py` deletes its state file. The PR check
 asks `gh` (or `az` for Azure Repos) every ten minutes.
 

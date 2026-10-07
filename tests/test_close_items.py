@@ -1,5 +1,6 @@
 """close_items.py closes merged, closed and archived items and deletes them a day later."""
 import json
+import os
 import subprocess
 from datetime import datetime, timedelta, timezone
 
@@ -158,3 +159,45 @@ def test_given_malformed_files_then_the_rest_still_close(repo, pipeline):
 
 def test_given_azure_seven_digit_time_then_it_parses():
     assert close_items.parse_time("2026-10-03T10:00:00.1234567Z") == datetime(2026, 10, 3, 10, 0, 0, 123456, tzinfo=timezone.utc)
+
+
+def adopted(**extra):
+    return item(adopted=True, **extra)
+
+
+def age(path, days):
+    moment = (NOW - timedelta(days=days)).timestamp()
+    os.utime(path, (moment, moment))
+
+
+def test_given_adopted_item_whose_branch_is_deleted_then_closed_deleted(repo, pipeline):
+    path = write(pipeline, "gone", adopted(branch="feat/gone", repo=str(repo)))
+    close_items.close_items(pipeline, repo, NOW)
+    assert json.loads(path.read_text())["closed"] == {"reason": "deleted", "at": "2026-10-03T12:00:00Z"}
+
+
+def test_given_adopted_item_untouched_for_8_days_then_closed_idle(repo, pipeline):
+    path = write(pipeline, "item", adopted(repo=str(repo)))
+    age(path, 8)
+    close_items.close_items(pipeline, repo, NOW)
+    assert json.loads(path.read_text())["closed"]["reason"] == "idle"
+
+
+def test_given_adopted_item_touched_6_days_ago_then_unchanged(repo, pipeline):
+    path = write(pipeline, "item", adopted(repo=str(repo)))
+    age(path, 6)
+    assert close_items.close_items(pipeline, repo, NOW) == []
+
+
+def test_given_kit_item_untouched_for_8_days_or_branch_deleted_then_unchanged(repo, pipeline):
+    idle = write(pipeline, "item", item(repo=str(repo)))
+    age(idle, 8)
+    write(pipeline, "gone", item(branch="feat/gone", repo=str(repo)))
+    assert close_items.close_items(pipeline, repo, NOW) == []
+
+
+def test_given_adopted_item_a_skill_took_over_under_another_name_then_deleted(repo, pipeline):
+    orphan = write(pipeline, "feat-item", adopted(repo=str(repo)))
+    kit = write(pipeline, "PROJ-1", item(repo=str(repo)))
+    assert close_items.close_items(pipeline, repo, NOW) == ["removed feat-item.json: taken over"]
+    assert not orphan.exists() and kit.exists()

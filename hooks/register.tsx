@@ -1,6 +1,7 @@
 // The kit's progress bar: the current branch's work item above the prompt, drawn from the pipeline
 // state files `start`, `plan` and `next` write under ~/.claude/dotnet-workflow-kit/pipeline, and a
-// Sessions pane listing every item in this repository. It also sets the run's /goal when the plan
+// Sessions pane listing every item in this repository. A branch no skill has touched yet gets a
+// file of its own, marked `adopted`, so every session shows whether or not it used the kit. It also sets the run's /goal when the plan
 // and then the review are approved.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
@@ -40,7 +41,17 @@ const POLL_MS = 4000
 const REMOVE_MS = 24 * 60 * 60 * 1000
 // Asking GitHub or Azure about each PR is a network call, so it runs far less often than the poll.
 const CLOSE_MS = 10 * 60 * 1000
-const CLOSED_LABELS: Record<string, string> = { merged: 'Merged', closed: 'PR closed', archived: 'Archived', manual: 'Done' }
+const CLOSED_LABELS: Record<string, string> = {
+  merged: 'Merged',
+  closed: 'PR closed',
+  archived: 'Archived',
+  deleted: 'Branch deleted',
+  idle: 'Idle',
+  manual: 'Done',
+}
+// An adopted item's file is rewritten at most this often while its session works, so it stays recent.
+const TOUCH_MS = 10 * 60 * 1000
+const ADOPTED_DETAIL = 'Not run through the kit yet: /next picks it up'
 
 const COLOR = { done: '#c4c0ff', active: '#8e86f8', waiting: '#f59e0b', todo: '#6b7280' }
 // The Sessions pane's cards: a purple edge on the item being viewed, an amber one on an item
@@ -59,6 +70,7 @@ const SEGMENT = { done: '#5d52a3', active: '#9d8cff', waitingDone: '#8a6a33', wa
 
 type Stage = {
   done?: boolean
+  at?: string
   waiting?: boolean
   label?: string
   artifactUrl?: string
@@ -68,7 +80,8 @@ type Stage = {
 type Closed = { reason: string; at: string }
 type StateFile = {
   closed?: Closed
-  worktree?: boolean
+  adopted?: boolean
+  worktree?: boolean | string
   repo?: string
   ticket?: string
   title?: string
@@ -297,7 +310,7 @@ async function homeDir($: EngineInterface) {
   return home.replace(/\\/g, '/')
 }
 
-type Repo = { branch: string; commonDir: string }
+type Repo = { branch: string; commonDir: string; root: string; isWorktree: boolean }
 
 // The session's repository: its checked-out branch and the git dir that holds its refs
 // (a worktree's own git dir points at the shared one through `commondir`).
@@ -321,7 +334,12 @@ async function currentRepo($: EngineInterface): Promise<Repo | undefined> {
           commonDir = /^([a-zA-Z]:)?\//.test(common) ? common : `${gitDir}/${common}`
         }
 
-        return { branch: head.startsWith('ref: refs/heads/') ? head.slice(16) : '', commonDir }
+        return {
+          branch: head.startsWith('ref: refs/heads/') ? head.slice(16) : '',
+          commonDir,
+          root: dir,
+          isWorktree: stat.kind === 'file',
+        }
       }
       const parent = dir.replace(/\/[^/]+$/, '')
       if (parent === dir) break
@@ -347,14 +365,19 @@ async function refresh($: EngineInterface) {
   isRefreshing = true
   try {
     const dir = `${await homeDir($)}/.claude/dotnet-workflow-kit/pipeline`
-    if (!(await $.fs.exists(dir))) return
-    const [entries, repo, now] = await Promise.all([$.fs.list(dir), currentRepo($), $.clock.now()])
+    const [entries, repo, now] = await Promise.all([
+      $.fs.exists(dir).then(has => (has ? $.fs.list(dir) : [])),
+      currentRepo($),
+      $.clock.now(),
+    ])
     const branch = repo?.branch ?? ''
     const packed = repo && (await $.fs.exists(`${repo.commonDir}/packed-refs`))
       ? `${await $.fs.read(`${repo.commonDir}/packed-refs`)}\n`
       : ''
 
     const found: { row: PipelineRow; mtime: number; branch: string }[] = []
+    // Every branch some file names, closed or not, so a branch is adopted only when none does.
+    const named = new Set<string>()
     for (const entry of entries) {
       const name = entry.name as string
       if (entry.kind !== 'file' || !name.endsWith('.json') || name.includes('-checks')) continue
@@ -365,6 +388,7 @@ async function refresh($: EngineInterface) {
           cache.set(name, hit)
         }
         const data = hit.data
+        if (data?.branch) named.add(data.branch)
         if (!data?.stages || Object.keys(data.stages).length === 0) continue
         if (data.closed && now - Date.parse(data.closed.at) > REMOVE_MS) continue
         const row = toRow(name.slice(0, -5), data, branch)
@@ -377,6 +401,8 @@ async function refresh($: EngineInterface) {
         // A half-written or foreign file: skip it this round.
       }
     }
+
+    if (repo && !named.has(repo.branch) && (await adopt($, dir, repo))) return
 
     // The cap below must never push a live item out for a finished one, so unfinished rows sort
     // ahead of complete ones; the viewing session's own row always stays first.
@@ -424,6 +450,79 @@ async function refresh($: EngineInterface) {
     $.ui.log(`dotnet-workflow-kit: ${String(err)}`)
   } finally {
     isRefreshing = false
+  }
+}
+
+// The branches a team works from, per repository root; their sessions are not work items.
+const bases = new Map<string, string[]>()
+
+async function baseBranches($: EngineInterface, repo: Repo): Promise<string[]> {
+  const known = bases.get(repo.root)
+  if (known) return known
+  const found = ['main', 'master']
+  for (const path of [`${repo.root}/.claude/dotnet-workflow-kit.json`, `${await homeDir($)}/.claude/dotnet-workflow-kit.json`]) {
+    try {
+      if (!(await $.fs.exists(path))) continue
+      const base = (JSON.parse(await $.fs.read(path)) as { base_branch?: unknown }).base_branch
+      if (typeof base === 'string' && base) found.push(base)
+      break
+    } catch {
+      // An unreadable profile leaves the defaults.
+    }
+  }
+  bases.set(repo.root, found)
+
+  return found
+}
+
+// feat/391-foo -> feat-391-foo: the file name `/next` keys a branch with no ticket id by. A
+// "-checks" in it becomes "_checks", since refresh skips files named like a stage's checks.
+const branchSlug = (branch: string) =>
+  branch
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-checks/g, '_checks')
+
+// Writes a state file for a branch no skill has written one for, with Start done; the skills
+// take it over on their first run. Resolves to whether a file was written.
+async function adopt($: EngineInterface, dir: string, repo: Repo): Promise<boolean> {
+  if (!repo.branch || (await baseBranches($, repo)).includes(repo.branch)) return false
+  const slug = branchSlug(repo.branch)
+  const path = `${dir}/${slug}.json`
+  // A file already there is one refresh could not read yet, such as a skill's half-written one.
+  if (!slug || (await $.fs.exists(path))) return false
+  const at = new Date(await $.clock.now()).toISOString().replace(/\.\d{3}Z$/, 'Z')
+  const data: StateFile = {
+    adopted: true,
+    branch: repo.branch,
+    repo: repo.commonDir,
+    ...(repo.isWorktree ? { worktree: repo.root } : {}),
+    current: { detail: ADOPTED_DETAIL },
+    stages: { start: { done: true, at } },
+  }
+  await $.fs.write(path, `${JSON.stringify(data, null, 2)}
+`)
+  // The next refresh reads the new file; refresh is idle again by the time this timer fires.
+  $.clock.after(50, () => void refresh($))
+
+  return true
+}
+
+// Rewrites the current branch's adopted file when it is older than TOUCH_MS, so other sessions
+// keep listing it and the closing script does not count a working branch as idle.
+async function touchAdopted($: EngineInterface) {
+  const current = (await read($, rows)).find(row => row.isCurrentBranch)
+  if (!current) return
+  const path = `${await homeDir($)}/.claude/dotnet-workflow-kit/pipeline/${current.slug}.json`
+  try {
+    const [stat, now] = await Promise.all([$.fs.stat(path), $.clock.now()])
+    if (now - stat.mtimeMs < TOUCH_MS) return
+    const data = JSON.parse(await $.fs.read(path)) as StateFile
+    if (data.adopted !== true || data.closed) return
+    await $.fs.write(path, `${JSON.stringify(data, null, 2)}
+`)
+  } catch {
+    // Gone or half written: the next turn tries again.
   }
 }
 
@@ -535,6 +634,7 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) await update($, activity, () => null)
     await refresh($)
+    await touchAdopted($)
 
     return next(e)
   })

@@ -73,8 +73,10 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    absolute path (`git rev-parse --show-toplevel`), and `repo`, the absolute path
    `git rev-parse --path-format=absolute --git-common-dir` prints: the progress bar
    closes the item once that worktree is gone, which is what archiving the chat leaves.
-   When the file already exists, update only these fields, remove any `closed` field
-   (the item is live again) and keep every other stage.
+   When a file for this branch already exists, update that file whatever its name,
+   including one the progress bar adopted (`adopted: true`) before any skill ran: update
+   only these fields, remove any `closed` and `adopted` field (the item is live again and
+   now the kit's) and keep every other stage.
 9. **Print a short summary:** item id and title (or the slug, with no tracker), the
    branch name, and whether the assignment and state change happened or were already
    true.

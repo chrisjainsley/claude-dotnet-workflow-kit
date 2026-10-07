@@ -85,7 +85,7 @@ Stages 1 through 4 leave no reliable trace in git or the scm, so completion is t
 ~/.claude/dotnet-workflow-kit/pipeline/<slug>.json
 ```
 
-Key by the ticket id when the branch carries one, else the sanitized branch name. Shape:
+Key by the ticket id when the branch carries one, else the sanitized branch name. A file that already names the current branch in `branch` is this item's file whatever its name: the progress bar writes one, marked `adopted: true` with only `stages.start` done, for any branch no skill has touched, so every session shows in the Sessions pane. Update that file in place and remove `adopted` on the first write, rather than starting a second file. Shape:
 
 ```json
 {
