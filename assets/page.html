@@ -208,6 +208,66 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
 .dform button { font: inherit; font-weight: 600; font-size: 14px; color: var(--paper); background: var(--accent); border: 0; border-radius: 5px; padding: 8px 16px; cursor: pointer; }
 .dform button[disabled] { opacity: 0.6; cursor: default; }
 .dform textarea:focus, .dform button:focus-visible, .opt input:focus-visible, .checklist input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+figure.flowmap { margin: 10px 0 18px; }
+.fm-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 16px; margin-bottom: 8px; }
+@media (max-width: 560px) { .fm-bar { grid-template-columns: minmax(0, 1fr); } }
+.fm-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); align-items: center; }
+.fm-legend .sw { display: inline-block; width: 14px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; box-sizing: border-box; }
+.fm-legend .sw.ev { height: 0; width: 18px; border-top: 2px dashed var(--accent); vertical-align: 3px; border-radius: 0; }
+.fm-legend .fm-hint { color: var(--ink); }
+.flowmap[data-view="after"] .lg-before, .flowmap[data-view="before"] .lg-after { display: none; }
+.fm-toggle { display: inline-flex; gap: 2px; padding: 2px; border-radius: 7px; background: var(--code-bg); border: 1px solid var(--line); }
+.fm-toggle button { font: 500 13px/1 var(--sans); color: var(--muted); background: transparent; border: 0; border-radius: 5px; padding: 0 12px; min-height: 34px; cursor: pointer; white-space: nowrap; }
+.fm-toggle button[aria-pressed="true"] { color: var(--ink); background: var(--card); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+.fm-toggle button:focus-visible, .fm-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fm-scroll { overflow-x: auto; }
+.fm-grid { position: relative; display: grid; grid-template-columns: repeat(var(--fm-lanes), minmax(0, 1fr)); column-gap: 36px; min-width: calc(var(--fm-lanes) * 168px); padding: 0 18px 4px; }
+.fm-edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
+.fm-edges path { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+.fm-edges path.ev { stroke: var(--accent); stroke-dasharray: 5 4; }
+.fm-edges .badge circle { fill: var(--paper); stroke: var(--muted); stroke-width: 1.5; }
+.fm-edges .badge text { font: 600 10.5px var(--sans); fill: var(--ink); stroke: none; }
+.fm-edges .badge.ev circle { stroke: var(--accent); }
+.fm-key { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--muted); }
+.fm-key li { display: flex; gap: 6px; align-items: baseline; }
+.fm-key b { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--muted); font-size: 10.5px; color: var(--ink); flex: none; }
+.fm-key li.ev b { border-color: var(--accent); }
+.flowmap[data-view="after"] .fm-key li:not([data-views~="after"]), .flowmap[data-view="before"] .fm-key li:not([data-views~="before"]) { display: none; }
+.fm-head { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 6px 2px; border-bottom: 2px solid var(--line); }
+.fm-rowhead { grid-column: 1 / -1; font-size: 12px; font-weight: 600; color: var(--muted); padding: 14px 0 2px; }
+.fm-rowhead.fm-testshead { border-top: 1px solid var(--line); margin-top: 10px; text-transform: uppercase; font-size: 11px; letter-spacing: 0.08em; }
+.fm-cell { display: flex; flex-wrap: wrap; gap: 28px; align-content: flex-start; padding: 28px 0 10px;min-height: 20px; position: relative; z-index: 1; }
+.fm-node { position: relative; flex: 1 1 150px; max-width: 100%; text-align: left; font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; cursor: pointer; min-height: 44px; }
+.fm-node:hover { border-color: var(--accent); }
+.fm-name { font: 500 13px/1.35 var(--mono); overflow-wrap: anywhere; }
+.fm-sub { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.fm-meta { font-size: 11.5px; color: var(--muted); }
+.fm-meta .fadd { color: var(--ok); }
+.fm-meta .fdel { color: var(--bad); }
+.fm-node.s-new, .fm-node.s-modified, .fm-legend .sw.s-modified { border: 2px solid var(--accent); }
+.flowmap[data-view="before"] .fm-node.s-modified, .flowmap[data-view="before"] .fm-legend .sw.s-modified { border-color: var(--warn); }
+.fm-node.s-deleted, .fm-legend .sw.s-deleted { border: 1px dashed var(--bad); background: var(--bad-soft); }
+.fm-node.s-deleted .fm-name { text-decoration: line-through; color: var(--bad); }
+.fm-node.s-context, .fm-legend .sw.s-context { border: 1px dashed var(--muted); background: transparent; }
+.fm-node.s-missing { border: 1px dashed var(--warn); background: var(--warn-soft); }
+.fm-tests .fm-node { flex-basis: 140px; }
+.flowmap[data-view="after"] .fm-node:not([data-views~="after"]), .flowmap[data-view="before"] .fm-node:not([data-views~="before"]) { display: none; }
+dialog.fm-modal { width: min(760px, 96vw); height: auto; max-height: 92vh; }
+.fm-detail { display: flex; flex-direction: column; gap: 8px; }
+.fm-detail .fm-title { margin: 2px 0 0; font: 500 17px/1.3 var(--mono); overflow-wrap: anywhere; }
+.fm-detail .fm-file code { font-size: 12px; }
+.fm-detail .fm-note { margin: 0; font-size: 14px; }
+.fm-chips { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.fm-chip { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 7px; border-radius: 3px; border: 1px solid var(--line); }
+.fm-chip.s-new { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
+.fm-chip.s-modified, .fm-chip.s-missing { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
+.fm-chip.s-deleted { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+.fm-ex-label { margin: 10px 0 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.fm-detail pre { margin: 0; }
+.fm-detail .fnote { border: 1px dashed var(--line); border-radius: 6px; }
+table.fm-record th { font-weight: 400; white-space: nowrap; }
+table.fm-record td code { overflow-wrap: anywhere; }
+.fm-rec-note { font-size: 12px; color: var(--warn); }
 
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; padding: 18px 16px 60px; }
@@ -234,6 +294,10 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
 <dialog class="diagram-modal" id="diagram-modal" aria-label="Diagram, full size">
   <div class="diagram-bar"><span>Scroll to pan. Esc or click outside to close.</span><button type="button" class="diagram-close" id="diagram-close">Close</button></div>
   <div class="diagram-body" id="diagram-body"></div>
+</dialog>
+<dialog class="diagram-modal fm-modal" id="fm-modal" aria-label="Change detail">
+  <div class="diagram-bar"><span>Esc or click outside to close.</span><button type="button" class="diagram-close" id="fm-close">Close</button></div>
+  <div class="diagram-body" id="fm-body"></div>
 </dialog>
 {{FOOTER}}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -323,6 +387,189 @@ fieldset.d legend { padding: 0 6px; font-weight: 600; font-size: 13.5px; }
     document.getElementById('diagram-close').addEventListener('click', function () { modal.close(); });
     modal.addEventListener('click', function (e) { if (e.target === modal) { modal.close(); } });
     modal.addEventListener('close', function () { modalBody.innerHTML = ''; });
+  }
+  // Layer maps: the Before / After toggle, edges drawn from the boxes' laid-out positions,
+  // and each box's detail (its template plus the embedded file diff) in a dialog.
+  var fmModal = document.getElementById('fm-modal');
+  var fmBody = document.getElementById('fm-body');
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function fmDraw(fig) {
+    var grid = fig.querySelector('.fm-grid');
+    var svg = fig.querySelector('.fm-edges');
+    var data = fig._fmData;
+    if (!grid || !svg || !data || !grid.offsetWidth) { return; }
+    while (svg.firstChild) { svg.removeChild(svg.firstChild); }
+    var view = fig.getAttribute('data-view');
+    var g = grid.getBoundingClientRect();
+    var defs = document.createElementNS(SVGNS, 'defs');
+    [['a', 'var(--muted)'], ['e', 'var(--accent)']].forEach(function (m) {
+      var marker = document.createElementNS(SVGNS, 'marker');
+      marker.setAttribute('id', fig.id + '-head-' + m[0]);
+      marker.setAttribute('viewBox', '0 0 8 8');
+      marker.setAttribute('refX', '7');
+      marker.setAttribute('refY', '4');
+      marker.setAttribute('markerWidth', '7');
+      marker.setAttribute('markerHeight', '7');
+      marker.setAttribute('orient', 'auto');
+      var head = document.createElementNS(SVGNS, 'path');
+      head.setAttribute('d', 'M0 0 L8 4 L0 8 Z');
+      head.style.fill = m[1];
+      head.style.stroke = 'none';
+      marker.appendChild(head);
+      defs.appendChild(marker);
+    });
+    svg.appendChild(defs);
+    function box(id) {
+      var el = grid.querySelector('.fm-node[data-node="' + id + '"]');
+      if (!el || !el.offsetParent) { return null; }
+      var r = el.getBoundingClientRect();
+      var cell = el.closest('.fm-cell');
+      return { el: el, l: r.left - g.left, r: r.right - g.left, t: r.top - g.top, b: r.bottom - g.top,
+        cx: (r.left + r.right) / 2 - g.left, cy: (r.top + r.bottom) / 2 - g.top,
+        col: parseInt(cell.style.gridColumnStart || cell.style.gridColumn, 10) - 1,
+        rowTop: cell.getBoundingClientRect().top - g.top };
+    }
+    function between(s, t) {
+      // Is another visible box in the same cell on the straight line from s to t?
+      var lo = Math.min(s.r, t.r);
+      var hi = Math.max(s.l, t.l);
+      return Array.prototype.slice.call(s.el.closest('.fm-cell').querySelectorAll('.fm-node')).some(function (n) {
+        if (n === s.el || n === t.el || !n.offsetParent) { return false; }
+        var r = n.getBoundingClientRect();
+        var l = r.left - g.left;
+        var top = r.top - g.top;
+        return l >= lo - 2 && l < hi && top < Math.max(s.cy, t.cy) && r.bottom - g.top > Math.min(s.cy, t.cy);
+      });
+    }
+    // Lines run only through the gaps between lanes and along the channel at the top of
+    // each row's cells, never across a box; edges sharing a gap or channel are spread apart.
+    var cols = Array.prototype.slice.call(grid.querySelectorAll('.fm-head')).map(function (h) {
+      var r = h.getBoundingClientRect();
+      return { l: r.left - g.left, r: r.right - g.left };
+    });
+    function gapRight(i) { return i < cols.length - 1 ? (cols[i].r + cols[i + 1].l) / 2 : cols[i].r + 12; }
+    function gapLeft(i) { return i > 0 ? gapRight(i - 1) : cols[0].l - 12; }
+    var used = {};
+    function spread(base) {
+      var key = Math.round(base);
+      var k = used[key] = (used[key] || 0) + 1;
+      return base + (k === 1 ? 0 : (k % 2 ? 1 : -1) * 6 * Math.floor(k / 2));
+    }
+    data.edges.forEach(function (e) {
+      if (e.views.indexOf(view) < 0) { return; }
+      var s = box(e.from);
+      var t = box(e.to);
+      if (!s || !t) { return; }
+      var d, bx, by, x, x1, x2, y;
+      var sideBySide = t.l >= s.r - 2 || t.r <= s.l + 2;
+      if (s.col === t.col && sideBySide && !between(s, t)) {
+        // Neighbours in one cell: straight across the gap between them.
+        var east1 = t.l >= s.r - 2;
+        x = (east1 ? s.r + t.l : s.l + t.r) / 2;
+        d = 'M' + (east1 ? s.r : s.l) + ' ' + s.cy + ' H' + x + ' V' + t.cy + ' H' + (east1 ? t.l : t.r);
+        bx = x;
+        by = (s.cy + t.cy) / 2;
+      } else if (s.col === t.col && sideBySide) {
+        // A box sits between them: go over the top, through the channel above the row.
+        y = spread(t.rowTop + 12);
+        d = 'M' + s.cx + ' ' + s.t + ' V' + y + ' H' + t.cx + ' V' + t.t;
+        bx = (s.cx + t.cx) / 2;
+        by = y;
+      } else if (s.col === t.col) {
+        x = spread(gapRight(s.col));
+        d = 'M' + s.r + ' ' + s.cy + ' H' + x + ' V' + t.cy + ' H' + t.r;
+        bx = x;
+        by = (s.cy + t.cy) / 2;
+      } else if (Math.abs(s.col - t.col) === 1) {
+        var right = t.col > s.col;
+        x = spread(right ? gapRight(s.col) : gapLeft(s.col));
+        d = 'M' + (right ? s.r : s.l) + ' ' + s.cy + ' H' + x + ' V' + t.cy + ' H' + (right ? t.l : t.r);
+        bx = x;
+        by = (s.cy + t.cy) / 2;
+      } else {
+        var east = t.col > s.col;
+        x1 = spread(east ? gapRight(s.col) : gapLeft(s.col));
+        x2 = spread(east ? gapLeft(t.col) : gapRight(t.col));
+        y = spread(t.rowTop + 12);
+        d = 'M' + (east ? s.r : s.l) + ' ' + s.cy + ' H' + x1 + ' V' + y + ' H' + x2 + ' V' + t.cy + ' H' + (east ? t.l : t.r);
+        bx = (x1 + x2) / 2;
+        by = y;
+      }
+      var path = document.createElementNS(SVGNS, 'path');
+      path.setAttribute('d', d);
+      path.setAttribute('marker-end', 'url(#' + fig.id + '-head-' + (e.event ? 'e' : 'a') + ')');
+      if (e.event) { path.setAttribute('class', 'ev'); }
+      svg.appendChild(path);
+      if (e.n) {
+        // A numbered badge; the key under the map carries the words.
+        var badge = document.createElementNS(SVGNS, 'g');
+        badge.setAttribute('class', 'badge' + (e.event ? ' ev' : ''));
+        var dot = document.createElementNS(SVGNS, 'circle');
+        dot.setAttribute('cx', bx);
+        dot.setAttribute('cy', by);
+        dot.setAttribute('r', '8');
+        var num = document.createElementNS(SVGNS, 'text');
+        num.setAttribute('x', bx);
+        num.setAttribute('y', by + 3.5);
+        num.setAttribute('text-anchor', 'middle');
+        num.textContent = String(e.n);
+        var tip = document.createElementNS(SVGNS, 'title');
+        tip.textContent = e.label;
+        badge.appendChild(dot);
+        badge.appendChild(num);
+        badge.appendChild(tip);
+        svg.appendChild(badge);
+      }
+    });
+  }
+  function fmOpen(fig, node) {
+    var tpl = document.getElementById(fig.id + '-' + node.getAttribute('data-node'));
+    if (!tpl || !fmModal || typeof fmModal.showModal !== 'function') { return; }
+    fmBody.innerHTML = '';
+    fmBody.appendChild(tpl.content.cloneNode(true));
+    // The diff is the one already embedded under File diffs; copy it rather than ship it twice.
+    fmBody.querySelectorAll('.fm-diff').forEach(function (slot) {
+      var src = document.getElementById(slot.getAttribute('data-file'));
+      if (!src) { return; }
+      Array.prototype.slice.call(src.children).forEach(function (child) {
+        if (child.tagName !== 'SUMMARY') { slot.appendChild(child.cloneNode(true)); }
+      });
+    });
+    if (window.hljs) {
+      fmBody.querySelectorAll('pre code[class*="language-"]').forEach(function (el) {
+        if (!el.dataset.highlighted) { hljs.highlightElement(el); }
+      });
+    }
+    fmBody.querySelectorAll('a.filelink').forEach(function (a) {
+      a.addEventListener('click', function () { fmModal.close(); openTarget(a.getAttribute('href')); });
+    });
+    fmModal.showModal();
+  }
+  var fmFigs = Array.prototype.slice.call(document.querySelectorAll('figure.flowmap'));
+  fmFigs.forEach(function (fig) {
+    try { fig._fmData = JSON.parse(fig.querySelector('.fm-data').textContent); } catch (err) { fig._fmData = { edges: [] }; }
+    fig.querySelectorAll('.fm-toggle button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        fig.setAttribute('data-view', b.getAttribute('data-view'));
+        fig.querySelectorAll('.fm-toggle button').forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+        fmDraw(fig);
+      });
+    });
+    fig.querySelectorAll('.fm-node').forEach(function (node) {
+      node.addEventListener('click', function () { fmOpen(fig, node); });
+    });
+    if ('ResizeObserver' in window) { new ResizeObserver(function () { fmDraw(fig); }).observe(fig.querySelector('.fm-grid')); }
+    fmDraw(fig);
+  });
+  function fmRedraw() { fmFigs.forEach(fmDraw); }
+  window.addEventListener('resize', fmRedraw);
+  window.addEventListener('load', fmRedraw);
+  if (document.fonts && document.fonts.ready) { document.fonts.ready.then(fmRedraw); }
+  document.querySelectorAll('details').forEach(function (d) { d.addEventListener('toggle', fmRedraw); });
+  if (fmModal && fmBody) {
+    document.getElementById('fm-close').addEventListener('click', function () { fmModal.close(); });
+    fmModal.addEventListener('click', function (e) { if (e.target === fmModal) { fmModal.close(); } });
+    fmModal.addEventListener('close', function () { fmBody.innerHTML = ''; });
   }
 })();
 (async function () {

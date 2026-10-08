@@ -19,7 +19,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from kit_profile import add_profile_arg, disallowed_plan_sections, expected_plan_sections, resolve_profile  # noqa: E402
+from kit_profile import (  # noqa: E402
+    add_profile_arg, disallowed_plan_sections, expected_plan_sections, resolve_profile, review_slices,
+)
+import flowmap  # noqa: E402
 
 SIZE_MULTIPLIER = {"small": 0.6, "standard": 1.0, "large": 1.5}
 
@@ -100,6 +103,54 @@ def fences(text):
         if current is not None:
             current.append(line)
     return blocks
+
+
+def captioned_fences(text):
+    """[(lang, caption, body, line)] for every fence, keeping the caption after the
+    language; line is the 0-based index of the opening fence."""
+    blocks, current = [], None
+    for n, line in enumerate(text.splitlines()):
+        if line.strip().startswith("```"):
+            if current is None:
+                info = line.strip()[3:].strip().split(None, 1)
+                current = [info[0].lower() if info else "", info[1].strip() if len(info) > 1 else "", [], n]
+            else:
+                blocks.append((current[0], current[1], "\n".join(current[2]), current[3]))
+                current = None
+            continue
+        if current is not None:
+            current[2].append(line)
+    return blocks
+
+
+def check_changes_diagram(changes, slices):
+    """The Changes section opens with one diagram before the first ### service heading: a
+    ```flowmap layer map (preferred) or, in older reviews, a ```mermaid flowchart. Example
+    fences attach to flowmap nodes by an @id caption and sit before the first ### too."""
+    failures = []
+    lines = changes.splitlines()
+    first_service = next((n for n, line in enumerate(lines) if line.startswith("### ")), len(lines))
+    blocks = captioned_fences(changes)
+    diagrams = [(lang, at) for lang, _, _, at in blocks if lang in ("flowmap", "mermaid")]
+    maps = [b for lang, _, b, _ in blocks if lang == "flowmap"]
+    if len(diagrams) != 1:
+        found = ", ".join(f"{sum(1 for lang, _ in diagrams if lang == k)} {k}" for k in ("flowmap", "mermaid"))
+        failures.append(f"Changes: needs exactly one ```flowmap layer map of the change before the first ### service heading, found {found}")
+        return failures
+    if diagrams[0][1] > first_service:
+        failures.append("Changes: the diagram belongs before the first ### service heading")
+    examples = [(lang, caption, body) for lang, caption, body, at in blocks if flowmap.example_target(caption)]
+    if examples and not maps:
+        failures.append("Changes: @id example fences need a ```flowmap to attach to")
+    for lang, caption, _, at in blocks:
+        if flowmap.example_target(caption) and at > first_service:
+            failures.append(f"Changes: example '{caption[:40]}' belongs before the first ### service heading")
+    if maps:
+        spec, errors = flowmap.parse(maps[0])
+        errors += flowmap.validate(spec, slices)
+        errors += flowmap.validate_examples(examples, spec)
+        failures += ["Changes: flowmap " + e for e in errors]
+    return failures
 
 
 def step_key(text):
@@ -353,7 +404,7 @@ def check_plan(meta, body, multiplier, sections, disallowed=()):
     return report(failures)
 
 
-def check_review(meta, body, multiplier):
+def check_review(meta, body, multiplier, slices=None):
     failures = [f"front matter is missing '{k}'" for k in REVIEW_META if not meta.get(k)]
 
     found = split_sections(body)
@@ -392,11 +443,7 @@ def check_review(meta, body, multiplier):
             failures.append(f"Changes: hunk {n} is {len(block)} lines, cap {MAX_HUNK_LINES}")
     if not re.search(r"^### ", changes, flags=re.M):
         failures.append("Changes: group by service with ### ServiceName headings")
-    mermaid = [b for lang, b in fences(changes) if lang == "mermaid"]
-    if len(mermaid) != 1:
-        failures.append(f"Changes: needs exactly one ```mermaid diagram of the change before the first ### service heading, found {len(mermaid)}")
-    elif changes.find("```mermaid") > (re.search(r"^### ", changes, flags=re.M) or re.search(r"$", changes)).start():
-        failures.append("Changes: the mermaid diagram belongs before the first ### service heading")
+    failures += check_changes_diagram(changes, slices)
     for r in table_rows(changes):
         if len(r) >= 2 and r[0].lower() not in ("slice", "") and r[1].strip().lower() != "none" and not re.fullmatch(r"`[^`]+`", r[1].strip()):
             failures.append(f"Changes: File cell must be a backticked repo path, or none: '{r[1][:40]}'")
@@ -475,7 +522,7 @@ def main(kind=None, argv=None):
         present = [name for name, _ in split_sections(body)]
         return check_plan(meta, body, multiplier, expected_plan_sections(profile, present),
                           disallowed_plan_sections(profile, present))
-    return check_review(meta, body, multiplier)
+    return check_review(meta, body, multiplier, review_slices(profile))
 
 
 if __name__ == "__main__":
