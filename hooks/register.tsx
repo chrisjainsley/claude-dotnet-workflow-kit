@@ -114,6 +114,10 @@ function stageDone(s: Record<string, Stage | undefined>, id: string): boolean {
   }
 }
 
+// A stage's entry in the file, under either spelling of the PR stage.
+const stageEntry = (s: Record<string, Stage | undefined>, id: string) =>
+  id === 'pull_request' || id === 'pullRequest' ? (s.pullRequest ?? s.pull_request) : s[id]
+
 // The stages in order with their labels: the file's `order` when present, else the kit's six.
 function stageList(data: StateFile): { id: string; label: string }[] {
   const order = data.order?.length ? data.order : DEFAULT_ORDER
@@ -155,11 +159,19 @@ function shortTitle(title: string): string {
 function toRow(slug: string, data: StateFile, branch: string): PipelineRow {
   const stages = data.stages ?? {}
   const list = stageList(data)
+  // A stage a skill has written to means every stage before it is behind the item, even when a
+  // skill skipped marking them (a plan written without Start ticked is still at Plan).
+  // `/next` seeds stages it has not reached with blank placeholders, so only real progress counts.
+  const isReached = (id: string) => {
+    const s = stageEntry(stages, id)
+    return data.current?.stage === id || !!(s && (s.done || s.waiting || s.at || s.artifactUrl || s.decision))
+  }
+  const reached = list.reduce((last, stage, i) => (isReached(stage.id) ? i : last), -1)
   // A closed item counts every stage as done, whatever the stage flags say.
-  const flags = list.map(stage => !!data.closed || stageDone(stages, stage.id))
+  const flags = list.map((stage, i) => !!data.closed || i < reached || stageDone(stages, stage.id))
   const activeIndex = flags.indexOf(false)
   const active = activeIndex === -1 ? undefined : list[activeIndex].id
-  const activeStage = active ? stages[active === 'pull_request' ? 'pullRequest' : active] : undefined
+  const activeStage = active ? stageEntry(stages, active) : undefined
   const isPlanGate = active === 'plan' && !!activeStage?.artifactUrl
   const isCheckpoint = active === 'review' && !!activeStage?.artifactUrl && !activeStage?.decision
   const isCustomGate = activeStage?.waiting === true
