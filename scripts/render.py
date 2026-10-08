@@ -41,12 +41,12 @@ and links backticked File cells to full per-file diffs pulled from git for --ran
 (derived from the front matter when omitted), QA report renders scenario cards whose
 gherkin steps expand to the evidence captioned with their text,
 Rollout renders a persistent checklist, and Decision gets the approve /
-request-changes form. An optional Walkthrough section is not drawn as a section: its
+request-changes form. With the profile's optional.walkthrough on, a Walkthrough section is not drawn as a section: its
 numbered scenes become a player bar under the header that scrolls to each scene's
 target, highlights it (a flowmap box gets its edges animated) and reads the line aloud.
 Clips recorded by scripts/narrate.py (walkthrough/narration.json beside the source)
-play first and are listed in review.files.json; any sentence without one falls back
-to the browser's speech synthesis, captions always on and timed when no voice.
+play with each sentence captioned and are listed in review.files.json; a sentence
+without a clip is captioned silently for as long as it would take to say.
 """
 import argparse
 import base64
@@ -995,26 +995,25 @@ def render_decision_form(open_findings, merged=False):
 
 
 def narration_clips():
-    """(voice, {sentence: clip path}) from walkthrough/narration.json beside the source,
-    written by scripts/narrate.py; clips whose file is gone are left out."""
+    """{sentence: clip path} from walkthrough/narration.json beside the source, written by
+    scripts/narrate.py; clips whose file is gone are left out."""
     manifest = SOURCE_DIR / "walkthrough" / "narration.json"
     if not manifest.is_file():
-        return None, {}
+        return {}
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
     except ValueError:
-        WARNINGS.append(f"{manifest} is not valid JSON; the walkthrough uses the browser voice")
-        return None, {}
-    clips = {c["text"]: c["file"] for c in data.get("clips", []) if (SOURCE_DIR / c.get("file", "")).is_file()}
-    return data.get("voice"), clips
+        WARNINGS.append(f"{manifest} is not valid JSON; the walkthrough plays captions only")
+        return {}
+    return {c["text"]: c["file"] for c in data.get("clips", []) if (SOURCE_DIR / c.get("file", "")).is_file()}
 
 
 def render_walkthrough(scenes):
     """The player bar: controls, a caption line and the scenes as JSON for the page script.
-    Sentences with a recorded clip carry its path; the rest are spoken by the browser."""
+    Sentences with a recorded clip carry its path; the rest are captioned without sound."""
     if not scenes:
         return ""
-    voice, clips = narration_clips()
+    clips = narration_clips()
     data, missing = [], 0
     for target, text in scenes:
         kind, name, needle = scene_target(target)
@@ -1036,13 +1035,12 @@ def render_walkthrough(scenes):
             if needle:
                 scene["find"] = needle
         data.append(scene)
-    if clips and missing:
-        WARNINGS.append(f"walkthrough: {missing} sentence(s) have no recorded clip and use the browser voice; rerun scripts/narrate.py")
-    recorded = voice if clips else ""
+    if missing:
+        WARNINGS.append(f"walkthrough: {missing} sentence(s) have no recorded clip and play as captions only; run scripts/narrate.py")
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     total = len(scenes)
     return (
-        f'<section class="wt" id="wt" aria-label="Narrated walkthrough" data-recorded="{html.escape(recorded or "", quote=True)}">'
+        f'<section class="wt" id="wt" aria-label="Narrated walkthrough">'
         '<div class="wt-bar">'
         '<button type="button" class="wt-play" id="wt-play" aria-pressed="false">'
         '<svg viewBox="0 0 16 16" aria-hidden="true"><path class="i-play" d="M4 2.5v11l9-5.5z"/>'
@@ -1054,7 +1052,6 @@ def render_walkthrough(scenes):
         '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3h2v10h-2zM2 3v10l8-5z"/></svg></button>'
         f'<span class="wt-step" id="wt-step">{total} scenes</span>'
         '<span class="wt-track" aria-hidden="true"><i id="wt-fill"></i></span>'
-        '<label class="wt-voice"><span>Voice</span><select id="wt-voice"><option value="">Captions only</option></select></label>'
         '<button type="button" class="wt-btn wt-stop" id="wt-stop" aria-label="Stop the walkthrough" hidden>'
         '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h10v10H3z"/></svg></button>'
         '</div>'
@@ -1176,7 +1173,7 @@ def layer_map(sections):
     return {name: idx for idx, name in enumerate(layers)}
 
 
-def build(meta, sections, template, count=0, branded=True):
+def build(meta, sections, template, count=0, branded=True, walkthrough=False):
     nav, parts = [], []
     layers = layer_map(sections) if KIND == "plan" else {}
     for name, body in sections:
@@ -1210,7 +1207,7 @@ def build(meta, sections, template, count=0, branded=True):
         "COUNT": str(len(sections)),
         "QUESTIONS": str(count if KIND == "plan" else 0),
         "OPEN": str(count if KIND == "review" else 0),
-        "WALKTHROUGH": render_walkthrough(WALK_SCENES) if KIND == "review" else "",
+        "WALKTHROUGH": render_walkthrough(WALK_SCENES) if KIND == "review" and walkthrough else "",
         "BRAND_STYLE": BRAND_STYLE if branded else "",
         "FOOTER": BRAND_FOOTER if branded else "",
     }.items():
@@ -1242,8 +1239,11 @@ def main(kind=None, argv=None):
         DIFF_RANGE = args.range or derive_range(META)
         load_file_stats()
     meta, sections, count = parse(text, document_kind)
+    walkthrough = bool(profile.get("optional", {}).get("walkthrough", False))
+    if WALK_SCENES and not walkthrough:
+        WARNINGS.append("the Walkthrough section is ignored because optional.walkthrough is false in the profile")
     page = build(meta, sections, Path(args.template).read_text(encoding="utf-8"), count,
-                 branded=bool(profile.get("branding", True)))
+                 branded=bool(profile.get("branding", True)), walkthrough=walkthrough)
     Path(args.out).write_text(page, encoding="utf-8", newline="\n")
     if document_kind == "plan":
         print(f"wrote {args.out} ({len(page):,} bytes, {len(sections)} sections, {count} answerable questions)")

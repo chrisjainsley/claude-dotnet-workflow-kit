@@ -281,12 +281,9 @@ table.fm-record td code { overflow-wrap: anywhere; }
 .wt-btn { color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 999px; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
 .wt-btn:hover:not([disabled]) { color: var(--accent); border-color: var(--accent); }
 .wt-btn[disabled] { opacity: 0.4; cursor: default; }
-.wt-play:focus-visible, .wt-btn:focus-visible, .wt-voice select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.wt-step { font: 500 12px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wt-play:focus-visible, .wt-btn:focus-visible, .wt-step { font: 500 12px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wt-track { flex: 1 1 80px; min-width: 60px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
 .wt-track i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.4s ease; }
-.wt-voice { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); min-width: 0; }
-.wt-voice select { font: 13px var(--sans); color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 5px; padding: 5px 6px; max-width: 220px; min-width: 0; }
 .wt-caption { margin-top: 10px; font-size: 15.5px; line-height: 1.5; text-wrap: pretty; }
 .wt-caption .s { color: var(--muted); transition: color 0.3s; }
 .wt-caption .s.now { color: var(--ink); }
@@ -314,8 +311,7 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; padding: 18px 16px 60px; }
   .wt { padding: 10px 16px; }
-  .wt-voice > span { display: none; }
-  nav.rail { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    nav.rail { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
   nav.rail a { border-left: 0; border-bottom: 2px solid var(--line); padding: 4px 8px; }
   nav.rail a.active { border-bottom-color: var(--accent); }
 }
@@ -635,14 +631,14 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
     fmModal.addEventListener('click', function (e) { if (e.target === fmModal) { fmModal.close(); } });
     fmModal.addEventListener('close', function () { fmBody.innerHTML = ''; });
   }
-  // Narrated walkthrough: each scene scrolls to its target, highlights it and is read aloud,
-  // from clips recorded with Kokoro when the review was built (scripts/narrate.py), else by
-  // the browser's own speech synthesis. "Captions only" times each caption by its length.
+  // Narrated walkthrough: each scene scrolls to its target, highlights it and plays the
+  // clips recorded with Kokoro when the review was built (scripts/narrate.py), one per
+  // sentence, with the sentence captioned. A sentence without a clip is captioned for as
+  // long as it would take to say, so the tour still runs.
   var wt = document.getElementById('wt');
   if (wt) {
     var scenes = [];
     try { scenes = JSON.parse(wt.querySelector('.wt-data').textContent); } catch (err) { scenes = []; }
-    var synth = window.speechSynthesis || null;
     var wtPlay = document.getElementById('wt-play');
     var wtLabel = wtPlay.querySelector('.wt-label');
     var wtPrev = document.getElementById('wt-prev');
@@ -651,75 +647,15 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
     var wtStep = document.getElementById('wt-step');
     var wtFill = document.getElementById('wt-fill');
     var wtCaption = document.getElementById('wt-caption');
-    var wtVoice = document.getElementById('wt-voice');
-    var VOICE_KEY = 'review-walkthrough-voice';
-    var RECORDED = '__recorded__';
-    var recordedName = wt.getAttribute('data-recorded') || '';
     var clipCache = {};
     var currentClip = null;
     var current = -1;
     var playing = false;
     var token = 0;
-    var wakeTimer = null;
-    function saved() { try { return localStorage.getItem(VOICE_KEY); } catch (e) { return null; } }
-    function remember(v) { try { localStorage.setItem(VOICE_KEY, v); } catch (e) { /* storage may be blocked */ } }
-    function voiceRank(v) {
-      // Edge's neural voices say "Natural"; Chrome's network voices say "Google".
-      var lang = (navigator.language || 'en').toLowerCase();
-      var score = 0;
-      if (/natural|neural/i.test(v.name)) { score += 8; }
-      if (/google|enhanced|premium|siri/i.test(v.name)) { score += 4; }
-      if (v.lang && v.lang.toLowerCase() === lang) { score += 3; }
-      if (v.localService === false) { score += 1; }
-      return score;
+    function wait(ms, t) {
+      return new Promise(function (done) { setTimeout(function () { done(t === token); }, ms); });
     }
-    function englishVoices() {
-      if (!synth) { return []; }
-      return synth.getVoices().filter(function (v) { return /^en(-|_|$)/i.test(v.lang || ''); })
-        .sort(function (a, b) { return voiceRank(b) - voiceRank(a) || a.name.localeCompare(b.name); });
-    }
-    function recordedLabel() {
-      // Kokoro ids read prefix_name: af_heart is an American female voice called Heart.
-      var name = recordedName.replace(/^[a-z]{2}_/, '');
-      return (name ? name.charAt(0).toUpperCase() + name.slice(1) + ', ' : '') + 'recorded';
-    }
-    function fillVoices() {
-      var list = englishVoices();
-      var keep = saved();
-      wtVoice.innerHTML = '';
-      if (recordedName) {
-        var rec = document.createElement('option');
-        rec.value = RECORDED;
-        rec.textContent = recordedLabel();
-        wtVoice.appendChild(rec);
-      }
-      list.forEach(function (v) {
-        var o = document.createElement('option');
-        o.value = v.name;
-        o.textContent = v.name.replace(/^Microsoft\s+/, '').replace(/\s+-\s+English.*$/, '') + ' (' + v.lang + ')';
-        wtVoice.appendChild(o);
-      });
-      var none = document.createElement('option');
-      none.value = '';
-      none.textContent = 'Captions only';
-      wtVoice.appendChild(none);
-      var known = Array.prototype.some.call(wtVoice.options, function (o) { return o.value === keep; });
-      wtVoice.value = keep !== null && known ? keep : wtVoice.options[0].value;
-    }
-    fillVoices();
-    if (synth) {
-      if (typeof synth.addEventListener === 'function') { synth.addEventListener('voiceschanged', fillVoices); }
-      else { synth.onvoiceschanged = fillVoices; }
-    }
-    wtVoice.addEventListener('change', function () {
-      remember(wtVoice.value);
-      if (playing) { play(current); }
-    });
-    function chosenVoice() {
-      if (!synth || !wtVoice.value) { return null; }
-      if (wtVoice.value === RECORDED) { return englishVoices()[0] || null; }
-      return synth.getVoices().filter(function (v) { return v.name === wtVoice.value; })[0] || null;
-    }
+    function estimate(text) { return Math.max(1400, text.split(/\s+/).length * 400); }
     function clip(src) {
       if (!clipCache[src]) {
         clipCache[src] = new Audio(src);
@@ -728,10 +664,11 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
       return clipCache[src];
     }
     function preload(i) {
-      if (wtVoice.value !== RECORDED || !scenes[i]) { return; }
+      if (!scenes[i]) { return; }
       (scenes[i].lines || []).forEach(function (l) { if (l.audio) { clip(l.audio); } });
     }
-    function playClip(line, t) {
+    function sayOne(line, t) {
+      if (!line.audio) { return wait(estimate(line.text), t); }
       return new Promise(function (done) {
         var finished = false;
         var audio = clip(line.audio);
@@ -741,8 +678,8 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
           clearTimeout(guard);
           audio.onended = audio.onerror = null;
           if (currentClip === audio) { currentClip = null; }
-          // A clip that will not load or play falls back to the browser voice.
-          if (!ok && t === token) { speakText(line.text, t).then(done); return; }
+          // A clip that will not load or play leaves its caption up for the time it would take.
+          if (!ok && t === token) { wait(estimate(line.text), t).then(done); return; }
           done(t === token);
         }
         var guard = setTimeout(function () { end(true); }, estimate(line.text) * 3 + 5000);
@@ -752,38 +689,6 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
         audio.onerror = function () { end(false); };
         var started = audio.play();
         if (started && typeof started.catch === 'function') { started.catch(function () { end(false); }); }
-      });
-    }
-    function sentences(text) {
-      // Chrome drops an utterance that runs past about fifteen seconds; a sentence never does.
-      return (text.match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) || [text]).map(function (t) { return t.trim(); }).filter(Boolean);
-    }
-    function linesOf(scene) {
-      return scene.lines && scene.lines.length ? scene.lines : sentences(scene.text).map(function (text) { return { text: text }; });
-    }
-    function wait(ms, t) {
-      return new Promise(function (done) { setTimeout(function () { done(t === token); }, ms); });
-    }
-    function estimate(text) { return Math.max(1400, text.split(/\s+/).length * 400); }
-    function sayOne(line, t) {
-      if (line.audio && wtVoice.value === RECORDED) { return playClip(line, t); }
-      return speakText(line.text, t);
-    }
-    function speakText(text, t) {
-      var voice = chosenVoice();
-      if (!voice) { return wait(estimate(text), t); }
-      return new Promise(function (done) {
-        var finished = false;
-        function end() { if (!finished) { finished = true; clearTimeout(guard); done(t === token); } }
-        var u = new SpeechSynthesisUtterance(text);
-        u.voice = voice;
-        u.lang = voice.lang;
-        u.rate = 1;
-        u.onend = end;
-        u.onerror = end;
-        // Some engines never fire onend; the guard moves the walkthrough on regardless.
-        var guard = setTimeout(end, estimate(text) * 2.5 + 3000);
-        synth.speak(u);
       });
     }
     function clearFocus() {
@@ -864,7 +769,7 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
       tag.className = 'wt-where';
       tag.textContent = where;
       wtCaption.appendChild(tag);
-      linesOf(scene).forEach(function (line) {
+      (scene.lines || []).forEach(function (line) {
         var span = document.createElement('span');
         span.className = 's';
         span.textContent = line.text + ' ';
@@ -881,13 +786,9 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
       playing = on;
       wtPlay.setAttribute('aria-pressed', String(on));
       wtLabel.textContent = on ? 'Pause' : current >= 0 && current < scenes.length - 1 ? 'Resume' : 'Walk me through it';
-      clearInterval(wakeTimer);
-      // Chrome pauses long speech queues on its own; a periodic resume keeps it going.
-      if (on && synth) { wakeTimer = setInterval(function () { if (synth.speaking && !synth.paused) { synth.resume(); } }, 5000); }
     }
     function silence() {
       token++;
-      if (synth) { synth.cancel(); }
       if (currentClip) { currentClip.pause(); currentClip = null; }
     }
     async function play(from) {
@@ -897,7 +798,7 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
       for (var i = Math.max(0, from); i < scenes.length; i++) {
         show(i);
         var parts = wtCaption.querySelectorAll('.s');
-        var lines = linesOf(scenes[i]);
+        var lines = scenes[i].lines || [];
         for (var n = 0; n < parts.length; n++) {
           parts[n].classList.add('now');
           if (!(await sayOne(lines[n], t))) { return; }

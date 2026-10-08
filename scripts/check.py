@@ -58,9 +58,10 @@ REVIEW_BANNED = [
     (re.compile(r"\brobust\b|\bseamless(ly)?\b|\bleverag(e|es|ing)\b", re.I), "filler adjective"),
 ]
 REVIEW_META = ("title", "ticket", "pr", "branch", "base")
-# The optional narrated walkthrough: numbered scenes after Decision, each a backticked
-# target (a section, "Section > text" for a row or heading in it, or "@node" for a
-# flowmap box) and one spoken line. The page reads it aloud with the browser's own voice.
+# The narrated walkthrough, on when the profile's optional.walkthrough is true: numbered
+# scenes after Decision, each a backticked target (a section, "Section > text" for a row
+# or heading in it, or "@node" for a flowmap box) and one spoken line, recorded with
+# Kokoro by scripts/narrate.py and played by the page.
 WALKTHROUGH = "Walkthrough"
 WALKTHROUGH_CAP = 220
 MAX_SCENES = 8
@@ -484,7 +485,7 @@ def check_plan(meta, body, multiplier, sections, disallowed=()):
     return report(failures)
 
 
-def check_review(meta, body, multiplier, slices=None):
+def check_review(meta, body, multiplier, slices=None, walkthrough=False):
     failures = [f"front matter is missing '{k}'" for k in REVIEW_META if not meta.get(k)]
 
     found = split_sections(body)
@@ -571,7 +572,9 @@ def check_review(meta, body, multiplier, slices=None):
     if len(items) > MAX_ROLLOUT_ITEMS:
         failures.append(f"Rollout: {len(items)} items, cap {MAX_ROLLOUT_ITEMS}")
 
-    if WALKTHROUGH in by_name:
+    if WALKTHROUGH in by_name and not walkthrough:
+        print(f"note: the {WALKTHROUGH} section is not checked and the page ignores it, because optional.walkthrough is false\n")
+    elif WALKTHROUGH in by_name:
         walk_failures, spoken, spoken_cap = check_walkthrough(by_name[WALKTHROUGH], by_name, multiplier)
         failures += walk_failures
         rows.append((WALKTHROUGH + " (spoken)", spoken, spoken_cap, "OVER" if spoken > spoken_cap else "ok"))
@@ -608,7 +611,8 @@ def main(kind=None, argv=None):
         present = [name for name, _ in split_sections(body)]
         return check_plan(meta, body, multiplier, expected_plan_sections(profile, present),
                           disallowed_plan_sections(profile, present))
-    return check_review(meta, body, multiplier, review_slices(profile))
+    return check_review(meta, body, multiplier, review_slices(profile),
+                        walkthrough=bool(profile.get("optional", {}).get("walkthrough", False)))
 
 
 if __name__ == "__main__":

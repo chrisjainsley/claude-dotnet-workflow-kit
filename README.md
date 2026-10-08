@@ -143,15 +143,14 @@ to full diffs, findings, the QA report and a rollout checklist. Choose **Approve
 session, which reads it with each open finding's fix or accept choice; on Approve it
 goes straight on to the pull request stage. Say "decided" in chat if the page asks.
 
-**Walk me through it**, under the header, plays a narrated tour of the page when the
-review has a Walkthrough section: it scrolls to each scene, highlights the row or
-flowmap box, animates the box's connections and reads the line aloud. The voice is
-recorded when the review is built, by [Kokoro](https://github.com/thewh1teagle/kokoro-onnx),
-an open-source voice model that runs on your machine (`pip install kokoro-onnx`; the
-model downloads once). The text is never sent anywhere, and every reader hears the
-same voice in any browser. Without Kokoro the page uses the browser's own voice,
-where Edge's Natural voices sound best. Captions always show, and **Captions only**
-plays it silently.
+With `optional.walkthrough` on, the review ends with a short narrated tour and the
+page gets a **Walk me through it** button under the header. It scrolls to each
+scene, highlights the row or flowmap box, animates the box's connections and plays
+the line with its caption. The voice is recorded when the review is built, by
+[Kokoro](https://github.com/thewh1teagle/kokoro-onnx), an open-source voice model
+that runs on your machine (`pip install kokoro-onnx`; the model downloads once). The
+text is never sent anywhere, and every reader hears the same voice in any browser.
+Without Kokoro installed, the tour plays as captions only.
 
 ![Review page showing verdict tiles, the change diagram and decision form](docs/images/review-page.png)
 
@@ -343,6 +342,7 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `optional.dotnet-claude-kit` | `true`, `false` | `false` | Companion plugin availability. |
 | `optional.codex` | `true`, `false` | `false` | Enable the Codex second-opinion reviewer. |
 | `optional.roslyn-mcp` | `true`, `false` | `false` | Roslyn MCP availability for code-review-workflow. |
+| `optional.walkthrough` | `true`, `false` | `false` | Narrated walkthrough on the review page, voiced by Kokoro on your machine (`pip install kokoro-onnx`). See [review](#review). |
 | `optional.jev` | `true`, `false` | `false` | Jev availability: a `TYPESAFE_API_KEY` or a `jev` MCP server. Detected by setup. See [Jev](#jev). |
 | `jev.flag_at` | Number from 0 to 1 | `0.75` | Probability at or above which a scored check becomes a finding at the rule's severity. |
 | `jev.review_at` | Number from 0 to 1, at most `flag_at` | `0.4` | Probability at or above which a scored check is listed as low with "confirm by reading". |

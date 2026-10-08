@@ -2,23 +2,22 @@
 """Record the review's Walkthrough with Kokoro, an open-source voice model run locally.
 
 Usage:
-  python narrate.py plans/<slug>/review.md [--voice af_heart] [--speed 1.0]
+  python narrate.py plans/<slug>/review.md [--profile <profile.json>]
 
-Each spoken sentence becomes one clip under plans/<slug>/walkthrough/, named by a hash
-of the voice, speed and text, so a rebuild only records the sentences that changed and
+Runs only when the profile's optional.walkthrough is true. Every review uses the same
+voice, Kokoro's af_heart. Each spoken sentence becomes one clip under
+plans/<slug>/walkthrough/, named by a hash of the voice and text, so a rebuild only
+records the sentences that changed and
 deletes clips no sentence uses any more. walkthrough/narration.json maps each sentence
-to its clip; the page builder reads it, plays the clips in place of the browser's voice
-and lists them in review.files.json so they publish next to the page.
+to its clip; the page builder reads it, attaches each clip to its sentence and lists
+them in review.files.json so they publish next to the page.
 
 Needs `pip install kokoro-onnx` (onnxruntime, no PyTorch). The model (88 MB) and the
 voice pack (28 MB) download once from the kokoro-onnx GitHub release into --model-dir
 (default ~/.cache/dotnet-workflow-kit/kokoro, or KIT_KOKORO_DIR). Clips are MP3 when
 ffmpeg is on PATH, WAV otherwise. Nothing is sent anywhere: the text never leaves the
-machine. Exit 2 when Kokoro is not installed, so the caller can fall back to the
-browser voice.
-
-Voices: af_heart (default, the best graded), af_bella, am_michael; British bf_emma,
-bf_isabella, bm_george, bm_fable.
+machine. Exit 2 when Kokoro is not installed; the page then shows the captions without
+sound.
 """
 import argparse
 import hashlib
@@ -33,11 +32,13 @@ import wave
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kit_profile import add_profile_arg, resolve_profile  # noqa: E402
 from check import WALKTHROUGH, spoken_sentences, split_front_matter, split_sections, walkthrough_scenes  # noqa: E402
 
 RELEASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
 MODEL_FILES = ("kokoro-v1.0.int8.onnx", "voices-v1.0.bin")
-DEFAULT_VOICE = "af_heart"
+VOICE = "af_heart"
+SPEED = 1.0
 CLIP_DIR = "walkthrough"
 MANIFEST = "narration.json"
 
@@ -64,7 +65,7 @@ def fetch_model(folder):
     return [folder / name for name in MODEL_FILES]
 
 
-def kokoro_engine(folder, voice, speed):
+def kokoro_engine(folder, voice=VOICE, speed=SPEED):
     """A function text -> (float samples, sample rate), or None when Kokoro is missing."""
     try:
         from kokoro_onnx import Kokoro
@@ -72,10 +73,7 @@ def kokoro_engine(folder, voice, speed):
         return None
     model, voices = fetch_model(folder)
     kokoro = Kokoro(str(model), str(voices))
-    if voice not in kokoro.get_voices():
-        raise SystemExit(f"unknown voice '{voice}'; try one of: {', '.join(sorted(kokoro.get_voices()))}")
-    lang = "en-gb" if voice[:1] == "b" else "en-us"
-    return lambda text: kokoro.create(text, voice=voice, speed=speed, lang=lang)
+    return lambda text: kokoro.create(text, voice=voice, speed=speed, lang="en-us")
 
 
 def wav_bytes(samples, rate):
@@ -99,7 +97,7 @@ def encode(wav, mp3):
     return done.stdout, ".mp3"
 
 
-def clip_name(voice, speed, text):
+def clip_name(text, voice=VOICE, speed=SPEED):
     return hashlib.sha256(f"{voice}|{speed}|{text}".encode("utf-8")).hexdigest()[:16]
 
 
@@ -112,7 +110,7 @@ def sentences_of(source):
     return [s for _, text in scenes for s in spoken_sentences(text)]
 
 
-def narrate(source, synth, voice, speed=1.0, mp3=True):
+def narrate(source, synth, mp3=True, voice=VOICE, speed=SPEED):
     """Record every Walkthrough sentence that has no clip yet, drop clips no sentence
     uses, and write the manifest. Returns (recorded, kept, removed)."""
     out_dir = source.parent / CLIP_DIR
@@ -120,7 +118,7 @@ def narrate(source, synth, voice, speed=1.0, mp3=True):
     ext = ".mp3" if mp3 else ".wav"
     clips, recorded, kept = [], 0, 0
     for text in dict.fromkeys(sentences_of(source)):
-        name = clip_name(voice, speed, text)
+        name = clip_name(text, voice, speed)
         existing = next((p for p in (out_dir / (name + ".mp3"), out_dir / (name + ".wav")) if p.is_file()), None)
         if existing is None:
             samples, rate = synth(text)
@@ -145,20 +143,22 @@ def narrate(source, synth, voice, speed=1.0, mp3=True):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("source")
-    ap.add_argument("--voice", default=DEFAULT_VOICE, help=f"Kokoro voice id (default {DEFAULT_VOICE})")
-    ap.add_argument("--speed", type=float, default=1.0, help="speaking rate, 1.0 is natural")
     ap.add_argument("--model-dir", help="where the model files live (default ~/.cache/dotnet-workflow-kit/kokoro)")
+    add_profile_arg(ap)
     args = ap.parse_args(argv)
+    if not resolve_profile(explicit=args.profile).get("optional", {}).get("walkthrough", False):
+        print("skipped: optional.walkthrough is false in the profile")
+        return 0
     source = Path(args.source)
     if not sentences_of(source):
         print(f"{source.name} has no Walkthrough; nothing to record")
         return 0
-    synth = kokoro_engine(model_dir(args.model_dir), args.voice, args.speed)
+    synth = kokoro_engine(model_dir(args.model_dir))
     if synth is None:
-        print("skipped: Kokoro is not installed (pip install kokoro-onnx); the page will use the browser voice")
+        print("skipped: Kokoro is not installed (pip install kokoro-onnx); the page will show captions without sound")
         return 2
-    recorded, kept, removed = narrate(source, synth, args.voice, args.speed, mp3=shutil.which("ffmpeg") is not None)
-    print(f"narration: {recorded} recorded, {kept} unchanged, {removed} removed, voice {args.voice} "
+    recorded, kept, removed = narrate(source, synth, mp3=shutil.which("ffmpeg") is not None)
+    print(f"narration: {recorded} recorded, {kept} unchanged, {removed} removed "
           f"({source.parent / CLIP_DIR / MANIFEST})")
     return 0
 

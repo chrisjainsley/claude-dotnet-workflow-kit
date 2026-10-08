@@ -9,7 +9,8 @@ Changes section opens with the flowmap of the two sign-in journeys (one Infrastr
 lane, a row per journey, context nodes for the untouched mobile session, and a missing test
 box because B2C XML has no test host); no example fences, because nothing in the change
 is an API or a table. Its File cells carry repo paths that the builder turned into links
-to the full per-file diffs. The closing Walkthrough narrates the page in eight scenes:
+to the full per-file diffs. The closing Walkthrough, written because the team's profile has
+`optional.walkthrough` on, narrates the page in eight scenes:
 the verdict, the two relying parties on the map, the two open findings, then QA,
 rollout and the recommendation, each line short enough to say in one breath. Use it for shape and tone; do not copy its content.
 

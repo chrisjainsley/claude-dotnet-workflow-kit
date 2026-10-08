@@ -90,6 +90,12 @@ def reviewer_report(profile):
             rows.append(("checks", "runs", f"{count} enforced by conventions only (optional.jev is false)"))
     if optional.get("jev"):
         rows.append(("jev", "runs", "gate, decide, classify, rerank and screen via the jev MCP"))
+    if optional.get("walkthrough"):
+        import importlib.util
+        if importlib.util.find_spec("kokoro_onnx"):
+            rows.append(("walkthrough", "runs", "narrated by Kokoro on this machine"))
+        else:
+            rows.append(("walkthrough", "skipped", "captions only until `pip install kokoro-onnx`"))
     return rows
 
 

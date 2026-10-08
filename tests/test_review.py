@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -296,6 +297,12 @@ def test_given_nine_hunks_then_exit1(review_fixture_path):
 
 
 WALKTHROUGH_HEAD = "\n## Walkthrough\n"
+WALK_ON = ("--profile", FIXTURES_DIR / "profile-walkthrough.json")
+
+
+def scene_data(page):
+    data = re.search(r'<script type="application/json" class="wt-data">(.*?)</script>', page, re.S).group(1)
+    return json.loads(data)
 
 
 def test_given_walkthrough_targets_then_each_must_resolve(review_fixture_path):
@@ -305,7 +312,7 @@ def test_given_walkthrough_targets_then_each_must_resolve(review_fixture_path):
                   .replace("`Findings > useLogoutRedirect`", "`Findings > nowhere-on-the-page`", 1)
                   .replace("`QA report`", "`Testing`", 1))
     review_fixture_path.write_text(broken, encoding="utf-8")
-    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path)
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path, *WALK_ON)
     assert code == 1
     assert "@no-such-node, which is not a flowmap node" in out
     assert "'nowhere-on-the-page' in Findings" in out
@@ -318,11 +325,26 @@ def test_given_walkthrough_written_for_the_eye_then_check_fails(review_fixture_p
                         "so 10/11 criteria are delivered in `B2C_1A_SIGNUP_SIGNIN.xml`.", 1)
     text = text.replace("8. `Decision`", "8. `Rollout` One more.\n9. `Decision`", 1)
     review_fixture_path.write_text(text, encoding="utf-8")
-    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path)
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path, *WALK_ON)
     assert code == 1
     assert "scene 1 has a slash count" in out
     assert "scene 1 has markdown or markup" in out
     assert "9 scenes, cap 8" in out
+
+
+def test_given_walkthrough_off_then_section_is_not_checked_and_no_player(tmp_path, review_fixture_path):
+    text = review_fixture_path.read_text(encoding="utf-8")
+    review_fixture_path.write_text(text.replace("`@web-rp`", "`@no-such-node`", 1), encoding="utf-8")
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path, "--profile", FIXTURES_DIR / "profile-checks.json")
+    assert code == 0, out + err
+    assert "optional.walkthrough is false" in out
+    out_path = tmp_path / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef",
+                            "--profile", FIXTURES_DIR / "profile-checks.json")
+    assert code == 0, out + err
+    assert "ignored because optional.walkthrough is false" in err
+    page = out_path.read_text(encoding="utf-8")
+    assert 'id="wt"' not in page and 'id="walkthrough"' not in page and "{{" not in page
 
 
 def test_given_walkthrough_before_decision_then_section_order_fails(review_fixture_path):
@@ -330,21 +352,21 @@ def test_given_walkthrough_before_decision_then_section_order_fails(review_fixtu
     walk = text[text.index(WALKTHROUGH_HEAD):]
     text = text.replace(walk, "\n").replace("\n## Decision\n", walk + "\n## Decision\n", 1)
     review_fixture_path.write_text(text, encoding="utf-8")
-    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path)
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path, *WALK_ON)
     assert code == 1
     assert "then an optional Walkthrough" in out
 
 
-def test_given_walkthrough_then_page_carries_the_player_not_a_section(tmp_path, review_fixture_path):
+def test_given_walkthrough_on_then_page_carries_the_player_not_a_section(tmp_path, review_fixture_path):
     out_path = tmp_path / "review.html"
-    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef")
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef", *WALK_ON)
     assert code == 0, out + err
+    assert "16 sentence(s) have no recorded clip" in err
     page = out_path.read_text(encoding="utf-8")
     assert '<section class="wt" id="wt"' in page
-    assert 'id="walkthrough"' not in page
-    assert 'data-target="walkthrough"' not in page
-    data = re.search(r'<script type="application/json" class="wt-data">(.*?)</script>', page, re.S).group(1)
-    scenes = __import__("json").loads(data)
+    assert 'id="walkthrough"' not in page and 'data-target="walkthrough"' not in page
+    assert "<select" not in page[page.index('id="wt"'):page.index("</section>", page.index('id="wt"'))]
+    scenes = scene_data(page)
     assert len(scenes) == 8
     assert scenes[0]["section"] == "verdict" and "find" not in scenes[0]
     assert scenes[1]["node"] == "web-rp"
@@ -354,18 +376,21 @@ def test_given_walkthrough_then_page_carries_the_player_not_a_section(tmp_path, 
         "Web members can now stay signed in for ninety days.",
         "Mobile members cannot, so ten of eleven acceptance criteria are delivered.",
     ]
-    assert not any("audio" in l for sc in scenes for l in sc["lines"])
-    assert 'data-recorded=""' in page
     assert "{{" not in page
+
+
+def test_given_page_template_then_no_browser_voice():
+    template = PAGE_TEMPLATE.read_text(encoding="utf-8")
+    assert "speechSynthesis" not in template and "wt-voice" not in template
 
 
 def test_given_no_walkthrough_then_check_passes_and_no_player(tmp_path, review_fixture_path):
     text = review_fixture_path.read_text(encoding="utf-8")
     review_fixture_path.write_text(text[: text.index(WALKTHROUGH_HEAD) + 1], encoding="utf-8")
-    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path)
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path, *WALK_ON)
     assert code == 0, out + err
     out_path = tmp_path / "review.html"
-    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef")
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef", *WALK_ON)
     assert code == 0, out + err
     page = out_path.read_text(encoding="utf-8")
     assert 'id="wt"' not in page
@@ -379,14 +404,18 @@ def fake_synth(calls):
     return synth
 
 
+def load_narrate(name):
+    return import_module_from_path(name, RENDER_PY.parent / "narrate.py")
+
+
 def test_given_walkthrough_then_narrate_records_each_sentence_once(review_fixture_path):
-    narrate = import_module_from_path("narrate_test", RENDER_PY.parent / "narrate.py")
+    narrate = load_narrate("narrate_test")
     calls = []
-    recorded, kept, removed = narrate.narrate(review_fixture_path, fake_synth(calls), "af_heart", mp3=False)
-    assert recorded == len(calls) == len(set(calls)) > 8
+    recorded, kept, removed = narrate.narrate(review_fixture_path, fake_synth(calls), mp3=False)
+    assert recorded == len(calls) == len(set(calls)) == 16
     assert (kept, removed) == (0, 0)
     clip_dir = review_fixture_path.parent / "walkthrough"
-    manifest = __import__("json").loads((clip_dir / "narration.json").read_text(encoding="utf-8"))
+    manifest = json.loads((clip_dir / "narration.json").read_text(encoding="utf-8"))
     assert manifest["voice"] == "af_heart"
     assert all((review_fixture_path.parent / c["file"]).is_file() for c in manifest["clips"])
 
@@ -394,32 +423,34 @@ def test_given_walkthrough_then_narrate_records_each_sentence_once(review_fixtur
     text = review_fixture_path.read_text(encoding="utf-8")
     review_fixture_path.write_text(text.replace("Nothing has run against a live tenant yet.", "No live tenant run exists yet.", 1), encoding="utf-8")
     calls.clear()
-    recorded, kept, removed = narrate.narrate(review_fixture_path, fake_synth(calls), "af_heart", mp3=False)
+    recorded, kept, removed = narrate.narrate(review_fixture_path, fake_synth(calls), mp3=False)
     assert calls == ["No live tenant run exists yet."]
-    assert (recorded, removed) == (1, 1)
+    assert (recorded, kept, removed) == (1, 15, 1)
 
 
-def test_given_recorded_clips_then_page_plays_and_publishes_them(tmp_path, review_fixture_path):
-    narrate = import_module_from_path("narrate_test2", RENDER_PY.parent / "narrate.py")
-    narrate.narrate(review_fixture_path, fake_synth([]), "bf_emma", mp3=False)
-    first = review_fixture_path.parent / "walkthrough" / (narrate.clip_name("bf_emma", 1.0, "The whole change is policy XML.") + ".wav")
-    first.unlink()
+def test_given_recorded_clips_then_page_plays_and_publishes_them(review_fixture_path):
+    narrate = load_narrate("narrate_test2")
+    narrate.narrate(review_fixture_path, fake_synth([]), mp3=False)
+    (review_fixture_path.parent / "walkthrough" / (narrate.clip_name("The whole change is policy XML.") + ".wav")).unlink()
     out_path = review_fixture_path.parent / "review.html"
-    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef")
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef", *WALK_ON)
     assert code == 0, out + err
-    assert "1 sentence(s) have no recorded clip" in err
-    page = out_path.read_text(encoding="utf-8")
-    assert 'data-recorded="bf_emma"' in page
-    data = re.search(r'<script type="application/json" class="wt-data">(.*?)</script>', page, re.S).group(1)
-    lines = [l for sc in __import__("json").loads(data) for l in sc["lines"]]
+    assert "1 sentence(s) have no recorded clip and play as captions only" in err
+    lines = [l for sc in scene_data(out_path.read_text(encoding="utf-8")) for l in sc["lines"]]
     assert sum(1 for l in lines if "audio" not in l) == 1
-    files = __import__("json").loads((review_fixture_path.parent / "review.files.json").read_text(encoding="utf-8"))
+    files = json.loads((review_fixture_path.parent / "review.files.json").read_text(encoding="utf-8"))
     assert len(files) == len(lines) - 1
     assert all(f.startswith("walkthrough/") and f.endswith(".wav") for f in files)
 
 
+def test_given_walkthrough_off_then_narrate_records_nothing(review_fixture_path):
+    narrate = load_narrate("narrate_test3")
+    assert narrate.main([str(review_fixture_path), "--profile", str(FIXTURES_DIR / "profile-checks.json")]) == 0
+    assert not (review_fixture_path.parent / "walkthrough").exists()
+
+
 def test_given_no_kokoro_then_narrate_exits_2(review_fixture_path, monkeypatch):
-    narrate = import_module_from_path("narrate_test3", RENDER_PY.parent / "narrate.py")
+    narrate = load_narrate("narrate_test4")
     monkeypatch.setattr(narrate, "kokoro_engine", lambda *a: None)
-    assert narrate.main([str(review_fixture_path)]) == 2
+    assert narrate.main([str(review_fixture_path), "--profile", str(FIXTURES_DIR / "profile-walkthrough.json")]) == 2
     assert not (review_fixture_path.parent / "walkthrough").exists()
