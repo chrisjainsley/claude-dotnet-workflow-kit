@@ -46,21 +46,23 @@ function host(on: On, scanner: Scanner) {
   const dirs = new Set([`${WORK}/.git`, PIPELINE, REGISTRY])
   const runs: string[][] = []
   mock.clock(on, { now: 1_800_000_000_000 })
+  // The engine hands fs paths over resolved for the host: on Windows, `D:\home\dev\...`.
+  const at = (e: { path: string }) => e.path.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')
   // Each call on `$` is answered as its event's result, `{ value }`.
   on('env.get', (_, e) => ({ value: e.name === 'HOME' ? HOME : undefined }))
   on('session.cwd', () => ({ value: WORK }))
   on('session.id', () => ({ value: 'me' }))
-  on('fs.exists', (_, e) => ({ value: dirs.has(e.path) || e.path in files }))
+  on('fs.exists', (_, e) => ({ value: dirs.has(at(e)) || at(e) in files }))
   on('fs.stat', (_, e) => ({
-    value: { kind: dirs.has(e.path) ? 'dir' : 'file', size: 0, mtimeMs: 1_800_000_000_000, isLink: false },
+    value: { kind: dirs.has(at(e)) ? 'dir' : 'file', size: 0, mtimeMs: 1_800_000_000_000, isLink: false },
   }))
   on('fs.read', (_, e) => {
-    const text = files[e.path]
+    const text = files[at(e)]
     if (text === undefined) throw new Error(`no file ${e.path}`)
     return { value: text }
   })
   const listing = (name: string) => [{ name, kind: 'file' as const, size: 1, mtimeMs: 1_800_000_000_000, isLink: false }]
-  on('fs.list', (_, e) => ({ value: e.path === PIPELINE ? listing('391.json') : e.path === REGISTRY ? listing('39104.json') : [] }))
+  on('fs.list', (_, e) => ({ value: at(e) === PIPELINE ? listing('391.json') : at(e) === REGISTRY ? listing('39104.json') : [] }))
   on('fs.write', () => ({ value: undefined }))
   on('ui.toast', () => ({ value: undefined }))
   on('ui.log', () => ({ value: undefined }))
@@ -71,6 +73,8 @@ function host(on: On, scanner: Scanner) {
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('tool.call', () => ({ result: { stdout: 'ran', stderr: '', interrupted: false } }) as never)
+  // Beneath the mod's own drawings, so ui.mount has something to answer an unclaimed render with.
+  on('ui.render', async () => ({ type: 'Box', props: {}, children: [] }) as never)
 
   return runs
 }
