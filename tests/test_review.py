@@ -346,9 +346,16 @@ def test_given_walkthrough_then_page_carries_the_player_not_a_section(tmp_path, 
     data = re.search(r'<script type="application/json" class="wt-data">(.*?)</script>', page, re.S).group(1)
     scenes = __import__("json").loads(data)
     assert len(scenes) == 8
-    assert scenes[0] == {"section": "verdict", "text": scenes[0]["text"]}
+    assert scenes[0]["section"] == "verdict" and "find" not in scenes[0]
     assert scenes[1]["node"] == "web-rp"
-    assert scenes[3] == {"section": "findings", "find": "B2C_1A_MOBILE_SIGNIN", "text": scenes[3]["text"]}
+    assert (scenes[3]["section"], scenes[3]["find"]) == ("findings", "B2C_1A_MOBILE_SIGNIN")
+    assert [l["text"] for l in scenes[0]["lines"]] == [
+        "This change merged on the tenth of September.",
+        "Web members can now stay signed in for ninety days.",
+        "Mobile members cannot, so ten of eleven acceptance criteria are delivered.",
+    ]
+    assert not any("audio" in l for sc in scenes for l in sc["lines"])
+    assert 'data-recorded=""' in page
     assert "{{" not in page
 
 
@@ -363,3 +370,56 @@ def test_given_no_walkthrough_then_check_passes_and_no_player(tmp_path, review_f
     page = out_path.read_text(encoding="utf-8")
     assert 'id="wt"' not in page
     assert "{{" not in page
+
+
+def fake_synth(calls):
+    def synth(text):
+        calls.append(text)
+        return [0.0, 0.1, -0.1] * 100, 24000
+    return synth
+
+
+def test_given_walkthrough_then_narrate_records_each_sentence_once(review_fixture_path):
+    narrate = import_module_from_path("narrate_test", RENDER_PY.parent / "narrate.py")
+    calls = []
+    recorded, kept, removed = narrate.narrate(review_fixture_path, fake_synth(calls), "af_heart", mp3=False)
+    assert recorded == len(calls) == len(set(calls)) > 8
+    assert (kept, removed) == (0, 0)
+    clip_dir = review_fixture_path.parent / "walkthrough"
+    manifest = __import__("json").loads((clip_dir / "narration.json").read_text(encoding="utf-8"))
+    assert manifest["voice"] == "af_heart"
+    assert all((review_fixture_path.parent / c["file"]).is_file() for c in manifest["clips"])
+
+    # A changed line records only itself and drops its old clip.
+    text = review_fixture_path.read_text(encoding="utf-8")
+    review_fixture_path.write_text(text.replace("Nothing has run against a live tenant yet.", "No live tenant run exists yet.", 1), encoding="utf-8")
+    calls.clear()
+    recorded, kept, removed = narrate.narrate(review_fixture_path, fake_synth(calls), "af_heart", mp3=False)
+    assert calls == ["No live tenant run exists yet."]
+    assert (recorded, removed) == (1, 1)
+
+
+def test_given_recorded_clips_then_page_plays_and_publishes_them(tmp_path, review_fixture_path):
+    narrate = import_module_from_path("narrate_test2", RENDER_PY.parent / "narrate.py")
+    narrate.narrate(review_fixture_path, fake_synth([]), "bf_emma", mp3=False)
+    first = review_fixture_path.parent / "walkthrough" / (narrate.clip_name("bf_emma", 1.0, "The whole change is policy XML.") + ".wav")
+    first.unlink()
+    out_path = review_fixture_path.parent / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef")
+    assert code == 0, out + err
+    assert "1 sentence(s) have no recorded clip" in err
+    page = out_path.read_text(encoding="utf-8")
+    assert 'data-recorded="bf_emma"' in page
+    data = re.search(r'<script type="application/json" class="wt-data">(.*?)</script>', page, re.S).group(1)
+    lines = [l for sc in __import__("json").loads(data) for l in sc["lines"]]
+    assert sum(1 for l in lines if "audio" not in l) == 1
+    files = __import__("json").loads((review_fixture_path.parent / "review.files.json").read_text(encoding="utf-8"))
+    assert len(files) == len(lines) - 1
+    assert all(f.startswith("walkthrough/") and f.endswith(".wav") for f in files)
+
+
+def test_given_no_kokoro_then_narrate_exits_2(review_fixture_path, monkeypatch):
+    narrate = import_module_from_path("narrate_test3", RENDER_PY.parent / "narrate.py")
+    monkeypatch.setattr(narrate, "kokoro_engine", lambda *a: None)
+    assert narrate.main([str(review_fixture_path)]) == 2
+    assert not (review_fixture_path.parent / "walkthrough").exists()

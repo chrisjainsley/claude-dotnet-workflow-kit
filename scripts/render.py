@@ -43,8 +43,10 @@ gherkin steps expand to the evidence captioned with their text,
 Rollout renders a persistent checklist, and Decision gets the approve /
 request-changes form. An optional Walkthrough section is not drawn as a section: its
 numbered scenes become a player bar under the header that scrolls to each scene's
-target, highlights it (a flowmap box gets its edges animated) and reads the line aloud
-with the browser's own speech synthesis, captions always on and timed when no voice.
+target, highlights it (a flowmap box gets its edges animated) and reads the line aloud.
+Clips recorded by scripts/narrate.py (walkthrough/narration.json beside the source)
+play first and are listed in review.files.json; any sentence without one falls back
+to the browser's speech synthesis, captions always on and timed when no voice.
 """
 import argparse
 import base64
@@ -67,7 +69,7 @@ DEFAULT_TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "page.html"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit_profile import add_profile_arg, resolve_profile  # noqa: E402
-from check import STEP_RE, WALKTHROUGH, is_video, scene_target, step_key, walkthrough_scenes  # noqa: E402
+from check import STEP_RE, WALKTHROUGH, is_video, scene_target, spoken_sentences, step_key, walkthrough_scenes  # noqa: E402
 import flowmap  # noqa: E402
 
 # Delivery Labs branding: the profile's `branding` flag (default true) switches it off.
@@ -992,14 +994,41 @@ def render_decision_form(open_findings, merged=False):
     return "".join(out)
 
 
+def narration_clips():
+    """(voice, {sentence: clip path}) from walkthrough/narration.json beside the source,
+    written by scripts/narrate.py; clips whose file is gone are left out."""
+    manifest = SOURCE_DIR / "walkthrough" / "narration.json"
+    if not manifest.is_file():
+        return None, {}
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except ValueError:
+        WARNINGS.append(f"{manifest} is not valid JSON; the walkthrough uses the browser voice")
+        return None, {}
+    clips = {c["text"]: c["file"] for c in data.get("clips", []) if (SOURCE_DIR / c.get("file", "")).is_file()}
+    return data.get("voice"), clips
+
+
 def render_walkthrough(scenes):
-    """The player bar: controls, a caption line and the scenes as JSON for the page script."""
+    """The player bar: controls, a caption line and the scenes as JSON for the page script.
+    Sentences with a recorded clip carry its path; the rest are spoken by the browser."""
     if not scenes:
         return ""
-    data = []
+    voice, clips = narration_clips()
+    data, missing = [], 0
     for target, text in scenes:
         kind, name, needle = scene_target(target)
-        scene = {"text": text}
+        lines = []
+        for sentence in spoken_sentences(text):
+            line = {"text": sentence}
+            if sentence in clips:
+                line["audio"] = clips[sentence]
+                if clips[sentence] not in MEDIA_FILES:
+                    MEDIA_FILES.append(clips[sentence])
+            else:
+                missing += 1
+            lines.append(line)
+        scene = {"text": text, "lines": lines}
         if kind == "node":
             scene["node"] = name
         else:
@@ -1007,10 +1036,13 @@ def render_walkthrough(scenes):
             if needle:
                 scene["find"] = needle
         data.append(scene)
+    if clips and missing:
+        WARNINGS.append(f"walkthrough: {missing} sentence(s) have no recorded clip and use the browser voice; rerun scripts/narrate.py")
+    recorded = voice if clips else ""
     payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     total = len(scenes)
     return (
-        '<section class="wt" id="wt" aria-label="Narrated walkthrough">'
+        f'<section class="wt" id="wt" aria-label="Narrated walkthrough" data-recorded="{html.escape(recorded or "", quote=True)}">'
         '<div class="wt-bar">'
         '<button type="button" class="wt-play" id="wt-play" aria-pressed="false">'
         '<svg viewBox="0 0 16 16" aria-hidden="true"><path class="i-play" d="M4 2.5v11l9-5.5z"/>'

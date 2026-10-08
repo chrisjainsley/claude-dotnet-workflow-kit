@@ -635,9 +635,9 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
     fmModal.addEventListener('click', function (e) { if (e.target === fmModal) { fmModal.close(); } });
     fmModal.addEventListener('close', function () { fmBody.innerHTML = ''; });
   }
-  // Narrated walkthrough: each scene scrolls to its target, highlights it and is read aloud
-  // by the browser's own speech synthesis. No voice (or "Captions only") times the caption
-  // by its length instead, so the walkthrough still plays silently.
+  // Narrated walkthrough: each scene scrolls to its target, highlights it and is read aloud,
+  // from clips recorded with Kokoro when the review was built (scripts/narrate.py), else by
+  // the browser's own speech synthesis. "Captions only" times each caption by its length.
   var wt = document.getElementById('wt');
   if (wt) {
     var scenes = [];
@@ -653,6 +653,10 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
     var wtCaption = document.getElementById('wt-caption');
     var wtVoice = document.getElementById('wt-voice');
     var VOICE_KEY = 'review-walkthrough-voice';
+    var RECORDED = '__recorded__';
+    var recordedName = wt.getAttribute('data-recorded') || '';
+    var clipCache = {};
+    var currentClip = null;
     var current = -1;
     var playing = false;
     var token = 0;
@@ -674,11 +678,21 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
       return synth.getVoices().filter(function (v) { return /^en(-|_|$)/i.test(v.lang || ''); })
         .sort(function (a, b) { return voiceRank(b) - voiceRank(a) || a.name.localeCompare(b.name); });
     }
+    function recordedLabel() {
+      // Kokoro ids read prefix_name: af_heart is an American female voice called Heart.
+      var name = recordedName.replace(/^[a-z]{2}_/, '');
+      return (name ? name.charAt(0).toUpperCase() + name.slice(1) + ', ' : '') + 'recorded';
+    }
     function fillVoices() {
       var list = englishVoices();
-      if (!list.length) { return; }
       var keep = saved();
       wtVoice.innerHTML = '';
+      if (recordedName) {
+        var rec = document.createElement('option');
+        rec.value = RECORDED;
+        rec.textContent = recordedLabel();
+        wtVoice.appendChild(rec);
+      }
       list.forEach(function (v) {
         var o = document.createElement('option');
         o.value = v.name;
@@ -689,10 +703,11 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
       none.value = '';
       none.textContent = 'Captions only';
       wtVoice.appendChild(none);
-      wtVoice.value = keep !== null && (keep === '' || list.some(function (v) { return v.name === keep; })) ? keep : list[0].name;
+      var known = Array.prototype.some.call(wtVoice.options, function (o) { return o.value === keep; });
+      wtVoice.value = keep !== null && known ? keep : wtVoice.options[0].value;
     }
+    fillVoices();
     if (synth) {
-      fillVoices();
       if (typeof synth.addEventListener === 'function') { synth.addEventListener('voiceschanged', fillVoices); }
       else { synth.onvoiceschanged = fillVoices; }
     }
@@ -702,17 +717,59 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
     });
     function chosenVoice() {
       if (!synth || !wtVoice.value) { return null; }
+      if (wtVoice.value === RECORDED) { return englishVoices()[0] || null; }
       return synth.getVoices().filter(function (v) { return v.name === wtVoice.value; })[0] || null;
+    }
+    function clip(src) {
+      if (!clipCache[src]) {
+        clipCache[src] = new Audio(src);
+        clipCache[src].preload = 'auto';
+      }
+      return clipCache[src];
+    }
+    function preload(i) {
+      if (wtVoice.value !== RECORDED || !scenes[i]) { return; }
+      (scenes[i].lines || []).forEach(function (l) { if (l.audio) { clip(l.audio); } });
+    }
+    function playClip(line, t) {
+      return new Promise(function (done) {
+        var finished = false;
+        var audio = clip(line.audio);
+        function end(ok) {
+          if (finished) { return; }
+          finished = true;
+          clearTimeout(guard);
+          audio.onended = audio.onerror = null;
+          if (currentClip === audio) { currentClip = null; }
+          // A clip that will not load or play falls back to the browser voice.
+          if (!ok && t === token) { speakText(line.text, t).then(done); return; }
+          done(t === token);
+        }
+        var guard = setTimeout(function () { end(true); }, estimate(line.text) * 3 + 5000);
+        currentClip = audio;
+        audio.currentTime = 0;
+        audio.onended = function () { end(true); };
+        audio.onerror = function () { end(false); };
+        var started = audio.play();
+        if (started && typeof started.catch === 'function') { started.catch(function () { end(false); }); }
+      });
     }
     function sentences(text) {
       // Chrome drops an utterance that runs past about fifteen seconds; a sentence never does.
       return (text.match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g) || [text]).map(function (t) { return t.trim(); }).filter(Boolean);
     }
+    function linesOf(scene) {
+      return scene.lines && scene.lines.length ? scene.lines : sentences(scene.text).map(function (text) { return { text: text }; });
+    }
     function wait(ms, t) {
       return new Promise(function (done) { setTimeout(function () { done(t === token); }, ms); });
     }
     function estimate(text) { return Math.max(1400, text.split(/\s+/).length * 400); }
-    function sayOne(text, t) {
+    function sayOne(line, t) {
+      if (line.audio && wtVoice.value === RECORDED) { return playClip(line, t); }
+      return speakText(line.text, t);
+    }
+    function speakText(text, t) {
       var voice = chosenVoice();
       if (!voice) { return wait(estimate(text), t); }
       return new Promise(function (done) {
@@ -807,12 +864,13 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
       tag.className = 'wt-where';
       tag.textContent = where;
       wtCaption.appendChild(tag);
-      sentences(scene.text).forEach(function (s) {
+      linesOf(scene).forEach(function (line) {
         var span = document.createElement('span');
         span.className = 's';
-        span.textContent = s + ' ';
+        span.textContent = line.text + ' ';
         wtCaption.appendChild(span);
       });
+      preload(i + 1);
       wtStep.textContent = (i + 1) + ' of ' + scenes.length;
       wtFill.style.width = ((i + 1) / scenes.length * 100) + '%';
       wtPrev.disabled = i <= 0;
@@ -830,6 +888,7 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
     function silence() {
       token++;
       if (synth) { synth.cancel(); }
+      if (currentClip) { currentClip.pause(); currentClip = null; }
     }
     async function play(from) {
       silence();
@@ -838,9 +897,10 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
       for (var i = Math.max(0, from); i < scenes.length; i++) {
         show(i);
         var parts = wtCaption.querySelectorAll('.s');
+        var lines = linesOf(scenes[i]);
         for (var n = 0; n < parts.length; n++) {
           parts[n].classList.add('now');
-          if (!(await sayOne(parts[n].textContent.trim(), t))) { return; }
+          if (!(await sayOne(lines[n], t))) { return; }
           parts[n].classList.remove('now');
         }
         if (!(await wait(450, t))) { return; }
@@ -866,6 +926,7 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
     }
     wtPlay.addEventListener('click', function () {
       if (playing) { pause(); return; }
+      preload(Math.max(0, current));
       play(current >= 0 && current < scenes.length - 1 ? current : 0);
     });
     function jump(i) {

@@ -114,7 +114,19 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    ```
 7. **Cut pass** with the review brief in `docs/writing-rules.md`, applied by a cheaper
    subagent or by you.
-8. **Build** from the repository root with the branch checked out and the base fetched:
+8. **Record the walkthrough** when the review has one:
+   ```bash
+   python "SKILL_DIR/../../scripts/narrate.py" plans/<slug>/review.md
+   ```
+   Kokoro, an open-source voice model, runs on this machine and writes one clip per
+   sentence to `plans/<slug>/walkthrough/`; nothing is sent anywhere. Reruns record
+   only the sentences that changed. `--voice` picks another voice (`bf_emma` or
+   `bm_george` for British English). Exit 2 means `kokoro-onnx` is not installed: say
+   `skipped: kokoro not installed` in chat and carry on, because the page falls back to
+   the reader's browser voice. The first run downloads the model (116 MB) once.
+   Rebuild after any change to the Walkthrough, or the builder warns that a sentence
+   has no clip.
+   Then **build** from the repository root with the branch checked out and the base fetched:
    ```bash
    python "SKILL_DIR/scripts/build_review.py" plans/<slug>/review.md --out plans/<slug>/review.html
    ```
@@ -122,8 +134,9 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    `<sha>^..<sha>` when `state: merged` and `commits` names the sha. Pass `--range` to
    override and `--repo` when the review lives outside the checkout. Read the warnings it
    prints: an unlinked File cell means the path did not match one changed file. Keep
-   `--out` beside `review.md`: the page links evidence media by its `evidence/` path,
-   and the builder lists those files in `plans/<slug>/review.files.json`.
+   `--out` beside `review.md`: the page links evidence media by its `evidence/` path
+   and narration clips by their `walkthrough/` path, and the builder lists those files
+   in `plans/<slug>/review.files.json`.
 9. **Publish.** With `artifacts: true`, use the Artifact tool: `file_path` is
    `review.html`, `favicon` 🔍 on the first publish only, one-sentence `description`,
    `capabilities` `{"db": {}, "comments": {}}`, so Send decision also passes the
@@ -131,7 +144,8 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    `ArtifactComments` `watch` on the URL before handing off, or the button falls back to
    asking for "decided". When `review.files.json` lists any files, also pass
    `root: plans/<slug>` and `files` set to that list, so each screenshot and video is
-   published at its `evidence/` path next to the page. Republishing from a new
+   published at its `evidence/` path and each narration clip at its `walkthrough/`
+   path next to the page. Republishing from a new
    session: run `list` with `scope: "files"` on the URL first, because the tool
    refuses to replace published paths the session has not seen. Invoke
    `artifact-design` and `artifact-capabilities` because the tool asks; the template
@@ -214,6 +228,7 @@ agree, report what happened rather than what should have, diffs carry a decision
 - `assets/skeleton.md`: section skeleton with front matter.
 - `assets/page.html` (repository root): the shared page shell, carrying the tiles, pills, collapsed hunks, linked file diffs, checklist, decision form and the walkthrough player (browser speech synthesis, no service).
 - `scripts/check_review.py`: budget and structure gate; exit 1 on any breach. Takes `--profile`. Wraps `scripts/check.py` (repository root) in review mode.
+- `scripts/narrate.py` (repository root): records the Walkthrough with Kokoro (`pip install kokoro-onnx`), one cached clip per sentence.
 - `scripts/build_review.py`: markdown subset to HTML with the section-specific renderers; pulls per-file diffs from git. Wraps `scripts/render.py` (repository root) in review mode.
 - `references/exemplar.md`: a filled review for a real merged PR, identifiers scrubbed.
 - `sweep.md`: the reviewer sweep, run here when no fresh sweep exists and by `implement` at the end of its stage.

@@ -146,9 +146,12 @@ goes straight on to the pull request stage. Say "decided" in chat if the page as
 **Walk me through it**, under the header, plays a narrated tour of the page when the
 review has a Walkthrough section: it scrolls to each scene, highlights the row or
 flowmap box, animates the box's connections and reads the line aloud. The voice is
-the browser's own speech synthesis, so nothing is generated or sent anywhere; Edge's
-Natural voices sound best. Captions always show, and **Captions only** plays it
-silently.
+recorded when the review is built, by [Kokoro](https://github.com/thewh1teagle/kokoro-onnx),
+an open-source voice model that runs on your machine (`pip install kokoro-onnx`; the
+model downloads once). The text is never sent anywhere, and every reader hears the
+same voice in any browser. Without Kokoro the page uses the browser's own voice,
+where Edge's Natural voices sound best. Captions always show, and **Captions only**
+plays it silently.
 
 ![Review page showing verdict tiles, the change diagram and decision form](docs/images/review-page.png)
 

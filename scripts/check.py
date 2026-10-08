@@ -89,6 +89,13 @@ def walkthrough_scenes(text):
     return scenes, stray
 
 
+def spoken_sentences(text):
+    """A scene's line split into the sentences the page speaks and captions one at a time.
+    The recorder and the page share this split, so each clip matches its caption."""
+    parts = re.findall(r"[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$", text.strip())
+    return [p.strip() for p in parts if p.strip()] or [text.strip()]
+
+
 def scene_target(target):
     """('node', id, None) for '@id', else ('section', name, needle or None)."""
     if target.startswith("@"):
