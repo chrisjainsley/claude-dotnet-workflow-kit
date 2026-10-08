@@ -123,5 +123,5 @@ def test_given_bar_drawings_then_they_follow_the_theme_and_reduced_motion():
 
 def test_given_subagent_tool_calls_then_the_activity_ignores_them():
     text = register_text()
-    assert "e.agentId === undefined ? describe(" in text
+    assert "if (e.agentId !== undefined) return next(e)" in text
     assert "on('agent.spawn'" in text

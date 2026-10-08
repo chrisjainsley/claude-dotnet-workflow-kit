@@ -1,6 +1,6 @@
 export type Activity = { text: string; at: number }
 
-export type RunningAgent = { id: string; description: string }
+export type RunningAgent = { id: string; description: string; at: number }
 
 export type StageStatus = 'done' | 'active' | 'waiting' | 'todo'
 

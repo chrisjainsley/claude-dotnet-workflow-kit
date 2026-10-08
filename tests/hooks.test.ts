@@ -124,3 +124,26 @@ test("a subagent's tool calls leave the activity, and the band counts it", async
   await engine.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 'x', agentId: 'a1', reason: 'answer' })
   expect(await band()).toBe('Agent: Bug-hunt review')
 })
+
+test("another repository's or a closed item's file for the branch is left alone", async ($, on) => {
+  const other = JSON.stringify({ branch: 'feat/12-add-thing', repo: 'C:/elsewhere/.git', stages: { start: { done: true } } })
+  const closed = JSON.stringify({ branch: 'feat/12-add-thing', closed: { reason: 'merged', at: '2026-10-01T00:00:00Z' }, stages: {} })
+  const files = world(on, 'feat/12-add-thing', { [`${DIR}/feat-12-add-thing.json`]: other, [`${DIR}/old.json`]: closed })
+  await stage($, { stage: 'start', fields: { done: true } })
+
+  expect(files.get(`${DIR}/feat-12-add-thing.json`)).toBe(other)
+  expect(files.get(`${DIR}/old.json`)).toBe(closed)
+  expect(json(files, 'feat-12-add-thing-2.json').stages.start.done).toBe(true)
+})
+
+test('two stage calls at once both land', async ($, on) => {
+  const files = world(on, 'feat/12-add-thing')
+  await Promise.all([
+    stage($, { stage: 'plan', fields: { artifactUrl: 'https://x' } }),
+    stage($, { current: { detail: 'Planning' } }),
+  ])
+
+  const data = json(files, 'feat-12-add-thing.json')
+  expect(data.stages.plan.artifactUrl).toBe('https://x')
+  expect(data.current.detail).toBe('Planning')
+})

@@ -180,9 +180,9 @@ the ticket id and a short title, a bar with a segment per stage, the current sta
 percentage and what Claude is doing right now. A stage waiting on you turns amber. The
 bar reads the pipeline state file that `start`, `plan` and `next` write.
 
-The skills write that file through a tool the mod adds, `mcp__dotnet-workflow-kit__stage`,
-which finds the branch's file, merges the change and redraws the bar at once; where mods
-are blocked, they edit the file by hand. While subagents run, such as the reviewers in
+The skills write that file through a tool the mod adds, `mcp__dotnet-workflow-kit__stage`.
+It finds the branch's file, merges the change and redraws the bar at once. Where mods are
+blocked, the skills edit the file by hand. While subagents run, such as the reviewers in
 the sweep, the bar counts them instead of showing what each one reads. The bar follows
 the light or dark theme and stops moving when the system asks for reduced motion.
 
@@ -424,6 +424,7 @@ Run the tests and plugin validation from the repository root before opening a PR
 ```bash
 python -m pytest
 claude plugin validate .
+claude plugin test .
 ```
 
 Keep examples generic. Hygiene tests check for private identifiers and em dashes.

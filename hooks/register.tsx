@@ -23,6 +23,7 @@ const notifyOthers = atom({ plugin: 'dotnet-workflow-kit', key: 'notifyOthers' }
 const agents = atom({ plugin: 'dotnet-workflow-kit', key: 'agents' } as const, [])
 
 const PANE = 'sessions'
+const AGENT_MS = 60 * 60 * 1000
 
 // The kit's own pipeline; a state file's `order` replaces it when a team adds stages.
 const DEFAULT_ORDER = ['start', 'plan', 'implement', 'test', 'review', 'pull_request']
@@ -55,7 +56,8 @@ const CLOSED_LABELS: Record<string, string> = {
 const TOUCH_MS = 10 * 60 * 1000
 const ADOPTED_DETAIL = 'Not run through the kit yet: /next picks it up'
 
-const COLOR = { done: '#c4c0ff', active: '#8e86f8', waiting: '#f59e0b', todo: '#6b7280' }
+// `todo` is a theme key, so the stages ahead read on a light terminal as on a dark one.
+const COLOR = { done: '#c4c0ff', active: '#8e86f8', waiting: '#f59e0b', todo: 'inactive' }
 // The Sessions pane's cards: a purple edge on the item being viewed, an amber one on an item
 // waiting on you, with a faint tint of the same where the surface can draw one.
 const CARD = {
@@ -301,13 +303,18 @@ async function setGoals($: EngineInterface, rows: PipelineRow[], mtimes: Record<
 }
 
 let lastJson = ''
-let isRefreshing = false
-// A refresh asked for while one runs runs again after it, so a write is never missed.
-let isRefreshQueued = false
+// The refresh under way, and the one queued behind it: a caller that asks during a refresh
+// waits for the next one, so what it just wrote is on the bar when its await returns.
+let running: Promise<void> | null = null
+let queued: Promise<void> | null = null
 // Parsed state files by name, reused while the file's mtime is unchanged.
 const cache = new Map<string, { mtime: number; data: StateFile | null }>()
 let lastDone: Record<string, boolean[]> | null = null
 let lastWaiting: Record<string, boolean> | null = null
+
+// A work item's state file, not a stage's checks or evidence file written beside it.
+const isStateFile = (entry: { name: unknown; kind: string }) =>
+  entry.kind === 'file' && String(entry.name).endsWith('.json') && !String(entry.name).includes('-checks')
 
 async function homeDir($: EngineInterface) {
   const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
@@ -365,13 +372,24 @@ async function hasBranch($: EngineInterface, repo: Repo, branch: string, packed:
   return $.fs.exists(`${repo.commonDir}/refs/heads/${branch}`)
 }
 
-async function refresh($: EngineInterface): Promise<void> {
-  if (isRefreshing) {
-    isRefreshQueued = true
-    return
+function refresh($: EngineInterface): Promise<void> {
+  if (running) {
+    queued ??= running.then(() => {
+      queued = null
+
+      return refresh($)
+    })
+
+    return queued
   }
-  isRefreshing = true
-  isRefreshQueued = false
+  running = refreshNow($).finally(() => {
+    running = null
+  })
+
+  return running
+}
+
+async function refreshNow($: EngineInterface) {
   try {
     const dir = `${await homeDir($)}/.claude/dotnet-workflow-kit/pipeline`
     const [entries, repo, now] = await Promise.all([
@@ -389,7 +407,7 @@ async function refresh($: EngineInterface): Promise<void> {
     const named = new Set<string>()
     for (const entry of entries) {
       const name = entry.name as string
-      if (entry.kind !== 'file' || !name.endsWith('.json') || name.includes('-checks')) continue
+      if (!isStateFile(entry)) continue
       try {
         let hit = cache.get(name)
         if (!hit || hit.mtime !== entry.mtimeMs) {
@@ -457,10 +475,7 @@ async function refresh($: EngineInterface): Promise<void> {
     }
   } catch (err) {
     $.ui.log(`dotnet-workflow-kit: ${String(err)}`)
-  } finally {
-    isRefreshing = false
   }
-  if (isRefreshQueued) await refresh($)
 }
 
 // The branches a team works from, per repository root; their sessions are not work items.
@@ -597,29 +612,56 @@ const isoNow = async ($: EngineInterface) => new Date(await $.clock.now()).toISO
 
 // The file for this branch: the one whose `branch` names it, whatever it is called, else a new
 // one keyed by the ticket id, else by the branch, as /next keys it.
-async function stateFileFor($: EngineInterface, dir: string, branch: string, ticket?: string): Promise<string> {
+// The folder is shared by every repository, so a file is this item's only when its branch and
+// repository match and it is still open; of several, the newest, as refresh shows.
+async function stateFileFor($: EngineInterface, dir: string, repo: Repo, ticket?: string): Promise<string> {
   const entries = (await $.fs.exists(dir)) ? await $.fs.list(dir) : []
+  const sameRepo = (path: string | undefined) => !path || samePath(path, repo.commonDir)
+  const taken = new Set<string>()
+  let best: { name: string; mtime: number } | undefined
   for (const entry of entries) {
     const name = entry.name as string
-    if (entry.kind !== 'file' || !name.endsWith('.json') || name.includes('-checks')) continue
+    if (!isStateFile(entry)) continue
+    taken.add(name)
     try {
-      if ((JSON.parse(await $.fs.read(`${dir}/${name}`)) as StateFile).branch === branch) return `${dir}/${name}`
+      const data = JSON.parse(await $.fs.read(`${dir}/${name}`)) as StateFile
+      const isMine = data.branch === repo.branch && sameRepo(data.repo) && !data.closed
+      if (isMine && (!best || entry.mtimeMs > best.mtime)) best = { name, mtime: entry.mtimeMs }
     } catch {
       // Unreadable: not this branch's file as far as anyone can tell.
     }
   }
-  const id = ticketId(ticket).replace(/^#/, '')
+  if (best) return `${dir}/${best.name}`
 
-  return `${dir}/${branchSlug(id || branch)}.json`
+  // A new file never reuses the name of another repository's or a closed item's.
+  const slug = branchSlug(ticketId(ticket).replace(/^#/, '') || repo.branch)
+  let name = `${slug}.json`
+  for (let n = 2; taken.has(name); n++) name = `${slug}-${n}.json`
+
+  return `${dir}/${name}`
+}
+
+// Git and the skills spell one path with either slash and either case on Windows.
+const pathKey = (path: string) => path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+const samePath = (a: string, b: string) => pathKey(a) === pathKey(b)
+
+// Stage calls run one at a time, so two in flight never read the same file and drop a write.
+let writing: Promise<unknown> = Promise.resolve()
+
+const writeStage = ($: EngineInterface, input: StageInput): Promise<string> => {
+  const next = writing.then(() => writeStageNow($, input))
+  writing = next.catch(() => undefined)
+
+  return next
 }
 
 // The stage tool: merges what a skill recorded into this branch's state file and redraws the bar.
-async function writeStage($: EngineInterface, input: StageInput): Promise<string> {
+async function writeStageNow($: EngineInterface, input: StageInput): Promise<string> {
   const repo = await currentRepo($)
   if (!repo?.branch) return 'Not on a branch of a git repository; nothing written.'
   if ((await baseBranches($, repo)).includes(repo.branch)) return `On the base branch ${repo.branch}; nothing written.`
   const dir = `${await homeDir($)}/.claude/dotnet-workflow-kit/pipeline`
-  const path = await stateFileFor($, dir, repo.branch, input.item?.ticket)
+  const path = await stateFileFor($, dir, repo, input.item?.ticket)
   const name = basename(path)
   let data: StateFile = {}
   if (await $.fs.exists(path)) {
@@ -722,7 +764,8 @@ export const register: Register = on => {
 
   on('tool.call', async ($, e, next) => {
     // A subagent's calls are its own: the band names the subagent, not what it is reading.
-    const text = e.agentId === undefined ? describe(e as unknown as Record<string, unknown>) : undefined
+    if (e.agentId !== undefined) return next(e)
+    const text = describe(e as unknown as Record<string, unknown>)
     if (text) {
       const now = await $.clock.now()
       await update($, activity, (): Activity => ({ text: clip(text), at: now }))
@@ -749,7 +792,8 @@ export const register: Register = on => {
     const started = await next(e)
     const id = started.deny === undefined ? started.agentId : undefined
     if (id) {
-      await update($, agents, list => [...list.filter(a => a.id !== id), { id, description: e.description }]).catch(
+      const at = await $.clock.now()
+      await update($, agents, list => [...list.filter(a => a.id !== id), { id, description: e.description, at }]).catch(
         err => $.ui.log(`dotnet-workflow-kit: ${String(err)}`),
       )
     }
@@ -782,7 +826,9 @@ export const register: Register = on => {
     const live = await read($, activity)
     const tasks = e.props.isWorking ? [] : await read($, background)
     const isBusy = e.props.isWorking || tasks.length > 0
-    const running = (await read($, agents)).length
+    // An agent that never reports its end (a remote one, a killed one) stops counting after an hour.
+    const now = await $.clock.now()
+    const running = (await read($, agents)).filter(a => now - a.at < AGENT_MS).length
     const crew = running === 0 ? '' : ` · ${running} ${running === 1 ? 'agent' : 'agents'} running`
     const doing = (one: PipelineRow) =>
       isWaiting(one)
@@ -1184,7 +1230,7 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
   const style =
     `<style>.track{fill:#1f1d2e;fill-opacity:.08}.tick{fill:#1f1d2e;fill-opacity:.25}` +
     `@media (prefers-color-scheme: dark){.track{fill:#fff;fill-opacity:.07}.tick{fill:#fff;fill-opacity:.28}}` +
-    `.tw{animation:tw 1.4s ease-in-out infinite}@keyframes tw{33%{opacity:1}66%{opacity:.15}}` +
+    `.tw{animation:tw 1.4s ease-in-out infinite}@keyframes tw{33%{fill-opacity:.95}66%{fill-opacity:.1}}` +
     `.sw{animation:sw 2.2s linear infinite}@keyframes sw{to{transform:translateX(${(fillEnd + 48).toFixed(1)}px)}}` +
     `@media (prefers-reduced-motion: reduce){.tw,.sw{animation:none}.sw{display:none}}</style>`
 
