@@ -31,14 +31,40 @@ date: <YYYY-MM-DD>
 | <scenario or decision> | done | |
 
 ## Changes
-<!-- One line at the top for anything the reviewer must not miss: breaking change, backfill, behaviour that differs from the ticket wording. Then one mermaid diagram of the change: nodes are the components touched (grains, handlers, resolvers, policies, tables), edges are the call or data path from the domain outward, a subgraph per service when more than one, changed nodes in class `changed`, untouched neighbours that give context in class `ctx`, about a dozen nodes at most. Then per service: ### ServiceName, a Slice / File / Change table (slices: Domain, Application, Infrastructure, API, Tests; anything else takes the nearest slice, so identity policies, infrastructure as code, workflows and config are Infrastructure). File is the repo-relative path in backticks, or a unique tail of it; the builder links it to that file's full diff, pulled from git and appended collapsed at the end of the section. Then the load-bearing hunks as #### title followed by a ```diff fence. At most eight hunks across the whole review; each under 60 lines. -->
+<!-- One line at the top for anything the reviewer must not miss: breaking change, backfill, behaviour that differs from the ticket wording. Then one ```flowmap layer map of the change (format: scripts/flowmap.py). `lanes:` are the slices the change touches, in the profile's names and in request order (API before Application before Domain before Infrastructure); `rows:` are the services, or the journeys when one service has two. A `node` is a component on the path (resolver, handler, entity method, repository, consumer, policy), with its `file`; status and the Before / After views come from git, so write `status:` only when a node is a symbol inside a file (a deleted method in a modified file) or untouched context (`status: context`, no file needed). A `test` node names the test file and the node it `covers:`, or `status: missing` for a gap the review calls out. Edges: `a -> b` for a call, `a ~> b` for an event or message, `: label` for what crosses it, a `before:` prefix for a path that only existed on the base branch. Sixteen nodes at most: the path a request takes, not every file. Then, still before the first ###, one fence per example captioned `@<node id> <label>`: for an API node the query or request, its variables and the response; for a table node a ```record row (`column | value | note` per line) and the migration; for an event node the message payload. Write an example only when it comes from the schema, the migration, the contract or a QA capture in this review; otherwise leave it out. Then per service: ### ServiceName, a Slice / File / Change table (slices: Domain, Application, Infrastructure, API, Tests; anything else takes the nearest slice, so identity policies, infrastructure as code, workflows and config are Infrastructure). File is the repo-relative path in backticks, or a unique tail of it; the builder links it to that file's full diff, pulled from git and appended collapsed at the end of the section. Then the load-bearing hunks as #### title followed by a ```diff fence. At most eight hunks across the whole review; each under 60 lines. -->
 
-```mermaid
-flowchart LR
-  A[<changed component>]:::changed --> B[<changed component>]:::changed
-  B --> C[<untouched neighbour>]:::ctx
-  classDef changed stroke-width:3px;
-  classDef ctx stroke-dasharray:4 3;
+```flowmap
+lanes: <API>, <Application>, <Domain>, <Infrastructure>
+rows: <ServiceName>
+
+node <entry>: <Resolver or endpoint>
+  lane: <API>
+  file: <repo-relative path>
+  kind: api
+
+node <rule>: <Entity.Method>
+  lane: <Domain>
+  file: <repo-relative path>
+
+node <store>: <Repository>
+  lane: <Infrastructure>
+  file: <repo-relative path>
+  kind: data
+
+test <rule-tests>: <TestClass>
+  covers: <rule>
+  file: <repo-relative test path>
+
+<entry> -> <rule>
+<entry> -> <store>: <what crosses>
+```
+
+```graphql @<entry> Query
+<the query or request a client sends>
+```
+
+```record @<store> Example row · <table>
+<Column> | <value> | <what changed>
 ```
 
 ### <ServiceName>

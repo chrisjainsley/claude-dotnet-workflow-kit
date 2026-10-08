@@ -33,7 +33,10 @@ Question ids derive from the title text, so a republish keeps answers already st
 as long as the title is unchanged.
 
 Review mode: Verdict becomes stat tiles, Plan versus delivered and Findings render
-status pills, Changes pairs "#### title" with a ```diff fence into collapsed hunks
+status pills, Changes draws its ```flowmap as a layer map (scripts/flowmap.py) whose
+nodes take their status from git, toggle between the base and the branch, and open
+their file diff and any @id example fences in a dialog, pairs "#### title" with a
+```diff fence into collapsed hunks
 and links backticked File cells to full per-file diffs pulled from git for --range
 (derived from the front matter when omitted), QA report renders scenario cards whose
 gherkin steps expand to the evidence captioned with their text,
@@ -62,6 +65,7 @@ DEFAULT_TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "page.html"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit_profile import add_profile_arg, resolve_profile  # noqa: E402
 from check import STEP_RE, is_video, step_key  # noqa: E402
+import flowmap  # noqa: E402
 
 # Delivery Labs branding: the profile's `branding` flag (default true) switches it off.
 # Colours follow deliverylabs.co: indigo accents on a gray-900 dark ground. Only the
@@ -103,6 +107,9 @@ SECRET_PATTERNS = re.compile(
 META = {}
 DIFF_RANGE = None
 FILE_STATS = {}
+FILE_STATUS = {}
+FLOW_EXAMPLES = {}
+FLOW_COUNT = [0]
 USED_FILES = []
 WARNINGS = []
 MEDIA_FILES = []
@@ -274,6 +281,11 @@ def load_file_stats():
         if len(parts) == 3:
             adds, dels, path = parts
             FILE_STATS[path] = (adds, dels)
+    for line in git("diff", "--name-status", DIFF_RANGE).splitlines():
+        parts = line.split("	")
+        if len(parts) >= 2 and parts[0]:
+            # A rename or copy reports the new path last; the map treats it as modified.
+            FILE_STATUS[parts[-1]] = parts[0][0] if parts[0][0] in "AD" else "M"
 
 
 def resolve_path(text):
@@ -339,6 +351,176 @@ def render_file_diffs():
         out.append(f'<details class="hunk filediff" id="{file_anchor(path)}">{head}{body}</details>')
     out.append("</div>")
     return "".join(out)
+
+
+def take_examples(lines):
+    """Lift the Changes fences captioned '@<node id> label' out of the flow of the
+    section; render_flowmap shows them in that node's detail dialog."""
+    FLOW_EXAMPLES.clear()
+    kept, i = [], 0
+    while i < len(lines):
+        if lines[i].startswith("```"):
+            lang, caption, body, j = read_fence(lines, i, with_caption=True)
+            target = flowmap.example_target(caption)
+            if target:
+                FLOW_EXAMPLES.setdefault(target[0], []).append((lang, target[1], body))
+                i = j
+                continue
+            kept.extend(lines[i:j])
+            i = j
+            continue
+        kept.append(lines[i])
+        i += 1
+    return kept
+
+
+FLOW_STATUS_LABEL = {"new": "new", "modified": "modified", "deleted": "deleted",
+                     "context": "unchanged", "missing": "missing"}
+
+
+def render_example(lang, label, body):
+    head = f'<h5 class="fm-ex-label">{html.escape(label)}</h5>'
+    if lang == "record":
+        rows = "".join(
+            f'<tr><th scope="row"><code>{html.escape(k)}</code></th><td><code>{html.escape(v)}</code></td>'
+            f'<td class="fm-rec-note">{html.escape(note)}</td></tr>'
+            for k, v, note in flowmap.record_rows(body))
+        return head + f'<div class="table-wrap"><table class="fm-record"><tbody>{rows}</tbody></table></div>'
+    if lang == "json":
+        body = pretty_json(body)
+    return head + render_code(lang, body)
+
+
+def flow_node_file(node, resolved):
+    """The node's path as it appears in the diff, or None when the file did not change."""
+    raw = node.get("file", "").strip("`")
+    if not raw:
+        return None
+    path = resolved(raw)
+    if path is None and node["status"] not in ("context", "missing"):
+        WARNINGS.append(f"flowmap node '{node['id']}': '{raw}' is not in the diff for {DIFF_RANGE}")
+    return path
+
+
+def render_flow_node(fid, node, path):
+    stat = ""
+    if path:
+        adds, dels = FILE_STATS.get(path, ("?", "?"))
+        stat = f' · <span class="fadd">+{adds}</span> <span class="fdel">-{dels}</span>'
+    note = f'<span class="fm-sub">{inline(node["note"])}</span>' if node.get("note") else ""
+    extra = " · example" if FLOW_EXAMPLES.get(node["id"]) else ""
+    kind = html.escape(node.get("kind") or node.get("lane", ""))
+    return (
+        f'<button type="button" class="fm-node s-{node["status"]}" data-node="{html.escape(node["id"], quote=True)}" '
+        f'data-views="{" ".join(node["views"])}" aria-haspopup="dialog">'
+        f'<span class="fm-name">{inline(node["title"])}</span>{note}'
+        f'<span class="fm-meta">{kind} · {FLOW_STATUS_LABEL[node["status"]]}{stat}{extra}</span></button>'
+        + render_flow_panel(fid, node, path)
+    )
+
+
+def render_flow_panel(fid, node, path):
+    kind = html.escape(node.get("kind") or node.get("lane", ""))
+    raw = node.get("file", "").strip("`")
+    file_line = ""
+    if path:
+        file_line = f'<a class="filelink fm-file" href="#{file_anchor(path)}"><code>{html.escape(path)}</code></a>'
+    elif raw:
+        file_line = f'<span class="fm-file"><code>{html.escape(raw)}</code></span>'
+    if path:
+        diff = f'<div class="fm-diff" data-file="{file_anchor(path)}"></div>'
+    elif node["status"] == "missing":
+        diff = '<p class="fnote">No test file yet: this is a gap the review calls out.</p>'
+    else:
+        diff = '<p class="fnote">Not changed on this branch. Shown for context.</p>'
+    examples = "".join(render_example(lang, label, body) for lang, label, body in FLOW_EXAMPLES.get(node["id"], []))
+    note = f'<p class="fm-note">{inline(node["note"])}</p>' if node.get("note") else ""
+    return (
+        f'<template id="{fid}-{html.escape(node["id"], quote=True)}">'
+        f'<div class="fm-detail"><div class="fm-chips"><span class="fm-chip">{kind}</span>'
+        f'<span class="fm-chip s-{node["status"]}">{FLOW_STATUS_LABEL[node["status"]]}</span>'
+        f'{"<span class=fm-row>" + html.escape(node["row"]) + "</span>" if node.get("row") else ""}</div>'
+        f'<h4 class="fm-title">{inline(node["title"])}</h4>{file_line}{note}'
+        f'<h5 class="fm-ex-label">Diff</h5>{diff}{examples}</div></template>'
+    )
+
+
+def render_flowmap(body):
+    spec, errors = flowmap.parse(body)
+    errors += flowmap.validate(spec)
+    if errors:
+        WARNINGS.extend("flowmap: " + e for e in errors)
+        return render_code("", body)
+    FLOW_COUNT[0] += 1
+    fid = f"fm{FLOW_COUNT[0]}"
+    paths = {}
+
+    def resolved(raw):
+        # One lookup per path, so an ambiguous tail warns once.
+        if raw not in paths:
+            paths[raw] = resolve_path(raw)
+        return paths[raw]
+
+    flowmap.resolve(spec, lambda raw: FILE_STATUS.get(resolved(raw) or ""))
+    lanes = spec["lanes"]
+    rows = spec["rows"] or [""]
+    by_id = {n["id"]: n for n in spec["nodes"]}
+    cells = {}
+    for node in spec["nodes"]:
+        path = flow_node_file(node, resolved)
+        if path and path not in USED_FILES:
+            USED_FILES.append(path)
+        if node["test"]:
+            key = ("tests", by_id[node["covers"]]["lane"])
+        else:
+            key = (node.get("row") or rows[0], node["lane"])
+        cells.setdefault(key, []).append(render_flow_node(fid, node, path))
+    grid = [f'<div class="fm-head" style="grid-column: {i + 1}">{html.escape(lane)}</div>' for i, lane in enumerate(lanes)]
+    groups = [(row, row) for row in rows]
+    if any(n["test"] for n in spec["nodes"]):
+        groups.append(("tests", "Tests"))
+    for key, label in groups:
+        if label:
+            grid.append(f'<div class="fm-rowhead{" fm-testshead" if key == "tests" else ""}">{html.escape(label)}</div>')
+        for i, lane in enumerate(lanes):
+            grid.append(f'<div class="fm-cell{" fm-tests" if key == "tests" else ""}" style="grid-column: {i + 1}">'
+                        + "".join(cells.get((key, lane), [])) + "</div>")
+    edges, key = [], []
+    for e in spec["edges"]:
+        # An edge shows in a view when the view allows it and both of its boxes are there.
+        views = [v for v in ([e["only"]] if e["only"] else ["before", "after"])
+                 if v in by_id[e["from"]]["views"] and v in by_id[e["to"]]["views"]]
+        n = len(key) + 1 if e["label"] else 0
+        edges.append({"from": e["from"], "to": e["to"], "event": e["event"], "label": e["label"], "views": views, "n": n})
+        if n:
+            arrow = "&#8669;" if e["event"] else "&#8594;"
+            key.append(f'<li data-views="{" ".join(views)}"{" class=ev" if e["event"] else ""}><b>{n}</b>'
+                       f'<span>{inline(by_id[e["from"]]["title"])} {arrow} {inline(by_id[e["to"]]["title"])}: {inline(e["label"])}</span></li>')
+    data = json.dumps({"edges": edges}).replace("</", "<\\/")
+    base = html.escape(META.get("base", "base"))
+    branch = "this branch"
+    toggle = (
+        '<div class="fm-toggle" role="group" aria-label="Compare with the base branch">'
+        f'<button type="button" data-view="before" aria-pressed="false">Before · {base}</button>'
+        f'<button type="button" data-view="after" aria-pressed="true">After · {branch}</button></div>'
+    )
+    legend = (
+        '<div class="fm-legend">'
+        '<span class="lg-after"><i class="sw s-modified"></i>changed</span>'
+        '<span class="lg-before"><i class="sw s-deleted"></i>deleted on branch</span>'
+        '<span class="lg-before"><i class="sw s-modified"></i>modified on branch</span>'
+        '<span><i class="sw s-context"></i>unchanged</span>'
+        '<span><i class="sw ev"></i>event</span>'
+        f'<span class="fm-hint">Select a box for its diff{" and example" if FLOW_EXAMPLES else ""}.</span></div>'
+    )
+    return (
+        f'<figure class="flowmap" id="{fid}" data-view="after">'
+        f'<div class="fm-bar">{legend}{toggle}</div>'
+        f'<div class="fm-scroll"><div class="fm-grid" style="--fm-lanes: {len(lanes)}">'
+        f'<svg class="fm-edges" aria-hidden="true"></svg>{"".join(grid)}</div></div>'
+        + (f'<ol class="fm-key" aria-label="Edges">{"".join(key)}</ol>' if key else "")
+        + f'<script type="application/json" class="fm-data">{data}</script></figure>'
+    )
 
 
 def render_table(lines, pill_columns=(), file_column=None):
@@ -456,7 +638,7 @@ def render_blocks(lines, mode=None, state=None):
             continue
         if line.startswith("```"):
             lang, body, i = read_fence(lines, i)
-            out.append(render_code(lang, body))
+            out.append(render_flowmap(body) if lang == "flowmap" and mode == "changes" else render_code(lang, body))
             continue
         if line.startswith("#### "):
             title = line[5:].strip()
@@ -871,6 +1053,8 @@ def parse(text, kind=None):
     open_findings, output = [], []
     for name, lines in sections:
         mode = REVIEW_MODES.get(name)
+        if mode == "changes":
+            lines = take_examples(lines)
         if mode == "qa":
             body = render_qa(lines)
         else:

@@ -5,9 +5,11 @@ checks, with no QA session behind it. It shows the bar for density (677 prose wo
 two hunks) and for honesty: the mobile acceptance criterion is reported as dropped, the
 QA report opens with **No QA run.** and puts all eleven criteria under Not covered rather
 than inventing a Blocked row, and the two open findings drive the decision form. The
-Changes section opens with the mermaid diagram of the two sign-in journeys (changed nodes
-solid, context nodes dashed) and its File cells carry repo paths that the builder turned
-into links to the full per-file diffs. Use it for shape and tone; do not copy its content.
+Changes section opens with the flowmap of the two sign-in journeys (one Infrastructure
+lane, a row per journey, context nodes for the untouched mobile session, and a missing test
+box because B2C XML has no test host); no example fences, because nothing in the change
+is an API or a table. Its File cells carry repo paths that the builder turned into links
+to the full per-file diffs. Use it for shape and tone; do not copy its content.
 
 ```markdown
 ---
@@ -56,25 +58,61 @@ Merged on 2026-09-10. Web sign-in gains the option and a 90 day session. Mobile 
 
 Only the web relying party gained `KeepAliveInDays`; the mobile policy is untouched.
 
-```mermaid
-flowchart LR
-  subgraph web [Web sign-in]
-    RP[AccountLinkSignUpOrSignIn relying party]:::changed
-    SSO[SingleSignOn KeepAliveInDays 90]:::changed
-    TP[SelfAsserted LocalAccountSignin Email ForgotPassword]:::changed
-  end
-  subgraph mobile [Mobile sign-in]
-    MRP[MobileSignInOnly relying party]:::changed
-    MSSO[SingleSignOn rolling 86400 s]:::ctx
-    MTP[SelfAsserted LocalAccountSignin Email]:::ctx
-  end
-  RP --> SSO
-  RP --> TP
-  TP -- enableRememberMe --> SSO
-  MRP -- dead parameter removed --> MTP
-  MRP --> MSSO
-  classDef changed stroke-width:3px;
-  classDef ctx stroke-dasharray:4 3;
+```flowmap
+lanes: Infrastructure
+rows: Web sign-in, Mobile sign-in
+
+node web-rp: AccountLinkSignUpOrSignIn relying party
+  lane: Infrastructure
+  row: Web sign-in
+  file: Acme.App.Services.User.AzureB2C/Policies/B2C_1A_SIGNUP_SIGNIN.xml
+  kind: policy
+  status: modified
+  note: tenant SSO cookie kept 90 days
+
+node web-tp: SelfAsserted LocalAccountSignin Email ForgotPassword
+  lane: Infrastructure
+  row: Web sign-in
+  file: Acme.App.Services.User.AzureB2C/Policies/B2C_1A_ACCOUNTLINK_EXTENSIONS.xml
+  kind: technical profile
+  status: modified
+  note: renders the remember-me box
+
+node web-sso: SingleSignOn KeepAliveInDays 90
+  lane: Infrastructure
+  row: Web sign-in
+  file: Acme.App.Services.User.AzureB2C/Policies/B2C_1A_SIGNUP_SIGNIN.xml
+  kind: session
+  status: modified
+
+node mobile-rp: MobileSignInOnly relying party
+  lane: Infrastructure
+  row: Mobile sign-in
+  file: Acme.App.Services.User.AzureB2C/Policies/B2C_1A_MOBILE_SIGNIN.xml
+  kind: policy
+  status: modified
+  note: dead parameter removed
+
+node mobile-tp: SelfAsserted LocalAccountSignin Email
+  lane: Infrastructure
+  row: Mobile sign-in
+  kind: technical profile
+  status: context
+
+node mobile-sso: SingleSignOn rolling 86400 s
+  lane: Infrastructure
+  row: Mobile sign-in
+  kind: session
+  status: context
+
+test web-tests: no B2C test host
+  covers: web-rp
+  status: missing
+
+web-rp -> web-tp
+web-tp -> web-sso: enableRememberMe
+mobile-rp -> mobile-tp
+mobile-tp -> mobile-sso
 ```
 
 ### User Service, Azure B2C policies

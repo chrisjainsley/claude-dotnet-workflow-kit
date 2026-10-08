@@ -44,25 +44,61 @@ Merged on 2026-09-10. Web sign-in gains the option and a 90 day session. Mobile 
 
 Only the web relying party gained `KeepAliveInDays`; the mobile policy is untouched.
 
-```mermaid
-flowchart LR
-  subgraph web [Web sign-in]
-    RP[AccountLinkSignUpOrSignIn relying party]:::changed
-    SSO[SingleSignOn KeepAliveInDays 90]:::changed
-    TP[SelfAsserted LocalAccountSignin Email ForgotPassword]:::changed
-  end
-  subgraph mobile [Mobile sign-in]
-    MRP[MobileSignInOnly relying party]:::changed
-    MSSO[SingleSignOn rolling 86400 s]:::ctx
-    MTP[SelfAsserted LocalAccountSignin Email]:::ctx
-  end
-  RP --> SSO
-  RP --> TP
-  TP -- enableRememberMe --> SSO
-  MRP -- dead parameter removed --> MTP
-  MRP --> MSSO
-  classDef changed stroke-width:3px;
-  classDef ctx stroke-dasharray:4 3;
+```flowmap
+lanes: Infrastructure
+rows: Web sign-in, Mobile sign-in
+
+node web-rp: AccountLinkSignUpOrSignIn relying party
+  lane: Infrastructure
+  row: Web sign-in
+  file: Acme.App.Services.User.AzureB2C/Policies/B2C_1A_SIGNUP_SIGNIN.xml
+  kind: policy
+  status: modified
+  note: tenant SSO cookie kept 90 days
+
+node web-tp: SelfAsserted LocalAccountSignin Email ForgotPassword
+  lane: Infrastructure
+  row: Web sign-in
+  file: Acme.App.Services.User.AzureB2C/Policies/B2C_1A_ACCOUNTLINK_EXTENSIONS.xml
+  kind: technical profile
+  status: modified
+  note: renders the remember-me box
+
+node web-sso: SingleSignOn KeepAliveInDays 90
+  lane: Infrastructure
+  row: Web sign-in
+  file: Acme.App.Services.User.AzureB2C/Policies/B2C_1A_SIGNUP_SIGNIN.xml
+  kind: session
+  status: modified
+
+node mobile-rp: MobileSignInOnly relying party
+  lane: Infrastructure
+  row: Mobile sign-in
+  file: Acme.App.Services.User.AzureB2C/Policies/B2C_1A_MOBILE_SIGNIN.xml
+  kind: policy
+  status: modified
+  note: dead parameter removed
+
+node mobile-tp: SelfAsserted LocalAccountSignin Email
+  lane: Infrastructure
+  row: Mobile sign-in
+  kind: technical profile
+  status: context
+
+node mobile-sso: SingleSignOn rolling 86400 s
+  lane: Infrastructure
+  row: Mobile sign-in
+  kind: session
+  status: context
+
+test web-tests: no B2C test host
+  covers: web-rp
+  status: missing
+
+web-rp -> web-tp
+web-tp -> web-sso: enableRememberMe
+mobile-rp -> mobile-tp
+mobile-tp -> mobile-sso
 ```
 
 ### User Service, Azure B2C policies

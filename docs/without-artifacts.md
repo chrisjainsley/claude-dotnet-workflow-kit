@@ -8,7 +8,7 @@ files instead of a published, interactive page.
 ## What still happens
 
 `plan` and `review` build the exact same `plan.html` and
-`review.html` either way. The section content, the word budgets, the mermaid diagram
+`review.html` either way. The section content, the word budgets, the layer map
 in the review, the per-file diff links, all of that comes from the same markdown and
 the same build scripts regardless of `artifacts`. The only thing that changes is the
 last step: instead of calling the Artifact tool, the skill tells you the path to the

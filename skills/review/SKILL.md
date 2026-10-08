@@ -91,11 +91,17 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    the nearest one (identity policies, infrastructure as code, workflows and
    configuration are Infrastructure). `size` tracks the number of rows the review needs,
    not the diff: a nine-line PR with eleven acceptance criteria is `standard`. The
-   Changes section opens with one mermaid diagram of the change: components as nodes,
-   the call or data path as edges from the domain outward, changed nodes in class
-   `changed`, context nodes in class `ctx`, a subgraph per service when more than one.
-   File cells hold the repo-relative path (or a unique tail) in backticks so the builder
-   can find the file in the diff.
+   Changes section opens with one ```flowmap layer map of the change: a lane per slice
+   the change touches, a row per service, a node per component on the request's path
+   with its file, `test` nodes for the tests covering each, and `->` calls and `~>`
+   events between them. The builder takes each node's status from git, draws the map
+   with a Before / After toggle, and opens a node's file diff in a dialog when it is
+   clicked. Examples sit beside the map as fences captioned `@<node id> <label>`: the
+   query, variables and response for an API node, a ```record row and the migration for
+   a table, the payload for an event. Write one only when the schema, migration,
+   contract or a QA capture grounds it; never invent a value. File cells hold the
+   repo-relative path (or a unique tail) in backticks so the builder can find the file
+   in the diff.
 6. **Run the check** and fix until OK; cut, never raise caps:
    ```bash
    python "SKILL_DIR/scripts/check_review.py" plans/<slug>/review.md
@@ -156,7 +162,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 |---|---|---|
 | Verdict | 80 words + tiles | Ready for QA or not and the one reason. Tiles: acceptance pass/run, manual pass/run, findings open with highest severity, AC covered n/m (delivered in code: done plus changed). Every tile agrees with the section it summarises. |
 | Plan versus delivered | 160 words + table | One row per spec scenario and plan decision: done, changed or dropped, with a one-line reason for anything but done. |
-| Changes | 300 words + 1 diagram + 8 hunks | One line for what the reviewer must not miss. One mermaid diagram of the changed components and the path between them. Then per service a Slice / File / Change table whose File cells open the full per-file diff, and the load-bearing hunks as collapsed diffs under 60 lines each. |
+| Changes | 300 words + 1 flowmap + 8 hunks | One line for what the reviewer must not miss. One flowmap layer map of the changed components, the path between them and their tests, with grounded examples for API, table and event nodes. Then per service a Slice / File / Change table whose File cells open the full per-file diff, and the load-bearing hunks as collapsed diffs under 60 lines each. |
 | Contracts and coordination | 140 words + table | API contract and snapshot, new events and their topics, storage and infrastructure as code, configuration keys, migrations, client apps, tenants, name collisions. Rows are illustrative; keep only what someone else has to act on. |
 | Findings | 200 words + table | Severity, location, finding, status, note. Accepted needs a reason. Open rows become accept or fix radios in the decision form. |
 | QA report | 350 words + gherkin + evidence, 10 images, 3 videos | Environment and test users, one scenario per behaviour tagged Acceptance or Manual with Pass, Fail or Blocked, Evidence with per-step proof, Classification (regression, pre-existing bug, environment issue, not run) on anything but Pass, the summary table, Not covered. When nothing was run, open with **No QA run.** and list every criterion under Not covered. |
