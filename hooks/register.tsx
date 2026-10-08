@@ -799,7 +799,8 @@ export const register: Register = on => {
     $.clock.every(POLL_MS, () => void refresh($))
     $.clock.after(1000, () => void closeItems($))
     $.clock.every(CLOSE_MS, () => void closeItems($))
-    $.clock.after(1500, () => void scanAspire($))
+    // The first prompt is composed right after this, so the AppHosts are looked up first, briefly.
+    await Promise.race([scanAspire($), $.clock.sleep(3000)])
     $.clock.every(ASPIRE_MS, () => void scanAspire($))
 
     return next(e)

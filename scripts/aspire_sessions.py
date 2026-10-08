@@ -44,7 +44,8 @@ DEFAULT_DIR = Path.home() / ".claude" / "dotnet-workflow-kit" / "aspire"
 STALE_AFTER = 120
 # How long a start's claim holds the AppHost it starts for the session that started it.
 CLAIM_FOR = 600
-LAUNCHERS = {"dotnet", "aspire"}
+# `dotnet run` on an AppHost hands off through `dnx aspire.cli run` to the Aspire CLI.
+LAUNCHERS = {"dotnet", "aspire", "dnx"}
 APPHOST_MARKERS = re.compile(r"Aspire\.AppHost\.Sdk|<IsAspireHost>\s*true\s*</IsAspireHost>", re.I)
 URL_PORT = re.compile(r"[a-z][a-z0-9+.-]*://[^/\s;\"',]*?:(\d{2,5})", re.I)
 SKIP_DIRS = {"bin", "obj", "node_modules", ".git", ".vs", ".idea"}
@@ -151,16 +152,29 @@ def launch_profile(project_dir, name=None):
 
 
 def launch_env(project_dir, profile_name=None, overrides=None, use_profile=True):
-    """The URL-bearing settings an AppHost starts with: its profile's, then the command's own."""
-    env = {}
+    """The URL-bearing settings an AppHost starts with: the command's own, then its profile's on
+    top, since `dotnet run` sets a profile's variables over whatever the shell already had."""
+    env = dict(overrides or {})
     if use_profile:
         profile = launch_profile(project_dir, profile_name)
         if profile.get("applicationUrl"):
             env["ASPNETCORE_URLS"] = str(profile["applicationUrl"])
         for key, value in (profile.get("environmentVariables") or {}).items():
             env[str(key)] = str(value)
-    env.update(overrides or {})
     return env
+
+
+def ignores_no_profile(project_dir):
+    """Whether `--no-launch-profile` is lost on the way: from Aspire 13, `dotnet run` hands an
+    AppHost to the Aspire CLI, which drops the flag and starts the first profile anyway."""
+    try:
+        for project in Path(norm(project_dir)).glob("*.csproj"):
+            match = re.search(r"Aspire\.AppHost\.Sdk/(\d+)", project.read_text(encoding="utf-8", errors="replace"))
+            if match:
+                return int(match.group(1)) >= 13
+    except OSError:
+        pass
+    return False
 
 
 def ports_in(env):
@@ -300,6 +314,7 @@ class Snapshot:
             self.children.setdefault(int(proc.get("ppid") or 0), []).append(int(proc["pid"]))
         self._listen = listen
         self._listen_of = listen_of
+        self._looked_at = set()
 
     def descendants(self, pid):
         found, stack = [], [pid]
@@ -310,10 +325,25 @@ class Snapshot:
                     stack.append(child)
         return found
 
+    def monitors(self, pid):
+        """What a process started detached that watches it: DCP runs apart from its AppHost as
+        `dcp start-apiserver --monitor <pid>`, with the dashboard and every resource beneath it."""
+        found = []
+        for other, proc in self.procs.items():
+            args = [str(arg) for arg in proc.get("cmdline") or []]
+            watched = [args[i + 1] for i, arg in enumerate(args[:-1]) if arg == "--monitor"]
+            if str(pid) in watched and other != pid:
+                found += [other, *(child for child in self.descendants(other) if child != pid)]
+        return found
+
     def listening(self, pids):
-        if self._listen is None:
-            self._listen = self._listen_of(set(pids)) if self._listen_of else {}
-        return sorted({port for pid in pids for port in self._listen.get(pid, [])})
+        if self._listen_of:
+            # Read on demand: only for processes not yet looked at, and kept for the next stack.
+            fresh = set(pids) - self._looked_at
+            if fresh:
+                self._listen = {**(self._listen or {}), **self._listen_of(fresh)}
+                self._looked_at |= fresh
+        return sorted({port for pid in pids for port in (self._listen or {}).get(pid, [])})
 
 
 def take_snapshot(path=None):
@@ -350,8 +380,8 @@ def find_stacks(snap):
                     profile = profile or args[i + 1]
                 no_profile = no_profile or arg == "--no-launch-profile"
             parent = snap.procs.get(int(parent.get("ppid") or 0))
-        pids = [pid, *snap.descendants(pid)]
-        env = launch_env(folder, profile, use_profile=not no_profile)
+        pids = [pid, *snap.descendants(pid), *snap.monitors(pid)]
+        env = launch_env(folder, profile, use_profile=not no_profile or ignores_no_profile(folder))
         stacks.append({
             "pid": pid,
             "project": Path(folder).name,
@@ -413,6 +443,10 @@ def scan(folder, me, snap, now):
                 remove(path)
                 continue
             entries[stack["pid"]] = entry
+
+    for path in folder.glob("claims/*.json"):
+        if now - float((read_json(path) or {}).get("at") or 0) >= CLAIM_FOR:
+            remove(path)
 
     live = []
     for pid, stack in sorted(stacks.items()):
@@ -739,11 +773,15 @@ def resolve(cwd, path):
 
 
 def find_apphost(cwd):
-    """The AppHost `aspire run` picks from a folder: the one its settings name, else the only one."""
+    """The AppHost `aspire run` picks from a folder: the one its settings name (`aspire.config.json`
+    from Aspire 13, `.aspire/settings.json` before it), else the only one beneath it."""
     for folder in (Path(cwd), *Path(cwd).parents):
-        settings = read_json(folder / ".aspire" / "settings.json")
-        if settings and settings.get("appHostPath"):
-            target = resolve(norm(folder / ".aspire"), settings["appHostPath"])
+        config = read_json(folder / "aspire.config.json") or {}
+        settings = read_json(folder / ".aspire" / "settings.json") or {}
+        named = (config.get("appHost") or {}).get("path") if isinstance(config.get("appHost"), dict) else None
+        base, path = (norm(folder), named) if named else (norm(folder / ".aspire"), settings.get("appHostPath"))
+        if path:
+            target = resolve(base, path)
             return norm(Path(target).parent) if target.lower().endswith(".csproj") else target
     found = []
     base = Path(cwd)
@@ -793,12 +831,12 @@ def check(command, cwd, me, snap, entries, folder, now):
         if same_path(entry.get("projectDir"), folder_key):
             return (
                 f"Blocked by dotnet-workflow-kit: {entry.get('project')} in this folder already runs for "
-                f"{owner(entry)} (pid {entry.get('pid')}). Two copies of one AppHost fight over its build "
-                "output and ports; work from a worktree of your own, or message that session."
+                f"{owner(entry)} (pid {entry.get('pid')}). Starting it again stops that copy (the Aspire CLI "
+                "stops a running instance of the same AppHost); work from a worktree of your own, or message "
+                "that session."
             )
-    if any(same_path(e.get("projectDir"), folder_key) for e in mine):
-        return None
-    env = launch_env(folder_key, target["profile"], target["env"], use_profile=not target["noProfile"])
+    use_profile = not target["noProfile"] or ignores_no_profile(folder_key)
+    env = launch_env(folder_key, target["profile"], target["env"], use_profile=use_profile)
     wanted = set(ports_in(env))
     for entry in others:
         held = sorted(wanted & set((entry.get("ports") or []) + (entry.get("launchPorts") or [])))
@@ -807,8 +845,9 @@ def check(command, cwd, me, snap, entries, folder, now):
             return (
                 f"Blocked by dotnet-workflow-kit: port{'s' if len(held) > 1 else ''} {names} "
                 f"{'are' if len(held) > 1 else 'is'} held by {entry.get('project')}, which {owner(entry)} owns "
-                f"(pid {entry.get('pid')}). Give this worktree ports of its own: another launch profile, or "
-                "ASPNETCORE_URLS and the dashboard's endpoint URLs set for this run. Or message that session."
+                f"(pid {entry.get('pid')}). Give this worktree ports of its own: add a launch profile with other "
+                "ports to its Properties/launchSettings.json and start with --launch-profile <name>; URLs set on "
+                "the command lose to the profile's. Or message that session."
             )
     write_json(claim_path(folder, folder_key), {"session": me["session"], "projectDir": folder_key, "at": now})
     return None

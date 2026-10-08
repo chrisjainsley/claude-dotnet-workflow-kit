@@ -16,11 +16,15 @@ Other sessions may be running AppHosts on the same machine. The kit's mod lists 
 with the session that owns it, in the system prompt and the Sessions pane, and refuses a
 kill or a start that would reach another session's. Stop only this session's own AppHost,
 by its pid, and never free a port by killing whatever holds it. When a start is refused
-for a port, give this worktree ports of its own for the run: a launch profile with other
-ports in the AppHost's `launchSettings.json`, or `ASPNETCORE_URLS` and the dashboard's
-endpoint URL variables set on the command. Endpoint ports fixed in the AppHost's code
-(`WithHttpEndpoint(port: ...)`) clash the same way; leave the port out so Aspire picks a
-free one.
+for a port, give this worktree ports of its own: add a launch profile with other ports to
+the AppHost's `Properties/launchSettings.json` (`applicationUrl` and the
+`ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL` and `ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL`
+variables) and start with `--launch-profile <name>`. URLs set on the command do not help:
+the profile's variables win over them, and from Aspire 13 `--no-launch-profile` is dropped
+on the way to the Aspire CLI, which starts the first profile anyway. Endpoint ports fixed in
+the AppHost's code (`WithHttpEndpoint(port: ...)`) clash the same way; leave the port out
+so Aspire picks a free one. From Aspire 13, starting an AppHost that already runs in the
+same folder stops the running copy, so never start one another session runs.
 
 **Common issues**
 - Another session's AppHost already holding the dashboard or a resource port, since every

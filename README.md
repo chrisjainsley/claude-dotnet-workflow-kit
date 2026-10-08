@@ -230,8 +230,8 @@ A session that ends leaves its AppHosts free for the next session in that worktr
 one that stops scanning for two minutes counts as ended. Scanning runs when the profile's
 `stack.local_run` is `aspire`, when this session starts an AppHost, or when any session
 has one listed, and needs Python like the rest of the kit. AppHosts in two worktrees of
-one repository start on the same ports, so give each worktree its own; see
-`adapters/stack/local_run.md`.
+one repository start on the same ports, so give each worktree a launch profile of its own;
+see `adapters/stack/local_run.md`.
 
 The bar turns on by itself once the plugin is installed: mods load in every new session,
 with nothing to enable. It stays empty until a work item is started. An organisation's
