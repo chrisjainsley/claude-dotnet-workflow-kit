@@ -6,7 +6,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Activity, PipelineRow, StageStatus } from '../types'
+import type { Activity, PipelineRow, RunningAgent, StageStatus } from '../types'
 
 const rows = atom({ plugin: 'dotnet-workflow-kit', key: 'rows' } as const, [])
 const isHidden = atom({ plugin: 'dotnet-workflow-kit', key: 'isHidden' } as const, false)
@@ -19,6 +19,8 @@ const background = atom({ plugin: 'dotnet-workflow-kit', key: 'background' } as 
 const goalsSet = atom({ plugin: 'dotnet-workflow-kit', key: 'goalsSet' } as const, {})
 // Whether this session toasts when another item reaches a gate; off, since the app notifies too.
 const notifyOthers = atom({ plugin: 'dotnet-workflow-kit', key: 'notifyOthers' } as const, false)
+// The subagents running now, so the band can count them without their tool calls taking it over.
+const agents = atom({ plugin: 'dotnet-workflow-kit', key: 'agents' } as const, [])
 
 const PANE = 'sessions'
 
@@ -57,10 +59,11 @@ const COLOR = { done: '#c4c0ff', active: '#8e86f8', waiting: '#f59e0b', todo: '#
 // The Sessions pane's cards: a purple edge on the item being viewed, an amber one on an item
 // waiting on you, with a faint tint of the same where the surface can draw one.
 const CARD = {
-  border: '#3a3836',
+  // A theme key, so a plain card's edge reads on a light theme as on a dark one.
+  border: 'subtle',
   currentBorder: '#5d52a3',
   currentTint: '#9d8cff14',
-  currentText: '#c9bfff',
+  currentText: '#8e86f8',
   waitingBorder: '#8a6a33',
   waitingTint: '#e9ae4f14',
   check: '#6fbf73',
@@ -299,6 +302,8 @@ async function setGoals($: EngineInterface, rows: PipelineRow[], mtimes: Record<
 
 let lastJson = ''
 let isRefreshing = false
+// A refresh asked for while one runs runs again after it, so a write is never missed.
+let isRefreshQueued = false
 // Parsed state files by name, reused while the file's mtime is unchanged.
 const cache = new Map<string, { mtime: number; data: StateFile | null }>()
 let lastDone: Record<string, boolean[]> | null = null
@@ -360,9 +365,13 @@ async function hasBranch($: EngineInterface, repo: Repo, branch: string, packed:
   return $.fs.exists(`${repo.commonDir}/refs/heads/${branch}`)
 }
 
-async function refresh($: EngineInterface) {
-  if (isRefreshing) return
+async function refresh($: EngineInterface): Promise<void> {
+  if (isRefreshing) {
+    isRefreshQueued = true
+    return
+  }
   isRefreshing = true
+  isRefreshQueued = false
   try {
     const dir = `${await homeDir($)}/.claude/dotnet-workflow-kit/pipeline`
     const [entries, repo, now] = await Promise.all([
@@ -451,6 +460,7 @@ async function refresh($: EngineInterface) {
   } finally {
     isRefreshing = false
   }
+  if (isRefreshQueued) await refresh($)
 }
 
 // The branches a team works from, per repository root; their sessions are not work items.
@@ -574,12 +584,111 @@ async function closeCurrent($: EngineInterface): Promise<string> {
   return `${current.ticket || current.title} is done; its row goes in a day.`
 }
 
+const STAGE_TOOL = 'mcp__dotnet-workflow-kit__stage'
+
+type StageInput = {
+  stage?: string
+  fields?: Record<string, unknown>
+  current?: StateFile['current']
+  item?: Pick<StateFile, 'ticket' | 'title' | 'shortTitle' | 'order'>
+}
+
+const isoNow = async ($: EngineInterface) => new Date(await $.clock.now()).toISOString().replace(/\.\d{3}Z$/, 'Z')
+
+// The file for this branch: the one whose `branch` names it, whatever it is called, else a new
+// one keyed by the ticket id, else by the branch, as /next keys it.
+async function stateFileFor($: EngineInterface, dir: string, branch: string, ticket?: string): Promise<string> {
+  const entries = (await $.fs.exists(dir)) ? await $.fs.list(dir) : []
+  for (const entry of entries) {
+    const name = entry.name as string
+    if (entry.kind !== 'file' || !name.endsWith('.json') || name.includes('-checks')) continue
+    try {
+      if ((JSON.parse(await $.fs.read(`${dir}/${name}`)) as StateFile).branch === branch) return `${dir}/${name}`
+    } catch {
+      // Unreadable: not this branch's file as far as anyone can tell.
+    }
+  }
+  const id = ticketId(ticket).replace(/^#/, '')
+
+  return `${dir}/${branchSlug(id || branch)}.json`
+}
+
+// The stage tool: merges what a skill recorded into this branch's state file and redraws the bar.
+async function writeStage($: EngineInterface, input: StageInput): Promise<string> {
+  const repo = await currentRepo($)
+  if (!repo?.branch) return 'Not on a branch of a git repository; nothing written.'
+  if ((await baseBranches($, repo)).includes(repo.branch)) return `On the base branch ${repo.branch}; nothing written.`
+  const dir = `${await homeDir($)}/.claude/dotnet-workflow-kit/pipeline`
+  const path = await stateFileFor($, dir, repo.branch, input.item?.ticket)
+  const name = basename(path)
+  let data: StateFile = {}
+  if (await $.fs.exists(path)) {
+    try {
+      data = JSON.parse(await $.fs.read(path)) as StateFile
+    } catch {
+      return `Could not parse ${name}; nothing changed.`
+    }
+  }
+
+  const at = await isoNow($)
+  delete data.adopted
+  data.branch = repo.branch
+  data.repo ??= repo.commonDir
+  if (repo.isWorktree) data.worktree ??= repo.root
+  for (const key of ['ticket', 'title', 'shortTitle', 'order'] as const) {
+    if (input.item?.[key] !== undefined) Object.assign(data, { [key]: input.item[key] })
+  }
+  if (input.current) data.current = { ...data.current, ...input.current }
+  if (input.stage) {
+    const key = input.stage === 'pull_request' ? 'pullRequest' : input.stage
+    const stages = (data.stages ??= {})
+    const before = stages[key] ?? {}
+    const after: Stage & Record<string, unknown> = { ...before, ...input.fields }
+    if (after.done === true && input.fields?.at === undefined && !(before.done && before.at)) after.at = at
+    stages[key] = after
+  }
+  await $.fs.write(path, `${JSON.stringify(data, null, 2)}
+`)
+  await refresh($)
+
+  const row = (await read($, rows)).find(one => one.isCurrentBranch)
+  return row ? `Wrote ${name}: ${stageLabel(row)}${row.detail ? `, ${row.detail}` : ''}` : `Wrote ${name}.`
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     watchingSince = await $.clock.now()
     await $.command.register({
       name: 'progress',
       description: 'Show or hide the workflow progress bar; "done" closes this branch\'s item',
+    })
+    await $.tool.register({
+      name: 'stage',
+      description:
+        "Record the dotnet-workflow-kit pipeline state for this branch: the progress bar's state file. " +
+        'Pass `stage` with `fields` to merge into stages.<stage> (done, artifactUrl, decision, note, waiting, ...; ' +
+        '`at` is filled when done is true), `current` for what the bar shows now, and `item` (ticket, title, ' +
+        'shortTitle, order) when the item starts. Fields left out keep their value. Finds or creates the file itself.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          stage: { type: 'string', description: 'Stage id: start, plan, implement, sweep, test, review, pull_request or a profile extra stage.' },
+          fields: { type: 'object', description: 'Keys merged into stages.<stage>.' },
+          current: {
+            type: 'object',
+            properties: { stage: { type: 'string' }, detail: { type: 'string' }, blocked: { type: 'boolean' } },
+          },
+          item: {
+            type: 'object',
+            properties: {
+              ticket: { type: 'string' },
+              title: { type: 'string' },
+              shortTitle: { type: 'string', description: 'At most four words.' },
+              order: { type: 'array', items: {}, description: 'Stage ids, or {id, label}, in pipeline order.' },
+            },
+          },
+        },
+      },
     })
     await $.command.register({
       name: 'sessions',
@@ -607,8 +716,13 @@ export const register: Register = on => {
     return { text: isOpen ? 'Sessions pane opened.' : 'Sessions pane closed.' }
   })
 
+  on('tool.call', { tool: STAGE_TOOL }, async ($, e) => ({
+    result: await writeStage($, e as unknown as StageInput).catch(err => `Could not write the state file: ${String(err)}`),
+  }))
+
   on('tool.call', async ($, e, next) => {
-    const text = describe(e as unknown as Record<string, unknown>)
+    // A subagent's calls are its own: the band names the subagent, not what it is reading.
+    const text = e.agentId === undefined ? describe(e as unknown as Record<string, unknown>) : undefined
     if (text) {
       const now = await $.clock.now()
       await update($, activity, (): Activity => ({ text: clip(text), at: now }))
@@ -631,8 +745,22 @@ export const register: Register = on => {
     return next(e)
   })
 
+  on('agent.spawn', async ($, e, next) => {
+    const started = await next(e)
+    const id = started.deny === undefined ? started.agentId : undefined
+    if (id) {
+      await update($, agents, list => [...list.filter(a => a.id !== id), { id, description: e.description }]).catch(
+        err => $.ui.log(`dotnet-workflow-kit: ${String(err)}`),
+      )
+    }
+
+    return started
+  })
+
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined) await update($, activity, () => null)
+    const agentId = e.agentId
+    if (agentId === undefined) await update($, activity, () => null)
+    else await update($, agents, list => list.filter(a => a.id !== agentId))
     await refresh($)
     await touchAdopted($)
 
@@ -654,11 +782,13 @@ export const register: Register = on => {
     const live = await read($, activity)
     const tasks = e.props.isWorking ? [] : await read($, background)
     const isBusy = e.props.isWorking || tasks.length > 0
+    const running = (await read($, agents)).length
+    const crew = running === 0 ? '' : ` · ${running} ${running === 1 ? 'agent' : 'agents'} running`
     const doing = (one: PipelineRow) =>
       isWaiting(one)
         ? one.detail
         : e.props.isWorking && live
-          ? live.text
+          ? `${live.text}${crew}`
           : tasks.length > 0
             ? `Waiting on ${tasks.length === 1 ? tasks[0] : `${tasks.length} background tasks`}`
             : one.detail
@@ -956,14 +1086,17 @@ function segmentsSvg(row: PipelineRow): string {
   const gap = 3
   const total = row.statuses.length
   const w = (SEGMENT_WIDTH - gap * (total - 1)) / total
+  // A stage ahead is a track that follows the theme; the others keep their colour.
   const bars = row.statuses.map(
     (s, i) =>
-      `<rect x="${(i * (w + gap)).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${SEGMENT_HEIGHT}" rx="2" fill="${segmentColor(row, s)}"/>`,
+      `<rect x="${(i * (w + gap)).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${SEGMENT_HEIGHT}" rx="2" ` +
+      (s === 'todo' ? 'class="todo"/>' : `fill="${segmentColor(row, s)}"/>`),
   )
 
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${SEGMENT_WIDTH}" height="${SEGMENT_HEIGHT}" ` +
-    `viewBox="0 0 ${SEGMENT_WIDTH} ${SEGMENT_HEIGHT}" preserveAspectRatio="none">${bars.join('')}</svg>`
+    `viewBox="0 0 ${SEGMENT_WIDTH} ${SEGMENT_HEIGHT}" preserveAspectRatio="none">` +
+    `<style>.todo{fill:#d9d6e4}@media (prefers-color-scheme: dark){.todo{fill:${SEGMENT.todo}}}</style>${bars.join('')}</svg>`
   )
 }
 
@@ -1022,8 +1155,7 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
       if (twinkles) {
         const delay = (random() * 1.4).toFixed(2)
         parts.push(
-          `<rect x="${x}" y="${y}" width="2.2" height="2.2" fill="${colour}" fill-opacity="${opacity}">` +
-            `<animate attributeName="fill-opacity" values="${opacity};0.95;0.1;${opacity}" dur="1.4s" begin="-${delay}s" repeatCount="indefinite"/></rect>`,
+          `<rect class="tw" style="animation-delay:-${delay}s" x="${x}" y="${y}" width="2.2" height="2.2" fill="${colour}" fill-opacity="${opacity}"/>`,
         )
       } else {
         parts.push(`<rect x="${x}" y="${y}" width="2.2" height="2.2" fill="${colour}" fill-opacity="${opacity}"/>`)
@@ -1034,14 +1166,11 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
   for (let i = 1; i < total; i++) {
     const x = (i / total) * W
     if (x < pillX + pillW + 6) continue
-    parts.push(`<rect x="${(x - 0.75).toFixed(1)}" y="${r - 5}" width="1.5" height="10" rx="0.75" fill="#ffffff" fill-opacity="0.28"/>`)
+    parts.push(`<rect class="tick" x="${(x - 0.75).toFixed(1)}" y="${r - 5}" width="1.5" height="10" rx="0.75"/>`)
   }
 
   if (isAnimated && fillEnd > 0) {
-    parts.push(
-      `<rect x="-48" y="0" width="48" height="${H}" fill="url(#sweep)">` +
-        `<animate attributeName="x" from="-48" to="${fillEnd.toFixed(1)}" dur="2.2s" repeatCount="indefinite"/></rect>`,
-    )
+    parts.push(`<rect class="sw" x="-48" y="0" width="48" height="${H}" fill="url(#sweep)"/>`)
   }
 
   const font = `font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-size="12"`
@@ -1051,14 +1180,23 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
     `<tspan font-weight="700">${escapeXml(stage)}</tspan>` +
     `<tspan dx="6" fill-opacity="0.85">${count}</tspan></text>`
 
+  // CSS, not SMIL, so reduced motion can stop it; the track and ticks follow the light or dark theme.
+  const style =
+    `<style>.track{fill:#1f1d2e;fill-opacity:.08}.tick{fill:#1f1d2e;fill-opacity:.25}` +
+    `@media (prefers-color-scheme: dark){.track{fill:#fff;fill-opacity:.07}.tick{fill:#fff;fill-opacity:.28}}` +
+    `.tw{animation:tw 1.4s ease-in-out infinite}@keyframes tw{33%{opacity:1}66%{opacity:.15}}` +
+    `.sw{animation:sw 2.2s linear infinite}@keyframes sw{to{transform:translateX(${(fillEnd + 48).toFixed(1)}px)}}` +
+    `@media (prefers-reduced-motion: reduce){.tw,.sw{animation:none}.sw{display:none}}</style>`
+
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
+    style +
     `<defs><clipPath id="track"><rect width="${W}" height="${H}" rx="${r}"/></clipPath>` +
     `<linearGradient id="sweep" x1="0" x2="1" y1="0" y2="0">` +
     `<stop offset="0" stop-color="${pillFill}" stop-opacity="0"/>` +
     `<stop offset="0.5" stop-color="${pillFill}" stop-opacity="0.45"/>` +
     `<stop offset="1" stop-color="${pillFill}" stop-opacity="0"/></linearGradient></defs>` +
-    `<rect width="${W}" height="${H}" rx="${r}" fill="#ffffff" fill-opacity="0.07"/>` +
+    `<rect class="track" width="${W}" height="${H}" rx="${r}"/>` +
     `<g clip-path="url(#track)">${parts.join('')}</g>` +
     pill +
     `</svg>`
