@@ -100,3 +100,28 @@ def test_given_branch_no_skill_touched_then_the_bar_adopts_it_and_skills_take_it
         assert label in text, f"CLOSED_LABELS must name the {label} reason close_items.py writes"
     for name in ("start", "plan", "next"):
         assert "adopted" in skill_text(name), f"{name} must take over an adopted file"
+
+
+def test_given_stage_tool_then_registered_and_every_state_writer_names_it():
+    text = register_text()
+    assert "name: 'stage'" in text and "'mcp__dotnet-workflow-kit__stage'" in text
+    for name in ("start", "plan", "implement", "test", "review", "next"):
+        assert "mcp__dotnet-workflow-kit__stage" in skill_text(name), f"{name} must name the stage tool"
+    sweep = (REPO_ROOT / "skills" / "review" / "sweep.md").read_text(encoding="utf-8")
+    assert "mcp__dotnet-workflow-kit__stage" in sweep
+    assert "edit the file by hand" in skill_text("next"), "next must keep the hand-written fallback"
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    assert "mcp__dotnet-workflow-kit__stage" in readme
+
+
+def test_given_bar_drawings_then_they_follow_the_theme_and_reduced_motion():
+    text = register_text()
+    assert "<animate" not in text, "SMIL ignores reduced motion; animate with CSS keyframes"
+    assert "prefers-reduced-motion: reduce" in text
+    assert text.count("prefers-color-scheme: dark") >= 2, "the bar and the pane's segments both follow the theme"
+
+
+def test_given_subagent_tool_calls_then_the_activity_ignores_them():
+    text = register_text()
+    assert "e.agentId === undefined ? describe(" in text
+    assert "on('agent.spawn'" in text
