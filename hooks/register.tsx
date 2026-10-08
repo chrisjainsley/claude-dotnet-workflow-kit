@@ -1199,9 +1199,11 @@ export const register: Register = on => {
       )
     }
 
-    // Never wraps. The name column is as wide as its text, up to a third of the band, and the bar
-    // is drawn at the width the rest leaves, so neither a gap nor a scaled-down pill shows. About
-    // 8 CSS pixels a reported column; the cluster's widths are estimates, so the bar keeps slack.
+    // Never wraps. The bar is drawn at a fixed size and handed to the surface at that size, so
+    // the desktop never scales it down to a slot narrower than the drawing (a tiny pill and
+    // percentage); the name column gives way instead, truncating its text. The width comes from
+    // about 8 CSS pixels a reported column, an estimate, so it is held to a modest range and a
+    // spacer after the bar takes whatever the estimate left over.
     const bandW = (e.props.bodyColumns || 100) * 8
     const said = doing(row)
     const nameW = Math.round(
@@ -1211,7 +1213,7 @@ export const register: Register = on => {
       (host ? textPx(hostLabel, 13) + 36 : 0) +
       (chipLabel ? textPx(`${chipLabel} ›`, 13) + 40 : 0) +
       (isComplete(row) ? 32 : 0)
-    const barW = Math.round(Math.max(160, Math.min(1200, bandW - 28 - nameW - clusterW - 56)))
+    const barW = Math.round(Math.max(BAR_MIN, Math.min(BAR_MAX, bandW - 28 - nameW - clusterW - 56)))
 
     return (
       <Box flexDirection="row" flexWrap="nowrap" alignItems="center" gap={2}>
@@ -1226,12 +1228,15 @@ export const register: Register = on => {
             </Text>
           ) : null}
         </Box>
-        <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
+        <Box flexShrink={0} width={barW}>
           <Svg
             source={barSvg(row, isBusy, barW)}
+            width={barW}
+            height={BAR_HEIGHT}
             alt={`${rowName(row)}: ${stageLabel(row)}, ${pct(row)}% complete${doing(row) ? `, ${doing(row)}` : ''}`}
           />
         </Box>
+        <Box flexGrow={1} />
         <Box flexDirection="row" flexWrap="nowrap" alignItems="center" gap={2} flexShrink={0}>
           {host ? (
             <Box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
@@ -1505,6 +1510,9 @@ const charEm = (ch: string) => (/[\s.,:;'|!il1()[\]]/.test(ch) ? 0.3 : /[A-Z@%mw
 const textPx = (text: string, size: number) => [...text].reduce((w, ch) => w + charEm(ch) * size, 0)
 
 const BAR_HEIGHT = 24
+// The bar's drawn width stays within these whatever the column estimate says.
+const BAR_MIN = 240
+const BAR_MAX = 560
 
 // A small seeded generator, so a row's dither pattern stays put between redraws.
 function seeded(text: string) {

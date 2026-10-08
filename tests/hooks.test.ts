@@ -162,7 +162,7 @@ test("in a worktree, the item's file is found by the main repository's git dir",
   expect([...files.keys()].filter(f => f.startsWith(DIR))).toEqual([`${DIR}/12.json`])
 })
 
-test('a finished item says so, and its bar fills the width the band leaves', async ($, on) => {
+test('a finished item says so, and its bar is drawn at a fixed size the surface never scales', async ($, on) => {
   const stages = Object.fromEntries(['start', 'plan', 'implement', 'test', 'review', 'pullRequest'].map(k => [k, { done: true }]))
   world(on, 'feat/12-add-thing', {
     [`${DIR}/12.json`]: JSON.stringify({ shortTitle: 'Add thing', branch: 'feat/12-add-thing', current: { detail: 'Writing the review page' }, stages }),
@@ -177,7 +177,13 @@ test('a finished item says so, and its bar fills the width the band leaves', asy
     const ui = await engine.ui.mount({ plugin: 'dotnet-workflow-kit', surface: 'desktop', component: 'AbovePrompt', props: { isWorking: false, hasSurvey: false, bodyColumns } })
     expect((await ui.find({ type: 'Text', text: /Every stage done/ }))?.text).toBe('Every stage done')
     expect(await ui.find({ type: 'Text', text: /%$/ })).toBeUndefined()
-    widths.push(Number(/width="(\d+)"/.exec(String((await ui.find({ type: 'Svg' }))?.props.source))?.[1]))
+    const svg = await ui.find({ type: 'Svg' })
+    const drawn = Number(/width="(\d+)"/.exec(String(svg?.props.source))?.[1])
+    expect(svg?.props.width).toBe(drawn)
+    expect(svg?.props.height).toBe(24)
+    widths.push(drawn)
   }
-  expect(widths[1]).toBeGreaterThan(widths[0] + 500)
+  expect(widths[0]).toBeGreaterThanOrEqual(240)
+  expect(widths[1]).toBeGreaterThan(widths[0])
+  expect(widths[1]).toBeLessThanOrEqual(560)
 })
