@@ -443,6 +443,10 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
     while (svg.firstChild) { svg.removeChild(svg.firstChild); }
     var view = fig.getAttribute('data-view');
     var g = grid.getBoundingClientRect();
+    // CSS zoom or a transform scales the measured boxes but not the svg's own units.
+    var scale = grid.offsetWidth ? g.width / grid.offsetWidth : 1;
+    function relX(v) { return (v - g.left) / scale; }
+    function relY(v) { return (v - g.top) / scale; }
     var defs = document.createElementNS(SVGNS, 'defs');
     [['a', 'var(--muted)'], ['e', 'var(--accent)']].forEach(function (m) {
       var marker = document.createElementNS(SVGNS, 'marker');
@@ -466,10 +470,10 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
       if (!el || !el.offsetParent) { return null; }
       var r = el.getBoundingClientRect();
       var cell = el.closest('.fm-cell');
-      return { el: el, l: r.left - g.left, r: r.right - g.left, t: r.top - g.top, b: r.bottom - g.top,
-        cx: (r.left + r.right) / 2 - g.left, cy: (r.top + r.bottom) / 2 - g.top,
+      return { el: el, l: relX(r.left), r: relX(r.right), t: relY(r.top), b: relY(r.bottom),
+        cx: relX((r.left + r.right) / 2), cy: relY((r.top + r.bottom) / 2),
         col: parseInt(cell.style.gridColumnStart || cell.style.gridColumn, 10) - 1,
-        rowTop: cell.getBoundingClientRect().top - g.top };
+        rowTop: relY(cell.getBoundingClientRect().top) };
     }
     function between(s, t) {
       // Is another visible box in the same cell on the straight line from s to t?
@@ -478,16 +482,16 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
       return Array.prototype.slice.call(s.el.closest('.fm-cell').querySelectorAll('.fm-node')).some(function (n) {
         if (n === s.el || n === t.el || !n.offsetParent) { return false; }
         var r = n.getBoundingClientRect();
-        var l = r.left - g.left;
-        var top = r.top - g.top;
-        return l >= lo - 2 && l < hi && top < Math.max(s.cy, t.cy) && r.bottom - g.top > Math.min(s.cy, t.cy);
+        var l = relX(r.left);
+        var top = relY(r.top);
+        return l >= lo - 2 && l < hi && top < Math.max(s.cy, t.cy) && relY(r.bottom) > Math.min(s.cy, t.cy);
       });
     }
     // Lines run only through the gaps between lanes and along the channel at the top of
     // each row's cells, never across a box; edges sharing a gap or channel are spread apart.
     var cols = Array.prototype.slice.call(grid.querySelectorAll('.fm-head')).map(function (h) {
       var r = h.getBoundingClientRect();
-      return { l: r.left - g.left, r: r.right - g.left };
+      return { l: relX(r.left), r: relX(r.right) };
     });
     function gapRight(i) { return i < cols.length - 1 ? (cols[i].r + cols[i + 1].l) / 2 : cols[i].r + 12; }
     function gapLeft(i) { return i > 0 ? gapRight(i - 1) : cols[0].l - 12; }
