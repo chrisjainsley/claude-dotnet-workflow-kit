@@ -2,11 +2,13 @@
 // state files `start`, `plan` and `next` write under ~/.claude/dotnet-workflow-kit/pipeline, and a
 // Sessions pane listing every item in this repository. A branch no skill has touched yet gets a
 // file of its own, marked `adopted`, so every session shows whether or not it used the kit. It also sets the run's /goal when the plan
-// and then the review are approved.
+// and then the review are approved. With Aspire it tracks which session owns each running AppHost
+// through scripts/aspire_sessions.py, shows them, tells Claude, and refuses commands that would
+// stop or clash with another session's.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Activity, PipelineRow, StageStatus } from '../types'
+import type { Activity, AspireEntry, PipelineRow, StageStatus } from '../types'
 
 const rows = atom({ plugin: 'dotnet-workflow-kit', key: 'rows' } as const, [])
 const isHidden = atom({ plugin: 'dotnet-workflow-kit', key: 'isHidden' } as const, false)
@@ -19,6 +21,8 @@ const background = atom({ plugin: 'dotnet-workflow-kit', key: 'background' } as 
 const goalsSet = atom({ plugin: 'dotnet-workflow-kit', key: 'goalsSet' } as const, {})
 // Whether this session toasts when another item reaches a gate; off, since the app notifies too.
 const notifyOthers = atom({ plugin: 'dotnet-workflow-kit', key: 'notifyOthers' } as const, false)
+// Every Aspire AppHost running on this machine, with the session that owns it.
+const aspire = atom({ plugin: 'dotnet-workflow-kit', key: 'aspire' } as const, [])
 
 const PANE = 'sessions'
 
@@ -52,6 +56,14 @@ const CLOSED_LABELS: Record<string, string> = {
 // An adopted item's file is rewritten at most this often while its session works, so it stays recent.
 const TOUCH_MS = 10 * 60 * 1000
 const ADOPTED_DETAIL = 'Not run through the kit yet: /next picks it up'
+// A session that owns an AppHost rescans this often; any other session only every QUIET_MS.
+const ASPIRE_MS = 15 * 1000
+const QUIET_MS = 60 * 1000
+// Commands worth asking scripts/aspire_sessions.py about: ones that stop processes or start an AppHost.
+const ASPIRE_COMMAND =
+  /\b(kill|pkill|killall|taskkill|stop-process|spps|fuser)\b|\bdotnet(\.exe)?\s+(run|watch)\b|\baspire(\.exe)?\s+(run|start)\b/i
+// A start's AppHost builds before it listens, so the scans after one come at these delays.
+const START_SCANS_MS = [5000, 20000, 45000, 90000]
 
 const COLOR = { done: '#c4c0ff', active: '#8e86f8', waiting: '#f59e0b', todo: '#6b7280' }
 // The Sessions pane's cards: a purple edge on the item being viewed, an amber one on an item
@@ -586,6 +598,204 @@ async function closeCurrent($: EngineInterface): Promise<string> {
   return `${current.ticket || current.title} is done; its row goes in a day.`
 }
 
+// --- Aspire ---------------------------------------------------------------------------------
+
+let isScanning = false
+let lastQuietScan = 0
+// Whether this session ran a command that started an AppHost; until then a quiet machine is scanned slowly.
+let hasStarted = false
+let runsAspire: boolean | undefined
+let lastAspire: AspireEntry[] | null = null
+let pythonName: string | undefined
+
+const aspireDir = async ($: EngineInterface) => `${await homeDir($)}/.claude/dotnet-workflow-kit/aspire`
+const ownerName = (entry: AspireEntry) => entry.label || entry.branch || 'another session'
+const portsOf = (entry: AspireEntry) => [...new Set([...entry.ports, ...entry.launchPorts])].sort((a, b) => a - b)
+const portList = (entry: AspireEntry) => portsOf(entry).map(port => `:${port}`).join(' ')
+const dashboardPort = (entry: AspireEntry) => /:(\d+)/.exec(entry.dashboard.replace(/^[a-z]+:\/\//i, ''))?.[1]
+
+// Whether the profile says the system runs through Aspire: the project's profile, else the personal one.
+async function profileRunsAspire($: EngineInterface): Promise<boolean> {
+  if (runsAspire !== undefined) return runsAspire
+  runsAspire = false
+  const repo = await currentRepo($)
+  const paths = [...(repo ? [`${repo.root}/.claude/dotnet-workflow-kit.json`] : []), `${await homeDir($)}/.claude/dotnet-workflow-kit.json`]
+  for (const path of paths) {
+    try {
+      if (!(await $.fs.exists(path))) continue
+      const profile = JSON.parse(await $.fs.read(path)) as { stack?: { local_run?: unknown } }
+      runsAspire = profile.stack?.local_run === 'aspire'
+      break
+    } catch {
+      // An unreadable profile leaves Aspire off.
+    }
+  }
+
+  return runsAspire
+}
+
+// Whether any session has an AppHost in the registry, live or not yet cleared away.
+async function isListed($: EngineInterface): Promise<boolean> {
+  const dir = await aspireDir($)
+  if (!(await $.fs.exists(dir))) return false
+
+  return (await $.fs.list(dir)).some(entry => entry.kind === 'file' && String(entry.name).endsWith('.json'))
+}
+
+type AspireResult = { entries: AspireEntry[]; deny?: string; starts?: string }
+
+// Runs scripts/aspire_sessions.py as this session: its id, worktree, branch and item name.
+async function runAspire($: EngineInterface, action: 'scan' | 'check', extra: string[] = []): Promise<AspireResult | undefined> {
+  const repo = await currentRepo($)
+  const current = (await read($, rows)).find(row => row.isCurrentBranch)
+  const script = `${$.plugin.root.replace(/\\/g, '/')}/scripts/aspire_sessions.py`
+  const args = [
+    script, action,
+    '--dir', await aspireDir($),
+    '--session', await $.session.id(),
+    '--root', repo?.root ?? '',
+    '--repo', repo?.commonDir ?? '',
+    '--branch', repo?.branch ?? '',
+    '--label', current ? rowName(current) : (repo?.branch ?? ''),
+    ...extra,
+  ]
+  for (const python of pythonName ? [pythonName] : ['python', 'python3']) {
+    try {
+      const result = await $.process.run([python, ...args], { timeoutMs: 60000 })
+      if (result.exitCode !== 0) {
+        // A name that ran the script and failed is the right Python; a stub that is not goes on to the next.
+        if (pythonName || result.stderr.includes('aspire_sessions')) {
+          $.ui.log(`dotnet-workflow-kit: aspire_sessions: ${result.stderr.trim()}`)
+          return undefined
+        }
+        continue
+      }
+      pythonName = python
+
+      return JSON.parse(result.stdout) as AspireResult
+    } catch {
+      // This name is not on PATH, or printed no JSON; try the next.
+    }
+  }
+
+  return undefined
+}
+
+// Stores a scan's entries, with a toast when another session's AppHost goes and when this one's starts.
+async function applyAspire($: EngineInterface, entries: AspireEntry[]) {
+  const before = lastAspire
+  lastAspire = entries
+  if (before) {
+    const live = new Set(entries.map(entry => entry.pid))
+    for (const gone of before.filter(entry => !entry.isMine && !live.has(entry.pid))) {
+      const free = portList(gone)
+      $.ui.toast(`${ownerName(gone)} stopped ${gone.project}${free ? ` · ${free} free` : ''}`)
+    }
+    const had = new Set(before.filter(entry => entry.isMine).map(entry => entry.pid))
+    for (const fresh of entries.filter(entry => entry.isMine && !had.has(entry.pid))) {
+      $.ui.toast(`${fresh.project} is this session's${fresh.dashboard ? `: dashboard ${fresh.dashboard}` : ''}`)
+    }
+  }
+  // seenAt moves on every scan; only a change worth drawing updates the atom.
+  const key = (list: AspireEntry[]) => JSON.stringify(list.map(({ seenAt, ...rest }) => rest))
+  if (key(entries) !== key(await read($, aspire))) await update($, aspire, () => entries)
+}
+
+async function scanAspire($: EngineInterface) {
+  if (isScanning) return
+  isScanning = true
+  try {
+    // An owner rescans often, so its entries never look abandoned; any other session looks now and
+    // then, since a check scans afresh before judging a command anyway.
+    const isOwner = hasStarted || (await read($, aspire)).some(entry => entry.isMine)
+    if (!isOwner) {
+      // Nothing listed and no profile running Aspire: nothing to show or protect.
+      if (!(await isListed($)) && !(await profileRunsAspire($))) {
+        if ((await read($, aspire)).length > 0) await applyAspire($, [])
+        return
+      }
+      const now = await $.clock.now()
+      if (now - lastQuietScan < QUIET_MS) return
+      lastQuietScan = now
+    }
+    const result = await runAspire($, 'scan')
+    if (result) await applyAspire($, result.entries)
+  } catch (err) {
+    $.ui.log(`dotnet-workflow-kit: aspire: ${String(err)}`)
+  } finally {
+    isScanning = false
+  }
+}
+
+// Why a command must not run, as scripts/aspire_sessions.py judges it; undefined lets it through.
+async function checkAspire($: EngineInterface, command: string): Promise<string | undefined> {
+  const mayStart = /\b(run|watch|start)\b/i.test(command)
+  if (!mayStart && !(await isListed($))) return undefined
+  const result = await runAspire($, 'check', ['--cwd', await $.session.cwd(), '--command', command])
+  if (!result) return undefined
+  await applyAspire($, result.entries)
+  if (result.starts) {
+    hasStarted = true
+    for (const ms of START_SCANS_MS) $.clock.after(ms, () => void scanAspire($))
+  }
+
+  return result.deny
+}
+
+// What Claude is told about the AppHosts on this machine; empty when none run.
+function aspirePrompt(entries: AspireEntry[]): string {
+  const mine = entries.filter(entry => entry.isMine)
+  const others = entries.filter(entry => !entry.isMine && !entry.isStale)
+  if (mine.length === 0 && others.length === 0) return ''
+  const line = (entry: AspireEntry) =>
+    `- ${entry.project} · pid ${entry.pid}${entry.dashboard ? ` · dashboard ${entry.dashboard}` : ''}` +
+    `${portsOf(entry).length ? ` · ports ${portsOf(entry).join(' ')}` : ''}`
+
+  return [
+    '# Aspire on this machine',
+    'The dotnet-workflow-kit tracks which Claude session owns each running Aspire AppHost.',
+    'Yours:',
+    ...(mine.length ? mine.map(line) : ['- none running']),
+    ...(others.length
+      ? [
+          "Other sessions':",
+          ...others.map(entry => `${line(entry)} · ${ownerName(entry)}`),
+          "Never stop, restart or reuse another session's AppHost or its ports: commands that would are refused. " +
+            'Start yours on ports nobody else holds. To have one stopped, ask the person or message its session.',
+        ]
+      : []),
+  ].join('\n')
+}
+
+// The Sessions pane's "Ask its session to stop it": a message to the session that owns the AppHost.
+async function askToStop($: EngineInterface, entry: AspireEntry) {
+  try {
+    const sent = await $.session.send({
+      to: { sessionId: entry.session },
+      text:
+        `The person asked, from another session's Sessions pane, for ${entry.project} (pid ${entry.pid}) to be ` +
+        'stopped so its ports are free. Stop it if your work allows, and say so.',
+    })
+    $.ui.toast(sent.isDelivered ? `Asked ${ownerName(entry)} to stop ${entry.project}` : `Could not reach that session: ${sent.reason}`)
+  } catch (err) {
+    $.ui.toast(`Could not reach that session: ${String(err)}`)
+  }
+}
+
+// A session that ends leaves its AppHosts' entries marked as gone, for a session in the same worktree to take.
+async function endAspire($: EngineInterface) {
+  const dir = await aspireDir($)
+  for (const entry of (await read($, aspire)).filter(one => one.isMine)) {
+    try {
+      const path = `${dir}/${entry.pid}.json`
+      const data = JSON.parse(await $.fs.read(path)) as AspireEntry
+      if (data.session === entry.session) await $.fs.write(path, `${JSON.stringify({ ...data, seenAt: 0 }, null, 2)}\n`)
+    } catch {
+      // Gone already.
+    }
+  }
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     watchingSince = await $.clock.now()
@@ -601,8 +811,26 @@ export const register: Register = on => {
     $.clock.every(POLL_MS, () => void refresh($))
     $.clock.after(1000, () => void closeItems($))
     $.clock.every(CLOSE_MS, () => void closeItems($))
+    // The first prompt is composed right after this, so the AppHosts are looked up first, briefly.
+    await Promise.race([scanAspire($), $.clock.sleep(3000)])
+    $.clock.every(ASPIRE_MS, () => void scanAspire($))
 
     return next(e)
+  })
+
+  on('session.end', async ($, e, next) => {
+    await endAspire($)
+
+    return next(e)
+  })
+
+  // The AppHosts on this machine and whose they are, last in the prompt, while any run.
+  on('prompt.compose', async ($, e, next) => {
+    const result = await next(e)
+    const text = aspirePrompt(await read($, aspire))
+    if (!text) return result
+
+    return { sections: [...result.sections, { id: 'dotnet-workflow-kit:aspire', text, scope: 'session' as const }] }
   })
 
   on('command.run', { command: 'progress' }, async ($, e) => {
@@ -620,13 +848,24 @@ export const register: Register = on => {
   })
 
   on('tool.call', async ($, e, next) => {
-    const text = describe(e as unknown as Record<string, unknown>)
+    const input = e as unknown as Record<string, unknown>
+    const text = describe(input)
     if (text) {
       const now = await $.clock.now()
       await update($, activity, (): Activity => ({ text: clip(text), at: now }))
     }
+    // A shell command that stops processes or starts an AppHost is judged against the other sessions' first.
+    const command =
+      (input.tool === 'Bash' || input.tool === 'PowerShell') && typeof input.command === 'string' ? input.command : ''
+    const isAspire = !!command && ASPIRE_COMMAND.test(command)
+    if (isAspire) {
+      // A failed check never holds the command up; the deny is a guard, not a gate.
+      const deny = await checkAspire($, command).catch(err => void $.ui.log(`dotnet-workflow-kit: aspire: ${String(err)}`))
+      if (deny) return { deny }
+    }
     const result = await next(e)
     void refresh($)
+    if (isAspire) $.clock.after(2000, () => void scanAspire($))
 
     return result
   })
@@ -677,6 +916,10 @@ export const register: Register = on => {
     const chipLabel =
       others.length === 0 ? '' : othersWaiting > 0 ? `+${others.length} · ${othersWaiting} needs you` : `+${others.length}`
     const openPane = () => void toggleSessions($)
+    // This session's own AppHost, by its dashboard port.
+    const host = (await read($, aspire)).find(one => one.isMine)
+    const hostPort = host ? dashboardPort(host) ?? host.ports[0] : undefined
+    const hostLabel = host ? `Aspire${hostPort ? ` :${hostPort}` : ''}` : ''
 
     if (e.surface === 'terminal') {
       const { Box, Text, Button } = $.ui.resolve(e)
@@ -699,8 +942,11 @@ export const register: Register = on => {
       const stageWidth = stageLabel(row).length
       const chipWidth = chipLabel ? chipLabel.length + 4 : 0
       const doingMin = cols >= 90 ? 24 : 0
-      // dot, name, bar, stage, percent, chip and their one-cell gaps, then the activity text.
-      const room = cols - 2 - nameWidth - stageWidth - 4 - 5 - chipWidth - doingMin
+      // A narrow terminal keeps the AppHost's mark and drops its label.
+      const isHostLabelled = cols >= 90
+      const hostWidth = host ? (isHostLabelled ? hostLabel.length + 3 : 2) : 0
+      // dot, name, bar, stage, percent, AppHost, chip and their one-cell gaps, then the activity text.
+      const room = cols - 2 - nameWidth - stageWidth - 4 - 5 - hostWidth - chipWidth - doingMin
       const segment = Math.max(1, Math.min(6, Math.floor(room / row.labels.length)))
 
       return (
@@ -730,6 +976,12 @@ export const register: Register = on => {
           <Box width={4} flexShrink={0}>
             <Text dimColor>{String(pct(row)).padStart(3)}%</Text>
           </Box>
+          {host ? (
+            <Box flexShrink={0} gap={1}>
+              <Text color={CARD.check}>◆</Text>
+              {isHostLabelled ? <Text dimColor>{hostLabel}</Text> : null}
+            </Box>
+          ) : null}
           {doingMin > 0 && doing(row) ? (
             <Box flexGrow={1} flexShrink={1} minWidth={0}>
               <Text dimColor wrap="truncate-end">
@@ -780,6 +1032,12 @@ export const register: Register = on => {
         </Box>
         <Box flexDirection="row" flexWrap="nowrap" alignItems="center" gap={2} flexShrink={0}>
           <Text dimColor>{pct(row)}%</Text>
+          {host ? (
+            <Box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
+              <Text color={CARD.check}>●</Text>
+              <Text dimColor>{hostLabel}</Text>
+            </Box>
+          ) : null}
           {chip}
           {isComplete(row) ? (
             <Button
@@ -799,7 +1057,7 @@ export const register: Register = on => {
   // with their stages, finished ones as a single line each.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const elements = $.ui.resolve(e)
-    const { Box, Text, Button } = elements
+    const { Box, Text, Button, Link } = elements
     const Svg = 'Svg' in elements ? elements.Svg : undefined
     const isTerminal = e.surface === 'terminal'
     const hiddenSlugs = await read($, dismissed)
@@ -809,6 +1067,39 @@ export const register: Register = on => {
     const running = list.filter(row => !isComplete(row) && !isWaiting(row))
     const done = list.filter(isComplete)
     const dismiss = (slugs: string[]) => update($, dismissed, all => [...new Set([...all, ...slugs])])
+    const hosts = await read($, aspire)
+    const nowS = (await $.clock.now()) / 1000
+    const since = (entry: AspireEntry) => {
+      const minutes = Math.max(0, Math.round((nowS - entry.firstSeen) / 60))
+
+      return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`
+    }
+
+    // One AppHost on a card: whether it runs, for how long, its dashboard and the ports it holds.
+    const hostBlock = (entry: AspireEntry) => (
+      <Box key={`aspire-${entry.pid}`} flexDirection="column">
+        <Box flexDirection="row" gap={1} alignItems="center">
+          <Text color={entry.isStale ? COLOR.todo : CARD.check}>●</Text>
+          <Box flexGrow={1} flexShrink={1} minWidth={0}>
+            <Text wrap="truncate-end">
+              <Text bold>{entry.project}</Text>
+              <Text dimColor>{` · ${entry.isStale ? 'its session has ended' : `running ${since(entry)}`} · pid ${entry.pid}`}</Text>
+            </Text>
+          </Box>
+          {entry.dashboard ? <Link key={`dashboard-${entry.pid}`} href={entry.dashboard} label="Dashboard ↗" /> : null}
+        </Box>
+        {portsOf(entry).length ? (
+          <Text dimColor wrap="truncate-end">
+            {portList(entry)}
+          </Text>
+        ) : null}
+        {!entry.isMine && !entry.isStale ? (
+          <Box flexDirection="row">
+            <Button key={`stop-${entry.pid}`} label="Ask its session to stop it" onPress={() => askToStop($, entry)} />
+          </Box>
+        ) : null}
+      </Box>
+    )
 
     const heading = (title: string, count: number, color?: string) => (
       <Text bold color={color} dimColor={!color}>
@@ -858,6 +1149,9 @@ export const register: Register = on => {
             {row.isCurrentBranch ? <Text color={CARD.currentText}>Viewing</Text> : null}
           </Box>
           {stages(row)}
+          {hosts
+            .filter(one => one.branch === row.branch && one.isMine === row.isCurrentBranch)
+            .map(hostBlock)}
           <Box flexDirection="row" gap={1} alignItems="center">
             <Box flexGrow={1} flexShrink={1} minWidth={0}>
               <Text wrap="truncate-end">
@@ -926,6 +1220,25 @@ export const register: Register = on => {
               />
             </Box>
             {done.map(doneLine)}
+          </Box>
+        ) : null}
+        {hosts.length > 0 ? (
+          <Box key="apphosts" flexDirection="column" gap={isTerminal ? 0 : 1}>
+            {heading('AppHosts on this machine', hosts.length)}
+            {hosts.map(entry => (
+              <Box key={`host-${entry.pid}`} flexDirection="row" gap={1} alignItems="center" paddingX={1}>
+                <Text color={entry.isStale ? COLOR.todo : CARD.check}>●</Text>
+                <Box flexGrow={1} flexShrink={1} minWidth={0}>
+                  <Text wrap="truncate-end">
+                    <Text>{entry.project}</Text>
+                    <Text color={entry.isMine ? CARD.currentText : undefined} dimColor={!entry.isMine}>
+                      {` · ${entry.isMine ? 'you' : entry.isStale ? 'session ended' : ownerName(entry)}`}
+                    </Text>
+                  </Text>
+                </Box>
+                <Text dimColor>{portList(entry)}</Text>
+              </Box>
+            ))}
           </Box>
         ) : null}
         <Box marginTop={1}>
