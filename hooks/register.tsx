@@ -1197,7 +1197,12 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
 
   const pillFill = isGate ? '#f2b04c' : '#8e86f8'
   const pillText = isGate ? '#2b1d05' : '#ffffff'
-  const dots = isGate ? ['#f2b04c', '#f7cd86', '#8a7a62'] : ['#8e86f8', '#c4c0ff', '#6e6a8c']
+  // Three tones per state, each with a light and a dark value: the pale tones that read on a
+  // dark track would vanish on a light one.
+  const tones = isGate
+    ? { light: ['#c47f12', '#a2650a', '#5e5040'], dark: ['#f2b04c', '#f7cd86', '#8a7a62'] }
+    : { light: ['#6c63e6', '#4b41c8', '#3a3566'], dark: ['#8e86f8', '#c4c0ff', '#6e6a8c'] }
+  const toneCss = (set: string[]) => set.map((c, i) => `.d${i}{fill:${c}}`).join('')
 
   const parts: string[] = []
   const random = seeded(row.slug)
@@ -1206,16 +1211,16 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
     const t = x / Math.max(fillEnd, 1)
     for (let y = 0; y < H; y += cell) {
       if (random() > 0.3 + 0.6 * t * t) continue
-      const colour = dots[Math.floor(random() * dots.length)]
+      const tone = `d${Math.floor(random() * 3)}`
       const opacity = (0.25 + random() * 0.6 * (0.4 + t)).toFixed(2)
       const twinkles = isAnimated && t > 0.55 && random() < 0.35
       if (twinkles) {
         const delay = (random() * 1.4).toFixed(2)
         parts.push(
-          `<rect class="tw" style="animation-delay:-${delay}s" x="${x}" y="${y}" width="2.2" height="2.2" fill="${colour}" fill-opacity="${opacity}"/>`,
+          `<rect class="${tone} tw" style="animation-delay:-${delay}s" x="${x}" y="${y}" width="2.2" height="2.2" fill-opacity="${opacity}"/>`,
         )
       } else {
-        parts.push(`<rect x="${x}" y="${y}" width="2.2" height="2.2" fill="${colour}" fill-opacity="${opacity}"/>`)
+        parts.push(`<rect class="${tone}" x="${x}" y="${y}" width="2.2" height="2.2" fill-opacity="${opacity}"/>`)
       }
     }
   }
@@ -1239,8 +1244,8 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
 
   // CSS, not SMIL, so reduced motion can stop it; the track and ticks follow the light or dark theme.
   const style =
-    `<style>.track{fill:#1f1d2e;fill-opacity:.08}.tick{fill:#1f1d2e;fill-opacity:.25}` +
-    `@media (prefers-color-scheme: dark){.track{fill:#fff;fill-opacity:.07}.tick{fill:#fff;fill-opacity:.28}}` +
+    `<style>.track{fill:#1f1d2e;fill-opacity:.08}.tick{fill:#1f1d2e;fill-opacity:.25}${toneCss(tones.light)}` +
+    `@media (prefers-color-scheme: dark){.track{fill:#fff;fill-opacity:.07}.tick{fill:#fff;fill-opacity:.28}${toneCss(tones.dark)}}` +
     `.tw{animation:tw 1.4s ease-in-out infinite}@keyframes tw{33%{fill-opacity:.95}66%{fill-opacity:.1}}` +
     `.sw{animation:sw 2.2s linear infinite}@keyframes sw{to{transform:translateX(${(fillEnd + 48).toFixed(1)}px)}}` +
     `@media (prefers-reduced-motion: reduce){.tw,.sw{animation:none}.sw{display:none}}</style>`
