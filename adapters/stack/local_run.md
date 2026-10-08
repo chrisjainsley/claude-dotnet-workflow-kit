@@ -12,7 +12,19 @@ resource, APIs, processors and containers, with its logs and traces in one place
 QA report's Environment line reads `local (Aspire)` with the AppHost project name, so a
 re-tester knows which stack to start.
 
+Other sessions may be running AppHosts on the same machine. The kit's mod lists each one
+with the session that owns it, in the system prompt and the Sessions pane, and refuses a
+kill or a start that would reach another session's. Stop only this session's own AppHost,
+by its pid, and never free a port by killing whatever holds it. When a start is refused
+for a port, give this worktree ports of its own for the run: a launch profile with other
+ports in the AppHost's `launchSettings.json`, or `ASPNETCORE_URLS` and the dashboard's
+endpoint URL variables set on the command. Endpoint ports fixed in the AppHost's code
+(`WithHttpEndpoint(port: ...)`) clash the same way; leave the port out so Aspire picks a
+free one.
+
 **Common issues**
+- Another session's AppHost already holding the dashboard or a resource port, since every
+  worktree of a repository starts from the same `launchSettings.json`.
 - Docker Desktop not running before a container resource, a queue emulator or a
   database, starts, failing the whole AppHost.
 - A resource that needs a one-time tool install, a functions runtime or a CLI, missing

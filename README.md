@@ -204,6 +204,35 @@ when its branch is deleted or after a week with no session working on it. A clos
 day later its row goes and `scripts/close_items.py` deletes its state file. The PR check
 asks `gh` (or `az` for Azure Repos) every ten minutes.
 
+### Aspire across sessions
+
+When several sessions run Aspire on one machine, the mod keeps track of which session
+owns each running AppHost, so they stop getting in each other's way. Every session scans
+for AppHosts with `scripts/aspire_sessions.py`: an AppHost belongs to the worktree it was
+built in, and the session working in that worktree owns it. The list lives in
+`~/.claude/dotnet-workflow-kit/aspire`, one file per AppHost with its process, ports,
+dashboard URL and owner, and a file goes when its AppHost exits.
+
+- **The band** marks this session's own AppHost after the stage, with its dashboard port.
+- **The Sessions pane** shows each card's AppHost with its uptime, process id, ports and
+  a dashboard link, and lists every AppHost on the machine at the bottom. Another
+  session's card has a button that asks that session to stop its AppHost.
+- **Claude is told** in its system prompt which AppHost is its own and which belong to
+  other sessions, and a toast says when another session's AppHost stops and its ports
+  are free.
+- **Commands are refused** when they would stop another session's AppHost (`kill`,
+  `pkill`, `killall`, `taskkill`, `Stop-Process`, or freeing a port with `lsof`, `fuser`
+  or `Get-NetTCPConnection`), or start an AppHost that another session already runs from
+  the same folder, or on a port another session's AppHost holds. The refusal names the
+  owner and what to do instead.
+
+A session that ends leaves its AppHosts free for the next session in that worktree, and
+one that stops scanning for two minutes counts as ended. Scanning runs when the profile's
+`stack.local_run` is `aspire`, when this session starts an AppHost, or when any session
+has one listed, and needs Python like the rest of the kit. AppHosts in two worktrees of
+one repository start on the same ports, so give each worktree its own; see
+`adapters/stack/local_run.md`.
+
 The bar turns on by itself once the plugin is installed: mods load in every new session,
 with nothing to enable. It stays empty until a work item is started. An organisation's
 managed settings can block user-installed mods, for example with `allowManagedModsOnly`.

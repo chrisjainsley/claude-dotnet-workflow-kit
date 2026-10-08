@@ -100,3 +100,21 @@ def test_given_branch_no_skill_touched_then_the_bar_adopts_it_and_skills_take_it
         assert label in text, f"CLOSED_LABELS must name the {label} reason close_items.py writes"
     for name in ("start", "plan", "next"):
         assert "adopted" in skill_text(name), f"{name} must take over an adopted file"
+
+
+def test_given_aspire_then_the_hooks_ask_the_scanner_and_guard_shell_commands():
+    text = register_text()
+    assert "/scripts/aspire_sessions.py" in text
+    assert (REPO_ROOT / "scripts" / "aspire_sessions.py").is_file()
+    assert "input.tool === 'Bash' || input.tool === 'PowerShell'" in text, "both shells must be guarded"
+    assert "if (deny) return { deny }" in text
+    assert "id: 'dotnet-workflow-kit:aspire'" in text and "scope: 'session'" in text
+    assert "seenAt: 0" in text, "an ending session must leave its AppHosts free at once"
+    assert "local_run === 'aspire'" in text
+
+
+def test_given_aspire_scanner_then_the_registry_sits_beside_the_pipeline_files():
+    text = register_text()
+    assert "/.claude/dotnet-workflow-kit/aspire`" in text
+    script = (REPO_ROOT / "scripts" / "aspire_sessions.py").read_text(encoding="utf-8")
+    assert 'DEFAULT_DIR = Path.home() / ".claude" / "dotnet-workflow-kit" / "aspire"' in script
