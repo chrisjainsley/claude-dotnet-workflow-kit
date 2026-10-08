@@ -123,7 +123,7 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
    URL first, or the button falls back to asking for "decided". With
    `artifacts: false`, tell the user the path of `plan.html` to open in a browser; the form still renders but cannot send, so take
    answers in chat by question number.
-11. **Record the page** in the pipeline state file
+11. **Record the page** in the pipeline state file with the stage tool (`mcp__dotnet-workflow-kit__stage`, see `/next`'s State file section), or by hand
     (`~/.claude/dotnet-workflow-kit/pipeline/<slug>.json`, keyed as `/next` keys it, or the existing file whose `branch` is the current branch whatever its name; remove its `adopted` field). If the file does not exist yet (the session never ran `/start`), create it first in the full shape under `/next`'s State file section, with `branch` (`git branch --show-current`), `title`, `shortTitle` and `order`. The progress bar and the Sessions pane match an item to its repository by `branch` and read only keys under `stages`, so a file without them never shows.
         `stages.plan` gets `artifactUrl`, `designUrl` when a canvas was made, and `done: false`.
     The progress bar reads an unapproved plan with a page as waiting on the user. When the

@@ -124,7 +124,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    refuses to replace published paths the session has not seen. Invoke
    `artifact-design` and `artifact-capabilities` because the tool asks; the template
    is already designed, leave it alone. Record the
-   URL in the pipeline state file as `review.artifactUrl`. With `artifacts: false`,
+   URL in the pipeline state file as `review.artifactUrl`, with the stage tool (`mcp__dotnet-workflow-kit__stage`, see `/next`'s State file section) or by hand. With `artifacts: false`,
    give the path of `review.html`; the rollout ticks and the decision form render but
    cannot send, so take the decision in chat.
 10. **Hand off in chat.** The link or path, the Verdict line, and the headline numbers as

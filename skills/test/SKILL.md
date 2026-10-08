@@ -52,7 +52,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    and `assertion_changed_by_refactor` (fix), `flaky_known` (rerun once, then treat as
    a regression), `environment` (follow `adapters/stack/local_run.md` "Common issues")
    and `manual_review` (read it yourself). Write `test` to the pipeline
-   state file as `{"done": true, "at": "<ISO time>", "note": "<n> scenarios pass"}`.
+   state file, with the stage tool (`mcp__dotnet-workflow-kit__stage`, see `/next`'s State file section) or by hand, as `{"done": true, "at": "<ISO time>", "note": "<n> scenarios pass"}`.
 2. **Check for an existing review page first.** If this session already produced a
    review artifact (the kit's review skill) that contains a QA section, copy that
    section verbatim into this report instead of rewriting it; the two must never

@@ -42,3 +42,8 @@ jobs:
         # informational only and never blocks the build.
         run: claude plugin validate .
         continue-on-error: true
+
+      - name: Run the hooks module's tests
+        # tests/hooks.test.ts runs against the engine; informational like the step above.
+        run: claude plugin test .
+        continue-on-error: true

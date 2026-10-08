@@ -1,5 +1,7 @@
 export type Activity = { text: string; at: number }
 
+export type RunningAgent = { id: string; description: string; at: number }
+
 export type StageStatus = 'done' | 'active' | 'waiting' | 'todo'
 
 export type PipelineRow = {
@@ -41,6 +43,6 @@ export type AspireEntry = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'dotnet-workflow-kit': { rows: PipelineRow[]; isHidden: boolean; dismissed: string[]; activity: Activity | null; background: string[]; goalsSet: Record<string, string[]>; notifyOthers: boolean; aspire: AspireEntry[] }
+    'dotnet-workflow-kit': { rows: PipelineRow[]; isHidden: boolean; dismissed: string[]; activity: Activity | null; background: string[]; goalsSet: Record<string, string[]>; notifyOthers: boolean; aspire: AspireEntry[]; agents: RunningAgent[] }
   }
 }

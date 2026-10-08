@@ -8,7 +8,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Activity, AspireEntry, PipelineRow, StageStatus } from '../types'
+import type { Activity, AspireEntry, PipelineRow, RunningAgent, StageStatus } from '../types'
 
 const rows = atom({ plugin: 'dotnet-workflow-kit', key: 'rows' } as const, [])
 const isHidden = atom({ plugin: 'dotnet-workflow-kit', key: 'isHidden' } as const, false)
@@ -21,10 +21,13 @@ const background = atom({ plugin: 'dotnet-workflow-kit', key: 'background' } as 
 const goalsSet = atom({ plugin: 'dotnet-workflow-kit', key: 'goalsSet' } as const, {})
 // Whether this session toasts when another item reaches a gate; off, since the app notifies too.
 const notifyOthers = atom({ plugin: 'dotnet-workflow-kit', key: 'notifyOthers' } as const, false)
+// The subagents running now, so the band can count them without their tool calls taking it over.
+const agents = atom({ plugin: 'dotnet-workflow-kit', key: 'agents' } as const, [])
 // Every Aspire AppHost running on this machine, with the session that owns it.
 const aspire = atom({ plugin: 'dotnet-workflow-kit', key: 'aspire' } as const, [])
 
 const PANE = 'sessions'
+const AGENT_MS = 60 * 60 * 1000
 
 // The kit's own pipeline; a state file's `order` replaces it when a team adds stages.
 const DEFAULT_ORDER = ['start', 'plan', 'implement', 'test', 'review', 'pull_request']
@@ -65,14 +68,16 @@ const ASPIRE_COMMAND =
 // A start's AppHost builds before it listens, so the scans after one come at these delays.
 const START_SCANS_MS = [5000, 20000, 45000, 90000]
 
-const COLOR = { done: '#c4c0ff', active: '#8e86f8', waiting: '#f59e0b', todo: '#6b7280' }
+// `todo` is a theme key, so the stages ahead read on a light terminal as on a dark one.
+const COLOR = { done: '#c4c0ff', active: '#8e86f8', waiting: '#f59e0b', todo: 'inactive' }
 // The Sessions pane's cards: a purple edge on the item being viewed, an amber one on an item
 // waiting on you, with a faint tint of the same where the surface can draw one.
 const CARD = {
-  border: '#3a3836',
+  // A theme key, so a plain card's edge reads on a light theme as on a dark one.
+  border: 'subtle',
   currentBorder: '#5d52a3',
   currentTint: '#9d8cff14',
-  currentText: '#c9bfff',
+  currentText: '#8e86f8',
   waitingBorder: '#8a6a33',
   waitingTint: '#e9ae4f14',
   check: '#6fbf73',
@@ -204,7 +209,9 @@ function toRow(slug: string, data: StateFile, branch: string): PipelineRow {
       ? 'Waiting on you: review checkpoint'
       : isCustomGate
         ? `Waiting on you${activeStage?.note ? `: ${activeStage.note}` : ''}`
-        : (data.current?.detail ?? activeStage?.note ?? '')
+        : activeIndex === -1
+          ? 'Every stage done'
+          : (data.current?.detail ?? activeStage?.note ?? '')
 
   return {
     slug,
@@ -322,16 +329,34 @@ async function setGoals($: EngineInterface, rows: PipelineRow[], mtimes: Record<
 }
 
 let lastJson = ''
-let isRefreshing = false
+// The refresh under way, and the one queued behind it: a caller that asks during a refresh
+// waits for the next one, so what it just wrote is on the bar when its await returns.
+let running: Promise<void> | null = null
+let queued: Promise<void> | null = null
 // Parsed state files by name, reused while the file's mtime is unchanged.
 const cache = new Map<string, { mtime: number; data: StateFile | null }>()
 let lastDone: Record<string, boolean[]> | null = null
 let lastWaiting: Record<string, boolean> | null = null
 
+// A work item's state file, not a stage's checks or evidence file written beside it.
+const isStateFile = (entry: { name: unknown; kind: string }) =>
+  entry.kind === 'file' && String(entry.name).endsWith('.json') && !String(entry.name).includes('-checks')
+
 async function homeDir($: EngineInterface) {
   const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME')) || ''
 
   return home.replace(/\\/g, '/')
+}
+
+// a/b/../c -> a/c: a worktree's `commondir` is relative (`../..`), and git prints the folded path.
+function resolveDots(path: string): string {
+  const out: string[] = []
+  for (const part of path.split('/')) {
+    if (part === '..' && out.length > 1) out.pop()
+    else if (part !== '.') out.push(part)
+  }
+
+  return out.join('/')
 }
 
 type Repo = { branch: string; commonDir: string; root: string; isWorktree: boolean }
@@ -355,7 +380,7 @@ async function currentRepo($: EngineInterface): Promise<Repo | undefined> {
         let commonDir = gitDir
         if (await $.fs.exists(`${gitDir}/commondir`)) {
           const common = ((await $.fs.read(`${gitDir}/commondir`)) as string).trim().replace(/\\/g, '/')
-          commonDir = /^([a-zA-Z]:)?\//.test(common) ? common : `${gitDir}/${common}`
+          commonDir = resolveDots(/^([a-zA-Z]:)?\//.test(common) ? common : `${gitDir}/${common}`)
         }
 
         return {
@@ -384,9 +409,24 @@ async function hasBranch($: EngineInterface, repo: Repo, branch: string, packed:
   return $.fs.exists(`${repo.commonDir}/refs/heads/${branch}`)
 }
 
-async function refresh($: EngineInterface) {
-  if (isRefreshing) return
-  isRefreshing = true
+function refresh($: EngineInterface): Promise<void> {
+  if (running) {
+    queued ??= running.then(() => {
+      queued = null
+
+      return refresh($)
+    })
+
+    return queued
+  }
+  running = refreshNow($).finally(() => {
+    running = null
+  })
+
+  return running
+}
+
+async function refreshNow($: EngineInterface) {
   try {
     const dir = `${await homeDir($)}/.claude/dotnet-workflow-kit/pipeline`
     const [entries, repo, now] = await Promise.all([
@@ -404,7 +444,7 @@ async function refresh($: EngineInterface) {
     const named = new Set<string>()
     for (const entry of entries) {
       const name = entry.name as string
-      if (entry.kind !== 'file' || !name.endsWith('.json') || name.includes('-checks')) continue
+      if (!isStateFile(entry)) continue
       try {
         let hit = cache.get(name)
         if (!hit || hit.mtime !== entry.mtimeMs) {
@@ -472,8 +512,6 @@ async function refresh($: EngineInterface) {
     }
   } catch (err) {
     $.ui.log(`dotnet-workflow-kit: ${String(err)}`)
-  } finally {
-    isRefreshing = false
   }
 }
 
@@ -596,6 +634,104 @@ async function closeCurrent($: EngineInterface): Promise<string> {
   await refresh($)
 
   return `${current.ticket || current.title} is done; its row goes in a day.`
+}
+
+const STAGE_TOOL = 'mcp__dotnet-workflow-kit__stage'
+
+type StageInput = {
+  stage?: string
+  fields?: Record<string, unknown>
+  current?: StateFile['current']
+  item?: Pick<StateFile, 'ticket' | 'title' | 'shortTitle' | 'order'>
+}
+
+const isoNow = async ($: EngineInterface) => new Date(await $.clock.now()).toISOString().replace(/\.\d{3}Z$/, 'Z')
+
+// The file for this branch: the one whose `branch` names it, whatever it is called, else a new
+// one keyed by the ticket id, else by the branch, as /next keys it.
+// The folder is shared by every repository, so a file is this item's only when its branch and
+// repository match and it is still open; of several, the newest, as refresh shows.
+async function stateFileFor($: EngineInterface, dir: string, repo: Repo, ticket?: string): Promise<string> {
+  const entries = (await $.fs.exists(dir)) ? await $.fs.list(dir) : []
+  const sameRepo = (path: string | undefined) => !path || samePath(path, repo.commonDir)
+  const taken = new Set<string>()
+  let best: { name: string; mtime: number } | undefined
+  for (const entry of entries) {
+    const name = entry.name as string
+    if (!isStateFile(entry)) continue
+    taken.add(name)
+    try {
+      const data = JSON.parse(await $.fs.read(`${dir}/${name}`)) as StateFile
+      const isMine = data.branch === repo.branch && sameRepo(data.repo) && !data.closed
+      if (isMine && (!best || entry.mtimeMs > best.mtime)) best = { name, mtime: entry.mtimeMs }
+    } catch {
+      // Unreadable: not this branch's file as far as anyone can tell.
+    }
+  }
+  if (best) return `${dir}/${best.name}`
+
+  // A new file never reuses the name of another repository's or a closed item's.
+  const slug = branchSlug(ticketId(ticket).replace(/^#/, '') || repo.branch)
+  let name = `${slug}.json`
+  for (let n = 2; taken.has(name); n++) name = `${slug}-${n}.json`
+
+  return `${dir}/${name}`
+}
+
+// Git and the skills spell one path with either slash and either case on Windows.
+const pathKey = (path: string) => resolveDots(path.replace(/\\/g, '/')).replace(/\/+$/, '').toLowerCase()
+const samePath = (a: string, b: string) => pathKey(a) === pathKey(b)
+
+// Stage calls run one at a time, so two in flight never read the same file and drop a write.
+let writing: Promise<unknown> = Promise.resolve()
+
+const writeStage = ($: EngineInterface, input: StageInput): Promise<string> => {
+  const next = writing.then(() => writeStageNow($, input))
+  writing = next.catch(() => undefined)
+
+  return next
+}
+
+// The stage tool: merges what a skill recorded into this branch's state file and redraws the bar.
+async function writeStageNow($: EngineInterface, input: StageInput): Promise<string> {
+  const repo = await currentRepo($)
+  if (!repo?.branch) return 'Not on a branch of a git repository; nothing written.'
+  if ((await baseBranches($, repo)).includes(repo.branch)) return `On the base branch ${repo.branch}; nothing written.`
+  const dir = `${await homeDir($)}/.claude/dotnet-workflow-kit/pipeline`
+  const path = await stateFileFor($, dir, repo, input.item?.ticket)
+  const name = basename(path)
+  let data: StateFile = {}
+  if (await $.fs.exists(path)) {
+    try {
+      data = JSON.parse(await $.fs.read(path)) as StateFile
+    } catch {
+      return `Could not parse ${name}; nothing changed.`
+    }
+  }
+
+  const at = await isoNow($)
+  delete data.adopted
+  data.branch = repo.branch
+  data.repo ??= repo.commonDir
+  if (repo.isWorktree) data.worktree ??= repo.root
+  for (const key of ['ticket', 'title', 'shortTitle', 'order'] as const) {
+    if (input.item?.[key] !== undefined) Object.assign(data, { [key]: input.item[key] })
+  }
+  if (input.current) data.current = { ...data.current, ...input.current }
+  if (input.stage) {
+    const key = input.stage === 'pull_request' ? 'pullRequest' : input.stage
+    const stages = (data.stages ??= {})
+    const before = stages[key] ?? {}
+    const after: Stage & Record<string, unknown> = { ...before, ...input.fields }
+    if (after.done === true && input.fields?.at === undefined && !(before.done && before.at)) after.at = at
+    stages[key] = after
+  }
+  await $.fs.write(path, `${JSON.stringify(data, null, 2)}
+`)
+  await refresh($)
+
+  const row = (await read($, rows)).find(one => one.isCurrentBranch)
+  return row ? `Wrote ${name}: ${stageLabel(row)}${row.detail ? `, ${row.detail}` : ''}` : `Wrote ${name}.`
 }
 
 // --- Aspire ---------------------------------------------------------------------------------
@@ -803,6 +939,34 @@ export const register: Register = on => {
       name: 'progress',
       description: 'Show or hide the workflow progress bar; "done" closes this branch\'s item',
     })
+    await $.tool.register({
+      name: 'stage',
+      description:
+        "Record the dotnet-workflow-kit pipeline state for this branch: the progress bar's state file. " +
+        'Pass `stage` with `fields` to merge into stages.<stage> (done, artifactUrl, decision, note, waiting, ...; ' +
+        '`at` is filled when done is true), `current` for what the bar shows now, and `item` (ticket, title, ' +
+        'shortTitle, order) when the item starts. Fields left out keep their value. Finds or creates the file itself.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          stage: { type: 'string', description: 'Stage id: start, plan, implement, sweep, test, review, pull_request or a profile extra stage.' },
+          fields: { type: 'object', description: 'Keys merged into stages.<stage>.' },
+          current: {
+            type: 'object',
+            properties: { stage: { type: 'string' }, detail: { type: 'string' }, blocked: { type: 'boolean' } },
+          },
+          item: {
+            type: 'object',
+            properties: {
+              ticket: { type: 'string' },
+              title: { type: 'string' },
+              shortTitle: { type: 'string', description: 'At most four words.' },
+              order: { type: 'array', items: {}, description: 'Stage ids, or {id, label}, in pipeline order.' },
+            },
+          },
+        },
+      },
+    })
     await $.command.register({
       name: 'sessions',
       description: 'Show or hide the pane listing every work item in this repository',
@@ -847,9 +1011,15 @@ export const register: Register = on => {
     return { text: isOpen ? 'Sessions pane opened.' : 'Sessions pane closed.' }
   })
 
+  on('tool.call', { tool: STAGE_TOOL }, async ($, e) => ({
+    result: await writeStage($, e as unknown as StageInput).catch(err => `Could not write the state file: ${String(err)}`),
+  }))
+
   on('tool.call', async ($, e, next) => {
     const input = e as unknown as Record<string, unknown>
-    const text = describe(input)
+    // A subagent's calls are its own: the band names the subagent, not what it is reading.
+    const isSubagent = e.agentId !== undefined
+    const text = isSubagent ? undefined : describe(input)
     if (text) {
       const now = await $.clock.now()
       await update($, activity, (): Activity => ({ text: clip(text), at: now }))
@@ -864,7 +1034,7 @@ export const register: Register = on => {
       if (deny) return { deny }
     }
     const result = await next(e)
-    void refresh($)
+    if (!isSubagent) void refresh($)
     if (isAspire) $.clock.after(2000, () => void scanAspire($))
 
     return result
@@ -882,8 +1052,23 @@ export const register: Register = on => {
     return next(e)
   })
 
+  on('agent.spawn', async ($, e, next) => {
+    const started = await next(e)
+    const id = started.deny === undefined ? started.agentId : undefined
+    if (id) {
+      const at = await $.clock.now()
+      await update($, agents, list => [...list.filter(a => a.id !== id), { id, description: e.description, at }]).catch(
+        err => $.ui.log(`dotnet-workflow-kit: ${String(err)}`),
+      )
+    }
+
+    return started
+  })
+
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined) await update($, activity, () => null)
+    const agentId = e.agentId
+    if (agentId === undefined) await update($, activity, () => null)
+    else await update($, agents, list => list.filter(a => a.id !== agentId))
     await refresh($)
     await touchAdopted($)
 
@@ -905,11 +1090,16 @@ export const register: Register = on => {
     const live = await read($, activity)
     const tasks = e.props.isWorking ? [] : await read($, background)
     const isBusy = e.props.isWorking || tasks.length > 0
+    // An agent that never reports its end (a remote one, a killed one) stops counting after an hour.
+    const now = await $.clock.now()
+    const running = (await read($, agents)).filter(a => now - a.at < AGENT_MS).length
+    const crew = running === 0 ? '' : ` · ${running} ${running === 1 ? 'agent' : 'agents'} running`
+    // A finished item says how it ended; this session's own shells and agents are not its news.
     const doing = (one: PipelineRow) =>
-      isWaiting(one)
+      isWaiting(one) || isComplete(one)
         ? one.detail
         : e.props.isWorking && live
-          ? live.text
+          ? `${live.text}${crew}`
           : tasks.length > 0
             ? `Waiting on ${tasks.length === 1 ? tasks[0] : `${tasks.length} background tasks`}`
             : one.detail
@@ -1009,14 +1199,26 @@ export const register: Register = on => {
       )
     }
 
-    // Never wraps: the name column and the bar share what the fixed cluster on the right leaves,
-    // and the bar's drawing scales down to its slot rather than spilling over the name.
+    // Never wraps. The name column is as wide as its text, up to a third of the band, and the bar
+    // is drawn at the width the rest leaves, so neither a gap nor a scaled-down pill shows. About
+    // 8 CSS pixels a reported column; the cluster's widths are estimates, so the bar keeps slack.
+    const bandW = (e.props.bodyColumns || 100) * 8
+    const said = doing(row)
+    const nameW = Math.round(
+      Math.min(bandW / 3, Math.max(textPx(rowName(row), 13), said ? textPx(said, 12) : 0, 60)),
+    )
+    const clusterW =
+      (host ? textPx(hostLabel, 13) + 36 : 0) +
+      (chipLabel ? textPx(`${chipLabel} ›`, 13) + 40 : 0) +
+      (isComplete(row) ? 32 : 0)
+    const barW = Math.round(Math.max(160, Math.min(1200, bandW - 28 - nameW - clusterW - 56)))
+
     return (
       <Box flexDirection="row" flexWrap="nowrap" alignItems="center" gap={2}>
         <Box flexShrink={0}>
           <Text color={dotColor(row)}>●</Text>
         </Box>
-        <Box flexDirection="column" flexGrow={1} flexShrink={1} width="35%" minWidth={0}>
+        <Box flexDirection="column" flexShrink={1} width={nameW} minWidth={0}>
           <Text wrap="truncate-end">{rowName(row)}</Text>
           {doing(row) ? (
             <Text dimColor wrap="truncate-end">
@@ -1024,14 +1226,13 @@ export const register: Register = on => {
             </Text>
           ) : null}
         </Box>
-        <Box flexShrink={1} width={BAR_WIDTH} minWidth={0} overflow="hidden">
+        <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
           <Svg
-            source={barSvg(row, isBusy)}
+            source={barSvg(row, isBusy, barW)}
             alt={`${rowName(row)}: ${stageLabel(row)}, ${pct(row)}% complete${doing(row) ? `, ${doing(row)}` : ''}`}
           />
         </Box>
         <Box flexDirection="row" flexWrap="nowrap" alignItems="center" gap={2} flexShrink={0}>
-          <Text dimColor>{pct(row)}%</Text>
           {host ? (
             <Box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
               <Text color={CARD.check}>●</Text>
@@ -1281,14 +1482,17 @@ function segmentsSvg(row: PipelineRow): string {
   const gap = 3
   const total = row.statuses.length
   const w = (SEGMENT_WIDTH - gap * (total - 1)) / total
+  // A stage ahead is a track that follows the theme; the others keep their colour.
   const bars = row.statuses.map(
     (s, i) =>
-      `<rect x="${(i * (w + gap)).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${SEGMENT_HEIGHT}" rx="2" fill="${segmentColor(row, s)}"/>`,
+      `<rect x="${(i * (w + gap)).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${SEGMENT_HEIGHT}" rx="2" ` +
+      (s === 'todo' ? 'class="todo"/>' : `fill="${segmentColor(row, s)}"/>`),
   )
 
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${SEGMENT_WIDTH}" height="${SEGMENT_HEIGHT}" ` +
-    `viewBox="0 0 ${SEGMENT_WIDTH} ${SEGMENT_HEIGHT}" preserveAspectRatio="none">${bars.join('')}</svg>`
+    `viewBox="0 0 ${SEGMENT_WIDTH} ${SEGMENT_HEIGHT}" preserveAspectRatio="none">` +
+    `<style>.todo{fill:#d9d6e4}@media (prefers-color-scheme: dark){.todo{fill:${SEGMENT.todo}}}</style>${bars.join('')}</svg>`
   )
 }
 
@@ -1296,7 +1500,10 @@ function escapeXml(text: string) {
   return text.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`)
 }
 
-const BAR_WIDTH = 400
+// Rough advance of system UI text in em, enough to size a column to its words.
+const charEm = (ch: string) => (/[\s.,:;'|!il1()[\]]/.test(ch) ? 0.3 : /[A-Z@%mw#]/.test(ch) ? 0.72 : 0.56)
+const textPx = (text: string, size: number) => [...text].reduce((w, ch) => w + charEm(ch) * size, 0)
+
 const BAR_HEIGHT = 24
 
 // A small seeded generator, so a row's dither pattern stays put between redraws.
@@ -1313,8 +1520,12 @@ function seeded(text: string) {
 
 // The desktop bar: a dark rounded track, a pixel-dither fill up to the current stage,
 // a pill naming that stage at the fill's head, and tick marks at the stage boundaries ahead.
-function barSvg(row: PipelineRow, isWorking: boolean): string {
-  const W = BAR_WIDTH
+// The percentage sits in the drawing, after the track, so nothing estimated sits between them.
+const PCT_W = 46
+
+function barSvg(row: PipelineRow, isWorking: boolean, width: number): string {
+  // The track; a finished item's pill already says n/n, so it takes the whole width.
+  const W = width - (isComplete(row) ? 0 : PCT_W)
   const H = BAR_HEIGHT
   const r = H / 2
   const total = row.labels.length
@@ -1332,7 +1543,12 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
 
   const pillFill = isGate ? '#f2b04c' : '#8e86f8'
   const pillText = isGate ? '#2b1d05' : '#ffffff'
-  const dots = isGate ? ['#f2b04c', '#f7cd86', '#8a7a62'] : ['#8e86f8', '#c4c0ff', '#6e6a8c']
+  // Three tones per state, each with a light and a dark value: the pale tones that read on a
+  // dark track would vanish on a light one.
+  const tones = isGate
+    ? { light: ['#c47f12', '#a2650a', '#5e5040'], dark: ['#f2b04c', '#f7cd86', '#8a7a62'] }
+    : { light: ['#6c63e6', '#4b41c8', '#3a3566'], dark: ['#8e86f8', '#c4c0ff', '#6e6a8c'] }
+  const toneCss = (set: string[]) => set.map((c, i) => `.d${i}{fill:${c}}`).join('')
 
   const parts: string[] = []
   const random = seeded(row.slug)
@@ -1341,17 +1557,16 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
     const t = x / Math.max(fillEnd, 1)
     for (let y = 0; y < H; y += cell) {
       if (random() > 0.3 + 0.6 * t * t) continue
-      const colour = dots[Math.floor(random() * dots.length)]
+      const tone = `d${Math.floor(random() * 3)}`
       const opacity = (0.25 + random() * 0.6 * (0.4 + t)).toFixed(2)
       const twinkles = isAnimated && t > 0.55 && random() < 0.35
       if (twinkles) {
         const delay = (random() * 1.4).toFixed(2)
         parts.push(
-          `<rect x="${x}" y="${y}" width="2.2" height="2.2" fill="${colour}" fill-opacity="${opacity}">` +
-            `<animate attributeName="fill-opacity" values="${opacity};0.95;0.1;${opacity}" dur="1.4s" begin="-${delay}s" repeatCount="indefinite"/></rect>`,
+          `<rect class="${tone} tw" style="animation-delay:-${delay}s" x="${x}" y="${y}" width="2.2" height="2.2" fill-opacity="${opacity}"/>`,
         )
       } else {
-        parts.push(`<rect x="${x}" y="${y}" width="2.2" height="2.2" fill="${colour}" fill-opacity="${opacity}"/>`)
+        parts.push(`<rect class="${tone}" x="${x}" y="${y}" width="2.2" height="2.2" fill-opacity="${opacity}"/>`)
       }
     }
   }
@@ -1359,14 +1574,11 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
   for (let i = 1; i < total; i++) {
     const x = (i / total) * W
     if (x < pillX + pillW + 6) continue
-    parts.push(`<rect x="${(x - 0.75).toFixed(1)}" y="${r - 5}" width="1.5" height="10" rx="0.75" fill="#ffffff" fill-opacity="0.28"/>`)
+    parts.push(`<rect class="tick" x="${(x - 0.75).toFixed(1)}" y="${r - 5}" width="1.5" height="10" rx="0.75"/>`)
   }
 
   if (isAnimated && fillEnd > 0) {
-    parts.push(
-      `<rect x="-48" y="0" width="48" height="${H}" fill="url(#sweep)">` +
-        `<animate attributeName="x" from="-48" to="${fillEnd.toFixed(1)}" dur="2.2s" repeatCount="indefinite"/></rect>`,
-    )
+    parts.push(`<rect class="sw" x="-48" y="0" width="48" height="${H}" fill="url(#sweep)"/>`)
   }
 
   const font = `font-family="system-ui,-apple-system,'Segoe UI',sans-serif" font-size="12"`
@@ -1376,16 +1588,28 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
     `<tspan font-weight="700">${escapeXml(stage)}</tspan>` +
     `<tspan dx="6" fill-opacity="0.85">${count}</tspan></text>`
 
+  // CSS, not SMIL, so reduced motion can stop it; the track and ticks follow the light or dark theme.
+  const style =
+    `<style>.track{fill:#1f1d2e;fill-opacity:.08}.tick{fill:#1f1d2e;fill-opacity:.25}.pct{fill:#6b6a66}${toneCss(tones.light)}` +
+    `@media (prefers-color-scheme: dark){.track{fill:#fff;fill-opacity:.07}.tick{fill:#fff;fill-opacity:.28}.pct{fill:#9a9894}${toneCss(tones.dark)}}` +
+    `.tw{animation:tw 1.4s ease-in-out infinite}@keyframes tw{33%{fill-opacity:.95}66%{fill-opacity:.1}}` +
+    `.sw{animation:sw 2.2s linear infinite}@keyframes sw{to{transform:translateX(${(fillEnd + 48).toFixed(1)}px)}}` +
+    `@media (prefers-reduced-motion: reduce){.tw,.sw{animation:none}.sw{display:none}}</style>`
+
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${H}" viewBox="0 0 ${width} ${H}">` +
+    style +
     `<defs><clipPath id="track"><rect width="${W}" height="${H}" rx="${r}"/></clipPath>` +
     `<linearGradient id="sweep" x1="0" x2="1" y1="0" y2="0">` +
     `<stop offset="0" stop-color="${pillFill}" stop-opacity="0"/>` +
     `<stop offset="0.5" stop-color="${pillFill}" stop-opacity="0.45"/>` +
     `<stop offset="1" stop-color="${pillFill}" stop-opacity="0"/></linearGradient></defs>` +
-    `<rect width="${W}" height="${H}" rx="${r}" fill="#ffffff" fill-opacity="0.07"/>` +
+    `<rect class="track" width="${W}" height="${H}" rx="${r}"/>` +
     `<g clip-path="url(#track)">${parts.join('')}</g>` +
     pill +
+    (isFinished
+      ? ''
+      : `<text class="pct" x="${width}" y="${r + 4.5}" text-anchor="end" ${font} font-variant-numeric="tabular-nums">${pct(row)}%</text>`) +
     `</svg>`
   )
 }
