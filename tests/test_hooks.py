@@ -57,7 +57,7 @@ def test_given_repo_then_hooks_name_no_owner_paths():
 
 def test_given_hooks_then_closed_items_read_done_and_leave_after_a_day():
     text = register_text()
-    assert "!!data.closed || stageDone(stages, stage.id)" in text
+    assert "!!data.closed || i < reached || stageDone(stages, stage.id)" in text
     assert "now - Date.parse(data.closed.at) > REMOVE_MS" in text
     assert "const REMOVE_MS = 24 * 60 * 60 * 1000" in text
 
@@ -118,3 +118,11 @@ def test_given_aspire_scanner_then_the_registry_sits_beside_the_pipeline_files()
     assert "/.claude/dotnet-workflow-kit/aspire`" in text
     script = (REPO_ROOT / "scripts" / "aspire_sessions.py").read_text(encoding="utf-8")
     assert 'DEFAULT_DIR = Path.home() / ".claude" / "dotnet-workflow-kit" / "aspire"' in script
+
+
+def test_given_a_later_stage_reached_then_earlier_stages_count_as_done():
+    text = register_text()
+    assert "i < reached" in text, "a plan written without Start ticked must still show Plan"
+    assert "s.done || s.waiting || s.at || s.artifactUrl || s.decision" in text, (
+        "next's blank placeholders must not count as a stage reached"
+    )
