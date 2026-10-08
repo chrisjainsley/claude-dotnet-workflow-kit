@@ -147,3 +147,17 @@ test('two stage calls at once both land', async ($, on) => {
   expect(data.stages.plan.artifactUrl).toBe('https://x')
   expect(data.current.detail).toBe('Planning')
 })
+
+test("in a worktree, the item's file is found by the main repository's git dir", async ($, on) => {
+  const files = world(on, 'feat/12-add-thing', {
+    [`${DIR}/12.json`]: JSON.stringify({ branch: 'feat/12-add-thing', repo: 'C:/main/.git', stages: { start: { done: true } } }),
+  })
+  files.delete(`${REPO}/.git/HEAD`)
+  files.set(`${REPO}/.git`, 'gitdir: C:/main/.git/worktrees/wt\n')
+  files.set('C:/main/.git/worktrees/wt/HEAD', 'ref: refs/heads/feat/12-add-thing\n')
+  files.set('C:/main/.git/worktrees/wt/commondir', '../..\n')
+  await stage($, { stage: 'plan', fields: { done: false } })
+
+  expect(json(files, '12.json').stages.plan).toEqual({ done: false })
+  expect([...files.keys()].filter(f => f.startsWith(DIR))).toEqual([`${DIR}/12.json`])
+})

@@ -322,6 +322,17 @@ async function homeDir($: EngineInterface) {
   return home.replace(/\\/g, '/')
 }
 
+// a/b/../c -> a/c: a worktree's `commondir` is relative (`../..`), and git prints the folded path.
+function resolveDots(path: string): string {
+  const out: string[] = []
+  for (const part of path.split('/')) {
+    if (part === '..' && out.length > 1) out.pop()
+    else if (part !== '.') out.push(part)
+  }
+
+  return out.join('/')
+}
+
 type Repo = { branch: string; commonDir: string; root: string; isWorktree: boolean }
 
 // The session's repository: its checked-out branch and the git dir that holds its refs
@@ -343,7 +354,7 @@ async function currentRepo($: EngineInterface): Promise<Repo | undefined> {
         let commonDir = gitDir
         if (await $.fs.exists(`${gitDir}/commondir`)) {
           const common = ((await $.fs.read(`${gitDir}/commondir`)) as string).trim().replace(/\\/g, '/')
-          commonDir = /^([a-zA-Z]:)?\//.test(common) ? common : `${gitDir}/${common}`
+          commonDir = resolveDots(/^([a-zA-Z]:)?\//.test(common) ? common : `${gitDir}/${common}`)
         }
 
         return {
@@ -642,7 +653,7 @@ async function stateFileFor($: EngineInterface, dir: string, repo: Repo, ticket?
 }
 
 // Git and the skills spell one path with either slash and either case on Windows.
-const pathKey = (path: string) => path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+const pathKey = (path: string) => resolveDots(path.replace(/\\/g, '/')).replace(/\/+$/, '').toLowerCase()
 const samePath = (a: string, b: string) => pathKey(a) === pathKey(b)
 
 // Stage calls run one at a time, so two in flight never read the same file and drop a write.
