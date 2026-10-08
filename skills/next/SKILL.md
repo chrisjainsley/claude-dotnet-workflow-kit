@@ -85,6 +85,8 @@ Stages 1 through 4 leave no reliable trace in git or the scm, so completion is t
 ~/.claude/dotnet-workflow-kit/pipeline/<slug>.json
 ```
 
+**Write it with the `mcp__dotnet-workflow-kit__stage` tool** when it is in your tool list. `stage` with `fields` merges into `stages.<stage>` and fills `at` when `done` is true; `current` sets what the bar shows; `item` sets `ticket`, `title`, `shortTitle` and `order` when the item starts. The tool finds or creates the file as below, writes `branch`, `repo` and `worktree`, drops `adopted`, and redraws the progress bar at once. Without the tool (an organisation that blocks mods, or an older kit), edit the file by hand as below.
+
 Key by the ticket id when the branch carries one, else the sanitized branch name. A file that already names the current branch in `branch` is this item's file whatever its name: the progress bar writes one, marked `adopted: true` with only `stages.start` done, for any branch no skill has touched, so every session shows in the Sessions pane. Update that file in place and remove `adopted` on the first write, rather than starting a second file. Shape:
 
 ```json

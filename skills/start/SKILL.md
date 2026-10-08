@@ -62,7 +62,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    to `user`, move to `tracker_states.active` when set, else the adapter's default active state. Both calls are safe to repeat. Skip this
    step entirely with `tracker: none`; there is no item to update.
 8. **Write the pipeline state file**, so the progress bar above the prompt shows the item
-   from now on. Key it the way `/dotnet-workflow-kit:next` does: the ticket id when the
+   from now on, with the stage tool (`mcp__dotnet-workflow-kit__stage`, see `/next`'s State file section); it writes `repo` and `worktree` itself. By hand: key it the way `/dotnet-workflow-kit:next` does: the ticket id when the
    branch carries one, else the sanitized branch name, at
    `~/.claude/dotnet-workflow-kit/pipeline/<slug>.json`. Write `ticket` (the id, or the
    slug with no tracker), `title` (the item's title), `shortTitle` (at most four words
