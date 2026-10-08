@@ -101,6 +101,8 @@ def test_given_legacy_mermaid_instead_of_flowmap_then_passes(review_fixture_path
     text = review_fixture_path.read_text(encoding="utf-8")
     mermaid = "```mermaid\nflowchart LR\n  A[relying party]:::changed --> B[session]:::ctx\n```\n"
     text = re.sub(FLOWMAP_RE, lambda _: mermaid, text, count=1, flags=re.S)
+    # With no layer map there are no boxes, so the walkthrough points at the section.
+    text = text.replace("`@web-rp`", "`Changes`").replace("`@mobile-rp`", "`Changes`")
     review_fixture_path.write_text(text, encoding="utf-8")
 
     code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path)
@@ -291,3 +293,73 @@ def test_given_nine_hunks_then_exit1(review_fixture_path):
 
     assert code == 1
     assert "9 diff hunks, cap 8" in out
+
+
+WALKTHROUGH_HEAD = "\n## Walkthrough\n"
+
+
+def test_given_walkthrough_targets_then_each_must_resolve(review_fixture_path):
+    text = review_fixture_path.read_text(encoding="utf-8")
+    assert WALKTHROUGH_HEAD in text
+    broken = (text.replace("`@web-rp`", "`@no-such-node`", 1)
+                  .replace("`Findings > useLogoutRedirect`", "`Findings > nowhere-on-the-page`", 1)
+                  .replace("`QA report`", "`Testing`", 1))
+    review_fixture_path.write_text(broken, encoding="utf-8")
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path)
+    assert code == 1
+    assert "@no-such-node, which is not a flowmap node" in out
+    assert "'nowhere-on-the-page' in Findings" in out
+    assert "'Testing', which is not a review section" in out
+
+
+def test_given_walkthrough_written_for_the_eye_then_check_fails(review_fixture_path):
+    text = review_fixture_path.read_text(encoding="utf-8")
+    text = text.replace("so ten of eleven acceptance criteria are delivered.",
+                        "so 10/11 criteria are delivered in `B2C_1A_SIGNUP_SIGNIN.xml`.", 1)
+    text = text.replace("8. `Decision`", "8. `Rollout` One more.\n9. `Decision`", 1)
+    review_fixture_path.write_text(text, encoding="utf-8")
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path)
+    assert code == 1
+    assert "scene 1 has a slash count" in out
+    assert "scene 1 has markdown or markup" in out
+    assert "9 scenes, cap 8" in out
+
+
+def test_given_walkthrough_before_decision_then_section_order_fails(review_fixture_path):
+    text = review_fixture_path.read_text(encoding="utf-8")
+    walk = text[text.index(WALKTHROUGH_HEAD):]
+    text = text.replace(walk, "\n").replace("\n## Decision\n", walk + "\n## Decision\n", 1)
+    review_fixture_path.write_text(text, encoding="utf-8")
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path)
+    assert code == 1
+    assert "then an optional Walkthrough" in out
+
+
+def test_given_walkthrough_then_page_carries_the_player_not_a_section(tmp_path, review_fixture_path):
+    out_path = tmp_path / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef")
+    assert code == 0, out + err
+    page = out_path.read_text(encoding="utf-8")
+    assert '<section class="wt" id="wt"' in page
+    assert 'id="walkthrough"' not in page
+    assert 'data-target="walkthrough"' not in page
+    data = re.search(r'<script type="application/json" class="wt-data">(.*?)</script>', page, re.S).group(1)
+    scenes = __import__("json").loads(data)
+    assert len(scenes) == 8
+    assert scenes[0] == {"section": "verdict", "text": scenes[0]["text"]}
+    assert scenes[1]["node"] == "web-rp"
+    assert scenes[3] == {"section": "findings", "find": "B2C_1A_MOBILE_SIGNIN", "text": scenes[3]["text"]}
+    assert "{{" not in page
+
+
+def test_given_no_walkthrough_then_check_passes_and_no_player(tmp_path, review_fixture_path):
+    text = review_fixture_path.read_text(encoding="utf-8")
+    review_fixture_path.write_text(text[: text.index(WALKTHROUGH_HEAD) + 1], encoding="utf-8")
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path)
+    assert code == 0, out + err
+    out_path = tmp_path / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef")
+    assert code == 0, out + err
+    page = out_path.read_text(encoding="utf-8")
+    assert 'id="wt"' not in page
+    assert "{{" not in page

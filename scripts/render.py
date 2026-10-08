@@ -41,7 +41,10 @@ and links backticked File cells to full per-file diffs pulled from git for --ran
 (derived from the front matter when omitted), QA report renders scenario cards whose
 gherkin steps expand to the evidence captioned with their text,
 Rollout renders a persistent checklist, and Decision gets the approve /
-request-changes form.
+request-changes form. An optional Walkthrough section is not drawn as a section: its
+numbered scenes become a player bar under the header that scrolls to each scene's
+target, highlights it (a flowmap box gets its edges animated) and reads the line aloud
+with the browser's own speech synthesis, captions always on and timed when no voice.
 """
 import argparse
 import base64
@@ -64,7 +67,7 @@ DEFAULT_TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "page.html"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit_profile import add_profile_arg, resolve_profile  # noqa: E402
-from check import STEP_RE, is_video, step_key  # noqa: E402
+from check import STEP_RE, WALKTHROUGH, is_video, scene_target, step_key, walkthrough_scenes  # noqa: E402
 import flowmap  # noqa: E402
 
 # Delivery Labs branding: the profile's `branding` flag (default true) switches it off.
@@ -111,6 +114,7 @@ FILE_STATUS = {}
 FLOW_EXAMPLES = {}
 FLOW_COUNT = [0]
 USED_FILES = []
+WALK_SCENES = []
 WARNINGS = []
 MEDIA_FILES = []
 HTTP_STATUS_RE = re.compile(r"^HTTP/\d(?:\.\d)?\s+(\d{3})\b")
@@ -988,6 +992,46 @@ def render_decision_form(open_findings, merged=False):
     return "".join(out)
 
 
+def render_walkthrough(scenes):
+    """The player bar: controls, a caption line and the scenes as JSON for the page script."""
+    if not scenes:
+        return ""
+    data = []
+    for target, text in scenes:
+        kind, name, needle = scene_target(target)
+        scene = {"text": text}
+        if kind == "node":
+            scene["node"] = name
+        else:
+            scene["section"] = slug(name)
+            if needle:
+                scene["find"] = needle
+        data.append(scene)
+    payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    total = len(scenes)
+    return (
+        '<section class="wt" id="wt" aria-label="Narrated walkthrough">'
+        '<div class="wt-bar">'
+        '<button type="button" class="wt-play" id="wt-play" aria-pressed="false">'
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><path class="i-play" d="M4 2.5v11l9-5.5z"/>'
+        '<path class="i-pause" d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>'
+        '<span class="wt-label">Walk me through it</span></button>'
+        '<button type="button" class="wt-btn" id="wt-prev" aria-label="Previous scene" disabled>'
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h2v10H3zM14 3v10L6 8z"/></svg></button>'
+        '<button type="button" class="wt-btn" id="wt-next" aria-label="Next scene">'
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3h2v10h-2zM2 3v10l8-5z"/></svg></button>'
+        f'<span class="wt-step" id="wt-step">{total} scenes</span>'
+        '<span class="wt-track" aria-hidden="true"><i id="wt-fill"></i></span>'
+        '<label class="wt-voice"><span>Voice</span><select id="wt-voice"><option value="">Captions only</option></select></label>'
+        '<button type="button" class="wt-btn wt-stop" id="wt-stop" aria-label="Stop the walkthrough" hidden>'
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h10v10H3z"/></svg></button>'
+        '</div>'
+        '<p class="wt-caption" id="wt-caption" aria-live="polite" hidden></p>'
+        f'<script type="application/json" class="wt-data">{payload}</script>'
+        '</section>'
+    )
+
+
 def parse_meta(text):
     meta = {}
     if text.startswith("---"):
@@ -1051,7 +1095,11 @@ def parse(text, kind=None):
             output.append((name, body))
         return meta, output, questions
     open_findings, output = [], []
+    WALK_SCENES.clear()
     for name, lines in sections:
+        if name == WALKTHROUGH:
+            WALK_SCENES.extend(walkthrough_scenes("\n".join(lines))[0])
+            continue
         mode = REVIEW_MODES.get(name)
         if mode == "changes":
             lines = take_examples(lines)
@@ -1130,6 +1178,7 @@ def build(meta, sections, template, count=0, branded=True):
         "COUNT": str(len(sections)),
         "QUESTIONS": str(count if KIND == "plan" else 0),
         "OPEN": str(count if KIND == "review" else 0),
+        "WALKTHROUGH": render_walkthrough(WALK_SCENES) if KIND == "review" else "",
         "BRAND_STYLE": BRAND_STYLE if branded else "",
         "FOOTER": BRAND_FOOTER if branded else "",
     }.items():

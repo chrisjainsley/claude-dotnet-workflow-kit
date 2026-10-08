@@ -102,6 +102,12 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    contract or a QA capture grounds it; never invent a value. File cells hold the
    repo-relative path (or a unique tail) in backticks so the builder can find the file
    in the diff.
+   Close with an optional `## Walkthrough`: up to eight numbered scenes, each a
+   backticked target and one line written to be heard (the skeleton has the format).
+   The page plays it from **Walk me through it**: it scrolls to each target, highlights
+   it, animates a flowmap box's edges and reads the line with the reader's browser
+   voice. It restates the page in reading order and adds no claim of its own. Leave it
+   out for a review small enough to read in a minute.
 6. **Run the check** and fix until OK; cut, never raise caps:
    ```bash
    python "SKILL_DIR/scripts/check_review.py" plans/<slug>/review.md
@@ -168,6 +174,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 | QA report | 350 words + gherkin + evidence, 10 images, 3 videos | Environment and test users, one scenario per behaviour tagged Acceptance or Manual with Pass, Fail or Blocked, Evidence with per-step proof, Classification (regression, pre-existing bug, environment issue, not run) on anything but Pass, the summary table, Not covered. When nothing was run, open with **No QA run.** and list every criterion under Not covered. |
 | Rollout | 90 words, 8 items | Ordered checklist with persistent ticks: infrastructure applied, config set, stacked order, migration, labels, hand-off. |
 | Decision | 60 words + form | Your recommendation in a sentence or two. The form is generated. |
+| Walkthrough (optional) | 220 spoken words, 8 scenes, 45 words each | Numbered scenes: `` `Section` ``, `` `Section > text in a row` `` or `` `@node-id` `` then one spoken line. Numbers as words, no markdown or links. Rendered as the player bar, not as a section. |
 
 `size: small` multiplies caps by 0.6 and `size: large` by 1.5.
 
@@ -205,7 +212,7 @@ agree, report what happened rather than what should have, diffs carry a decision
 ## Files
 
 - `assets/skeleton.md`: section skeleton with front matter.
-- `assets/page.html` (repository root): the shared page shell, carrying the tiles, pills, collapsed hunks, linked file diffs, checklist and decision form.
+- `assets/page.html` (repository root): the shared page shell, carrying the tiles, pills, collapsed hunks, linked file diffs, checklist, decision form and the walkthrough player (browser speech synthesis, no service).
 - `scripts/check_review.py`: budget and structure gate; exit 1 on any breach. Takes `--profile`. Wraps `scripts/check.py` (repository root) in review mode.
 - `scripts/build_review.py`: markdown subset to HTML with the section-specific renderers; pulls per-file diffs from git. Wraps `scripts/render.py` (repository root) in review mode.
 - `references/exemplar.md`: a filled review for a real merged PR, identifiers scrubbed.

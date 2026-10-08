@@ -178,3 +178,14 @@ B2C caps `SessionExpiryInSeconds` at 86400 and ignores `refresh_token_lifetime_s
 ## Decision
 
 Approve for web, raise a follow-up for mobile. The work item should not close on this PR alone.
+
+## Walkthrough
+
+1. `Verdict` This change merged on the tenth of September. Web members can now stay signed in for ninety days. Mobile members cannot, so ten of eleven acceptance criteria are delivered.
+2. `@web-rp` The whole change is policy XML. The web relying party now keeps the tenant sign-in cookie for ninety days, through the keep alive setting.
+3. `@mobile-rp` The mobile relying party only lost a dead parameter. Its journey still calls a profile without the option, under a rolling one day session.
+4. `Findings > B2C_1A_MOBILE_SIGNIN` That gap is the high finding. Which policy the mobile app calls is not verifiable from this repository.
+5. `Findings > useLogoutRedirect` The other open finding is sign-out. Native sign-out skips the end session call, so a kept cookie would outlive log out once mobile gets the option.
+6. `QA report` Nothing has run against a live tenant yet. All eleven criteria sit under not covered.
+7. `Rollout` Next, dispatch the dev deployment, decide what happens to mobile, and get real credentials for the ninety day checks.
+8. `Decision` The recommendation is to approve for web and raise a follow-up for mobile. The work item should not close on this PR alone.

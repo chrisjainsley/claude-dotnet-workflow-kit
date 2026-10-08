@@ -9,7 +9,9 @@ Changes section opens with the flowmap of the two sign-in journeys (one Infrastr
 lane, a row per journey, context nodes for the untouched mobile session, and a missing test
 box because B2C XML has no test host); no example fences, because nothing in the change
 is an API or a table. Its File cells carry repo paths that the builder turned into links
-to the full per-file diffs. Use it for shape and tone; do not copy its content.
+to the full per-file diffs. The closing Walkthrough narrates the page in eight scenes:
+the verdict, the two relying parties on the map, the two open findings, then QA,
+rollout and the recommendation, each line short enough to say in one breath. Use it for shape and tone; do not copy its content.
 
 ```markdown
 ---
@@ -192,4 +194,15 @@ B2C caps `SessionExpiryInSeconds` at 86400 and ignores `refresh_token_lifetime_s
 ## Decision
 
 Approve for web, raise a follow-up for mobile. The work item should not close on this PR alone.
+
+## Walkthrough
+
+1. `Verdict` This change merged on the tenth of September. Web members can now stay signed in for ninety days. Mobile members cannot, so ten of eleven acceptance criteria are delivered.
+2. `@web-rp` The whole change is policy XML. The web relying party now keeps the tenant sign-in cookie for ninety days, through the keep alive setting.
+3. `@mobile-rp` The mobile relying party only lost a dead parameter. Its journey still calls a profile without the option, under a rolling one day session.
+4. `Findings > B2C_1A_MOBILE_SIGNIN` That gap is the high finding. Which policy the mobile app calls is not verifiable from this repository.
+5. `Findings > useLogoutRedirect` The other open finding is sign-out. Native sign-out skips the end session call, so a kept cookie would outlive log out once mobile gets the option.
+6. `QA report` Nothing has run against a live tenant yet. All eleven criteria sit under not covered.
+7. `Rollout` Next, dispatch the dev deployment, decide what happens to mobile, and get real credentials for the ninety day checks.
+8. `Decision` The recommendation is to approve for web and raise a follow-up for mobile. The work item should not close on this PR alone.
 ```
