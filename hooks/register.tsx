@@ -209,7 +209,9 @@ function toRow(slug: string, data: StateFile, branch: string): PipelineRow {
       ? 'Waiting on you: review checkpoint'
       : isCustomGate
         ? `Waiting on you${activeStage?.note ? `: ${activeStage.note}` : ''}`
-        : (data.current?.detail ?? activeStage?.note ?? '')
+        : activeIndex === -1
+          ? 'Every stage done'
+          : (data.current?.detail ?? activeStage?.note ?? '')
 
   return {
     slug,
@@ -1092,8 +1094,9 @@ export const register: Register = on => {
     const now = await $.clock.now()
     const running = (await read($, agents)).filter(a => now - a.at < AGENT_MS).length
     const crew = running === 0 ? '' : ` · ${running} ${running === 1 ? 'agent' : 'agents'} running`
+    // A finished item says how it ended; this session's own shells and agents are not its news.
     const doing = (one: PipelineRow) =>
-      isWaiting(one)
+      isWaiting(one) || isComplete(one)
         ? one.detail
         : e.props.isWorking && live
           ? `${live.text}${crew}`
@@ -1196,14 +1199,26 @@ export const register: Register = on => {
       )
     }
 
-    // Never wraps: the name column and the bar share what the fixed cluster on the right leaves,
-    // and the bar's drawing scales down to its slot rather than spilling over the name.
+    // Never wraps. The name column is as wide as its text, up to a third of the band, and the bar
+    // is drawn at the width the rest leaves, so neither a gap nor a scaled-down pill shows. About
+    // 8 CSS pixels a reported column; the cluster's widths are estimates, so the bar keeps slack.
+    const bandW = (e.props.bodyColumns || 100) * 8
+    const said = doing(row)
+    const nameW = Math.round(
+      Math.min(bandW / 3, Math.max(textPx(rowName(row), 13), said ? textPx(said, 12) : 0, 60)),
+    )
+    const clusterW =
+      (host ? textPx(hostLabel, 13) + 36 : 0) +
+      (chipLabel ? textPx(`${chipLabel} ›`, 13) + 40 : 0) +
+      (isComplete(row) ? 32 : 0)
+    const barW = Math.round(Math.max(160, Math.min(1200, bandW - 28 - nameW - clusterW - 56)))
+
     return (
       <Box flexDirection="row" flexWrap="nowrap" alignItems="center" gap={2}>
         <Box flexShrink={0}>
           <Text color={dotColor(row)}>●</Text>
         </Box>
-        <Box flexDirection="column" flexGrow={1} flexShrink={1} width="35%" minWidth={0}>
+        <Box flexDirection="column" flexShrink={1} width={nameW} minWidth={0}>
           <Text wrap="truncate-end">{rowName(row)}</Text>
           {doing(row) ? (
             <Text dimColor wrap="truncate-end">
@@ -1211,14 +1226,13 @@ export const register: Register = on => {
             </Text>
           ) : null}
         </Box>
-        <Box flexShrink={1} width={BAR_WIDTH} minWidth={0} overflow="hidden">
+        <Box flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
           <Svg
-            source={barSvg(row, isBusy)}
+            source={barSvg(row, isBusy, barW)}
             alt={`${rowName(row)}: ${stageLabel(row)}, ${pct(row)}% complete${doing(row) ? `, ${doing(row)}` : ''}`}
           />
         </Box>
         <Box flexDirection="row" flexWrap="nowrap" alignItems="center" gap={2} flexShrink={0}>
-          <Text dimColor>{pct(row)}%</Text>
           {host ? (
             <Box flexDirection="row" alignItems="center" gap={1} flexShrink={0}>
               <Text color={CARD.check}>●</Text>
@@ -1486,7 +1500,10 @@ function escapeXml(text: string) {
   return text.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`)
 }
 
-const BAR_WIDTH = 400
+// Rough advance of system UI text in em, enough to size a column to its words.
+const charEm = (ch: string) => (/[\s.,:;'|!il1()[\]]/.test(ch) ? 0.3 : /[A-Z@%mw#]/.test(ch) ? 0.72 : 0.56)
+const textPx = (text: string, size: number) => [...text].reduce((w, ch) => w + charEm(ch) * size, 0)
+
 const BAR_HEIGHT = 24
 
 // A small seeded generator, so a row's dither pattern stays put between redraws.
@@ -1503,8 +1520,12 @@ function seeded(text: string) {
 
 // The desktop bar: a dark rounded track, a pixel-dither fill up to the current stage,
 // a pill naming that stage at the fill's head, and tick marks at the stage boundaries ahead.
-function barSvg(row: PipelineRow, isWorking: boolean): string {
-  const W = BAR_WIDTH
+// The percentage sits in the drawing, after the track, so nothing estimated sits between them.
+const PCT_W = 46
+
+function barSvg(row: PipelineRow, isWorking: boolean, width: number): string {
+  // The track; a finished item's pill already says n/n, so it takes the whole width.
+  const W = width - (isComplete(row) ? 0 : PCT_W)
   const H = BAR_HEIGHT
   const r = H / 2
   const total = row.labels.length
@@ -1569,14 +1590,14 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
 
   // CSS, not SMIL, so reduced motion can stop it; the track and ticks follow the light or dark theme.
   const style =
-    `<style>.track{fill:#1f1d2e;fill-opacity:.08}.tick{fill:#1f1d2e;fill-opacity:.25}${toneCss(tones.light)}` +
-    `@media (prefers-color-scheme: dark){.track{fill:#fff;fill-opacity:.07}.tick{fill:#fff;fill-opacity:.28}${toneCss(tones.dark)}}` +
+    `<style>.track{fill:#1f1d2e;fill-opacity:.08}.tick{fill:#1f1d2e;fill-opacity:.25}.pct{fill:#6b6a66}${toneCss(tones.light)}` +
+    `@media (prefers-color-scheme: dark){.track{fill:#fff;fill-opacity:.07}.tick{fill:#fff;fill-opacity:.28}.pct{fill:#9a9894}${toneCss(tones.dark)}}` +
     `.tw{animation:tw 1.4s ease-in-out infinite}@keyframes tw{33%{fill-opacity:.95}66%{fill-opacity:.1}}` +
     `.sw{animation:sw 2.2s linear infinite}@keyframes sw{to{transform:translateX(${(fillEnd + 48).toFixed(1)}px)}}` +
     `@media (prefers-reduced-motion: reduce){.tw,.sw{animation:none}.sw{display:none}}</style>`
 
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${H}" viewBox="0 0 ${width} ${H}">` +
     style +
     `<defs><clipPath id="track"><rect width="${W}" height="${H}" rx="${r}"/></clipPath>` +
     `<linearGradient id="sweep" x1="0" x2="1" y1="0" y2="0">` +
@@ -1586,6 +1607,9 @@ function barSvg(row: PipelineRow, isWorking: boolean): string {
     `<rect class="track" width="${W}" height="${H}" rx="${r}"/>` +
     `<g clip-path="url(#track)">${parts.join('')}</g>` +
     pill +
+    (isFinished
+      ? ''
+      : `<text class="pct" x="${width}" y="${r + 4.5}" text-anchor="end" ${font} font-variant-numeric="tabular-nums">${pct(row)}%</text>`) +
     `</svg>`
   )
 }

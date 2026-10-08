@@ -161,3 +161,23 @@ test("in a worktree, the item's file is found by the main repository's git dir",
   expect(json(files, '12.json').stages.plan).toEqual({ done: false })
   expect([...files.keys()].filter(f => f.startsWith(DIR))).toEqual([`${DIR}/12.json`])
 })
+
+test('a finished item says so, and its bar fills the width the band leaves', async ($, on) => {
+  const stages = Object.fromEntries(['start', 'plan', 'implement', 'test', 'review', 'pullRequest'].map(k => [k, { done: true }]))
+  world(on, 'feat/12-add-thing', {
+    [`${DIR}/12.json`]: JSON.stringify({ shortTitle: 'Add thing', branch: 'feat/12-add-thing', current: { detail: 'Writing the review page' }, stages }),
+  })
+  const engine = $ as never as {
+    tool: { call: (e: object) => Promise<unknown> }
+    ui: { mount: (e: object) => Promise<{ find: (q: object) => Promise<{ text: string; props: Record<string, unknown> } | undefined> }> }
+  }
+  await engine.tool.call({ tool: 'Read', file_path: 'x' })
+  const widths: number[] = []
+  for (const bodyColumns of [80, 160]) {
+    const ui = await engine.ui.mount({ plugin: 'dotnet-workflow-kit', surface: 'desktop', component: 'AbovePrompt', props: { isWorking: false, hasSurvey: false, bodyColumns } })
+    expect((await ui.find({ type: 'Text', text: /Every stage done/ }))?.text).toBe('Every stage done')
+    expect(await ui.find({ type: 'Text', text: /%$/ })).toBeUndefined()
+    widths.push(Number(/width="(\d+)"/.exec(String((await ui.find({ type: 'Svg' }))?.props.source))?.[1]))
+  }
+  expect(widths[1]).toBeGreaterThan(widths[0] + 500)
+})
