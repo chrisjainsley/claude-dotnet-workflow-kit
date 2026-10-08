@@ -37,6 +37,9 @@ def iter_text_files():
             continue
         if any(part in SKIP_DIR_NAMES for part in path.parts):
             continue
+        # plans/ is gitignored: the kit's own plan and review pages, built locally, never shipped.
+        if path.relative_to(REPO_ROOT).parts[0] == "plans":
+            continue
         if path.suffix.lower() in BINARY_SUFFIXES:
             continue
         yield path
