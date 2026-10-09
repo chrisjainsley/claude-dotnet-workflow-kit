@@ -281,12 +281,7 @@ table.fm-record td code { overflow-wrap: anywhere; }
 .wt-btn { color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 999px; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
 .wt-btn:hover:not([disabled]) { color: var(--accent); border-color: var(--accent); }
 .wt-btn[disabled] { opacity: 0.4; cursor: default; }
-.wt-play:focus-visible, .wt-btn:focus-visible, .wt-watch { font: 600 13px/1 var(--sans); color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 999px; padding: 0 14px 0 12px; min-height: 36px; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
-.wt-watch:hover { background: var(--card); }
-.wt-watch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.wt-len { font: 500 12px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
-dialog.diagram-modal .diagram-body video.overview { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; border-radius: 4px; }
-.wt-step { font: 500 12px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wt-play:focus-visible, .wt-btn:focus-visible, .wt-step { font: 500 12px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .wt-track { flex: 1 1 80px; min-width: 60px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
 .wt-track i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.4s ease; }
 .wt-caption { margin-top: 10px; font-size: 15.5px; line-height: 1.5; text-wrap: pretty; }
@@ -846,25 +841,6 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
     wtPrev.addEventListener('click', function () { jump(current - 1); });
     wtNext.addEventListener('click', function () { jump(current + 1); });
     wtStop.addEventListener('click', stop);
-    // The recorded overview plays in the full-size dialog; it pauses a running tour.
-    var wtWatch = document.getElementById('wt-watch');
-    if (wtWatch && modal && modalBody && typeof modal.showModal === 'function') {
-      wtWatch.addEventListener('click', function () {
-        if (playing) { pause(); }
-        modalBody.innerHTML = '';
-        var v = document.createElement('video');
-        v.className = 'overview';
-        v.controls = true;
-        v.playsInline = true;
-        v.preload = 'auto';
-        if (wtWatch.dataset.poster) { v.poster = wtWatch.dataset.poster; }
-        v.src = wtWatch.dataset.src;
-        modalBody.appendChild(v);
-        modal.showModal();
-        var started = v.play();
-        if (started && typeof started.catch === 'function') { started.catch(function () { /* the controls stay for a manual start */ }); }
-      });
-    } else if (wtWatch) { wtWatch.hidden = true; }
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && current >= 0 && !document.querySelector('dialog[open]')) { stop(); }
     });
