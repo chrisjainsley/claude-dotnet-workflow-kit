@@ -41,11 +41,12 @@ and links backticked File cells to full per-file diffs pulled from git for --ran
 (derived from the front matter when omitted), QA report renders scenario cards whose
 gherkin steps expand to the evidence captioned with their text,
 Rollout renders a persistent checklist, and Decision gets the approve /
-request-changes form. With the profile's optional.walkthrough on, a Walkthrough section is not drawn as a section: its
+request-changes form. With the profile's optional.walkthrough on, a closing Walkthrough section (in a plan or a
+review) is not drawn as a section: its
 numbered scenes become a player bar under the header that scrolls to each scene's
 target, highlights it (a flowmap box gets its edges animated) and reads the line aloud.
-Clips recorded by scripts/narrate.py (walkthrough/narration.json beside the source)
-play with each sentence captioned and are listed in review.files.json; a sentence
+Clips recorded by scripts/narrate.py (walkthrough/<plan|review>/narration.json beside
+the source) play with each sentence captioned and are listed in <kind>.files.json; a sentence
 without a clip is captioned silently for as long as it would take to say.
 """
 import argparse
@@ -96,6 +97,7 @@ BRAND_FOOTER = (
 )
 
 SOURCE_DIR = Path(".")
+SOURCE_STEM = "review"
 REPO_DIR = Path(".")
 KIND = "plan"
 MAX_IMAGE_WIDTH = 1600
@@ -995,9 +997,9 @@ def render_decision_form(open_findings, merged=False):
 
 
 def narration_clips():
-    """{sentence: clip path} from walkthrough/narration.json beside the source, written by
-    scripts/narrate.py; clips whose file is gone are left out."""
-    manifest = SOURCE_DIR / "walkthrough" / "narration.json"
+    """{sentence: clip path} from walkthrough/<plan|review>/narration.json beside the
+    source, written by scripts/narrate.py; clips whose file is gone are left out."""
+    manifest = SOURCE_DIR / "walkthrough" / SOURCE_STEM / "narration.json"
     if not manifest.is_file():
         return {}
     try:
@@ -1111,9 +1113,13 @@ def parse(text, kind=None):
     global KIND
     meta, sections = split_document(text)
     KIND = kind or infer_kind(meta, [name for name, _ in sections])
+    WALK_SCENES.clear()
     if KIND == "plan":
         output, questions = [], 0
         for name, lines in sections:
+            if name == WALKTHROUGH:
+                WALK_SCENES.extend(walkthrough_scenes("\n".join(lines))[0])
+                continue
             if name == QUESTIONS_SECTION:
                 body, count = render_questions(lines)
                 questions += count
@@ -1124,7 +1130,6 @@ def parse(text, kind=None):
             output.append((name, body))
         return meta, output, questions
     open_findings, output = [], []
-    WALK_SCENES.clear()
     for name, lines in sections:
         if name == WALKTHROUGH:
             WALK_SCENES.extend(walkthrough_scenes("\n".join(lines))[0])
@@ -1207,7 +1212,7 @@ def build(meta, sections, template, count=0, branded=True, walkthrough=False):
         "COUNT": str(len(sections)),
         "QUESTIONS": str(count if KIND == "plan" else 0),
         "OPEN": str(count if KIND == "review" else 0),
-        "WALKTHROUGH": render_walkthrough(WALK_SCENES) if KIND == "review" and walkthrough else "",
+        "WALKTHROUGH": render_walkthrough(WALK_SCENES) if walkthrough else "",
         "BRAND_STYLE": BRAND_STYLE if branded else "",
         "FOOTER": BRAND_FOOTER if branded else "",
     }.items():
@@ -1227,8 +1232,9 @@ def main(kind=None, argv=None):
     add_profile_arg(ap)
     args = ap.parse_args(argv)
     profile = resolve_profile(explicit=args.profile)
-    global SOURCE_DIR, REPO_DIR, DIFF_RANGE
+    global SOURCE_DIR, SOURCE_STEM, REPO_DIR, DIFF_RANGE
     SOURCE_DIR = Path(args.source).resolve().parent
+    SOURCE_STEM = Path(args.source).stem
     REPO_DIR = Path(args.repo).resolve()
     text = Path(args.source).read_text(encoding="utf-8")
     META.clear()
@@ -1249,15 +1255,15 @@ def main(kind=None, argv=None):
         print(f"wrote {args.out} ({len(page):,} bytes, {len(sections)} sections, {count} answerable questions)")
     else:
         print(f"wrote {args.out} ({len(page):,} bytes, {len(sections)} sections, {count} open findings in the decision form, {len(USED_FILES)} linked file diffs from {DIFF_RANGE})")
-        # Evidence media is referenced by relative path, so it is published beside the
-        # page: the list below is the Artifact tool's `files` argument, with root = the
-        # review's folder.
-        out_dir = Path(args.out).resolve().parent
-        manifest = out_dir / "review.files.json"
-        manifest.write_text(json.dumps(sorted(MEDIA_FILES), indent=2) + "\n", encoding="utf-8", newline="\n")
-        print(f"evidence files: {len(MEDIA_FILES)} ({manifest.name})")
-        if MEDIA_FILES and out_dir != SOURCE_DIR:
-            WARNINGS.append(f"--out is not beside {Path(args.source).name}; the page's evidence/ paths will not resolve until the files sit next to it")
+    # Evidence media and walkthrough clips are referenced by relative path, so they are
+    # published beside the page: the list below is the Artifact tool's `files` argument,
+    # with root = the document's folder.
+    out_dir = Path(args.out).resolve().parent
+    manifest = out_dir / f"{document_kind}.files.json"
+    manifest.write_text(json.dumps(sorted(MEDIA_FILES), indent=2) + "\n", encoding="utf-8", newline="\n")
+    print(f"published files: {len(MEDIA_FILES)} ({manifest.name})")
+    if MEDIA_FILES and out_dir != SOURCE_DIR:
+        WARNINGS.append(f"--out is not beside {Path(args.source).name}; the page's relative media paths will not resolve until the files sit next to it")
     for warning in WARNINGS:
         print("warning: " + warning, file=sys.stderr)
     return 0

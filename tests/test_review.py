@@ -316,7 +316,7 @@ def test_given_walkthrough_targets_then_each_must_resolve(review_fixture_path):
     assert code == 1
     assert "@no-such-node, which is not a flowmap node" in out
     assert "'nowhere-on-the-page' in Findings" in out
-    assert "'Testing', which is not a review section" in out
+    assert "'Testing', which is not a section of this document" in out
 
 
 def test_given_walkthrough_written_for_the_eye_then_check_fails(review_fixture_path):
@@ -414,7 +414,7 @@ def test_given_walkthrough_then_narrate_records_each_sentence_once(review_fixtur
     recorded, kept, removed = narrate.narrate(review_fixture_path, fake_synth(calls), mp3=False)
     assert recorded == len(calls) == len(set(calls)) == 16
     assert (kept, removed) == (0, 0)
-    clip_dir = review_fixture_path.parent / "walkthrough"
+    clip_dir = review_fixture_path.parent / "walkthrough" / "review"
     manifest = json.loads((clip_dir / "narration.json").read_text(encoding="utf-8"))
     assert manifest["voice"] == "af_heart"
     assert all((review_fixture_path.parent / c["file"]).is_file() for c in manifest["clips"])
@@ -431,7 +431,7 @@ def test_given_walkthrough_then_narrate_records_each_sentence_once(review_fixtur
 def test_given_recorded_clips_then_page_plays_and_publishes_them(review_fixture_path):
     narrate = load_narrate("narrate_test2")
     narrate.narrate(review_fixture_path, fake_synth([]), mp3=False)
-    (review_fixture_path.parent / "walkthrough" / (narrate.clip_name("The whole change is policy XML.") + ".wav")).unlink()
+    (review_fixture_path.parent / "walkthrough" / "review" / (narrate.clip_name("The whole change is policy XML.") + ".wav")).unlink()
     out_path = review_fixture_path.parent / "review.html"
     code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef", *WALK_ON)
     assert code == 0, out + err
@@ -440,7 +440,7 @@ def test_given_recorded_clips_then_page_plays_and_publishes_them(review_fixture_
     assert sum(1 for l in lines if "audio" not in l) == 1
     files = json.loads((review_fixture_path.parent / "review.files.json").read_text(encoding="utf-8"))
     assert len(files) == len(lines) - 1
-    assert all(f.startswith("walkthrough/") and f.endswith(".wav") for f in files)
+    assert all(f.startswith("walkthrough/review/") and f.endswith(".wav") for f in files)
 
 
 def test_given_walkthrough_off_then_narrate_records_nothing(review_fixture_path):

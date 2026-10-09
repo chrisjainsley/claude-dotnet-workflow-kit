@@ -734,7 +734,7 @@ tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
     }
     function findIn(section, needle) {
       var want = needle.toLowerCase();
-      var picks = section.querySelectorAll('tbody tr, .tile, h3, h4, details > summary, li, .fm-node, p');
+      var picks = section.querySelectorAll('tbody tr, .tile, fieldset.q, h3, h4, details > summary, li, .fm-node, pre, figure, p');
       for (var i = 0; i < picks.length; i++) {
         if (picks[i].textContent.toLowerCase().indexOf(want) >= 0) { return picks[i]; }
       }

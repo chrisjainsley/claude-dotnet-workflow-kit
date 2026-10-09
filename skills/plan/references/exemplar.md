@@ -4,6 +4,8 @@ The original plan-skill output for this ticket ran 3,373 prose words with a flow
 diagram, a data model, three annotated code tabs and a question form. This is the
 same plan at about 800 prose words. Nothing an implementer would act on differently was
 lost. Use it as the bar for density, section shape and tone; do not copy its content.
+Its closing Walkthrough, written because the profile has `optional.walkthrough` on,
+narrates the plan for the person answering it and ends on the questions form.
 
 ```markdown
 ---
@@ -142,4 +144,15 @@ Shared infra: `TestUser.Email` and an `AcmeEmail` header in `GraphQLTestClient` 
    - [x] **No backfill.** Test accounts only; a tester re-signing up with an alias being credited is acceptable there.
    - [ ] **One-off processor.** Walk ledger Grant rows, resolve each aggregate email, claim the key. Precedent: `BackfillUserAnniversariesProcessor`.
 3. Anything else to preserve or avoid?
+
+## Walkthrough
+
+1. `Requirement` Today every new account gets one thousand points, so a second account is another ten dollars. This plan grants it once per payer, judged by the email root.
+2. `Specs > plus alias` Three scenarios pin the rule down. A plus alias of an existing member gets nothing, while a different person at the same provider still gets the full grant.
+3. `Application > TryClaimAsync` A new payer grain, keyed by a hash of the email root, claims the grant. Any earlier claim blocks every once per payer campaign, for life.
+4. `Decisions > Gate inside the account grain` The gate sits inside the account grain, not the issuer, so the admin mutation follows the same rule and acceptance tests can reach it.
+5. `Risks and rollout > Terraform first` The rollout risk is ordering. The new storage container goes to sandbox before the deploy, or the first flagged grant fails.
+6. `Open questions > durable sign-in identity` Question one asks whether to include the durable sign-in identity now. The recommendation is to defer it until the checkout story lands.
+7. `Open questions > Backfill payer claims` Question two asks whether to backfill grants already issued on sandbox and dev. The recommendation is no, because those are test accounts.
+8. `Open questions` Pick an answer for each question, then approve the plan or ask for a revision from the form.
 ```

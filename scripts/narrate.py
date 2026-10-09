@@ -1,16 +1,17 @@
 #!/usr/bin/env python
-"""Record the review's Walkthrough with Kokoro, an open-source voice model run locally.
+"""Record a plan's or review's Walkthrough with Kokoro, an open-source voice model run locally.
 
 Usage:
   python narrate.py plans/<slug>/review.md [--profile <profile.json>]
+  python narrate.py plans/<slug>/plan.md
 
-Runs only when the profile's optional.walkthrough is true. Every review uses the same
+Runs only when the profile's optional.walkthrough is true. Every page uses the same
 voice, Kokoro's af_heart. Each spoken sentence becomes one clip under
-plans/<slug>/walkthrough/, named by a hash of the voice and text, so a rebuild only
-records the sentences that changed and
-deletes clips no sentence uses any more. walkthrough/narration.json maps each sentence
-to its clip; the page builder reads it, attaches each clip to its sentence and lists
-them in review.files.json so they publish next to the page.
+plans/<slug>/walkthrough/<plan|review>/, named by a hash of the voice and text, so a
+rebuild only records the sentences that changed and deletes clips no sentence uses any
+more. narration.json in that folder maps each sentence to its clip; the page builder
+reads it, attaches each clip to its sentence and lists the clips in plan.files.json or
+review.files.json so they publish next to the page.
 
 Needs `pip install kokoro-onnx` (onnxruntime, no PyTorch). The model (88 MB) and the
 voice pack (28 MB) download once from the kokoro-onnx GitHub release into --model-dir
@@ -97,6 +98,12 @@ def encode(wav, mp3):
     return done.stdout, ".mp3"
 
 
+def clip_dir(source):
+    """walkthrough/<plan|review>/ beside the source: a plan and its review share a folder,
+    and each recording deletes the clips its own document no longer uses."""
+    return source.parent / CLIP_DIR / source.stem
+
+
 def clip_name(text, voice=VOICE, speed=SPEED):
     return hashlib.sha256(f"{voice}|{speed}|{text}".encode("utf-8")).hexdigest()[:16]
 
@@ -113,8 +120,8 @@ def sentences_of(source):
 def narrate(source, synth, mp3=True, voice=VOICE, speed=SPEED):
     """Record every Walkthrough sentence that has no clip yet, drop clips no sentence
     uses, and write the manifest. Returns (recorded, kept, removed)."""
-    out_dir = source.parent / CLIP_DIR
-    out_dir.mkdir(exist_ok=True)
+    out_dir = clip_dir(source)
+    out_dir.mkdir(parents=True, exist_ok=True)
     ext = ".mp3" if mp3 else ".wav"
     clips, recorded, kept = [], 0, 0
     for text in dict.fromkeys(sentences_of(source)):
@@ -128,7 +135,7 @@ def narrate(source, synth, mp3=True, voice=VOICE, speed=SPEED):
             recorded += 1
         else:
             kept += 1
-        clips.append({"text": text, "file": f"{CLIP_DIR}/{existing.name}"})
+        clips.append({"text": text, "file": existing.relative_to(source.parent).as_posix()})
     used = {Path(c["file"]).name for c in clips}
     removed = 0
     for old in out_dir.iterdir():
@@ -159,7 +166,7 @@ def main(argv=None):
         return 2
     recorded, kept, removed = narrate(source, synth, mp3=shutil.which("ffmpeg") is not None)
     print(f"narration: {recorded} recorded, {kept} unchanged, {removed} removed "
-          f"({source.parent / CLIP_DIR / MANIFEST})")
+          f"({clip_dir(source) / MANIFEST})")
     return 0
 
 

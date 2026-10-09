@@ -68,3 +68,11 @@ Feature: <name>
    - [x] **<Recommended option.>** <Why it is the default, one or two sentences.>
    - [ ] **<Alternative.>** <What it costs or buys.>
 2. Anything else to preserve or avoid?
+
+## Walkthrough
+<!-- Only when the profile's optional.walkthrough is true; otherwise delete this section. A narrated tour the page plays from a button under the header: it scrolls to each scene's target, highlights it and plays the line, recorded with Kokoro by scripts/narrate.py (captions always show). Up to eight numbered scenes, each a backticked target then one spoken line of at most 45 words, 220 words in all. Targets: a section name (`Requirement`), or text inside one (`Decisions > words from the bullet`, `Open questions > words from the question title`). Write for the ear: plain sentences, numbers as words, no backticks, links or markdown. Every fact must already be on the page. Order it for the person answering: what is built, the rule, the riskiest decision or rollout step, each open question with its recommendation, then the form. -->
+
+1. `Requirement` <what this builds and why, in one or two spoken sentences>
+2. `Decisions > <words from the bullet>` <the decision the reader would most likely question>
+3. `Open questions > <words from question one's title>` <the question and the recommended answer>
+4. `Open questions` <answer the questions, then approve or ask for a revision>

@@ -59,7 +59,7 @@ REVIEW_BANNED = [
 ]
 REVIEW_META = ("title", "ticket", "pr", "branch", "base")
 # The narrated walkthrough, on when the profile's optional.walkthrough is true: numbered
-# scenes after Decision, each a backticked target (a section, "Section > text" for a row
+# scenes after the last section (Decision in a review, Open questions in a plan), each a backticked target (a section, "Section > text" for a row
 # or heading in it, or "@node" for a flowmap box) and one spoken line, recorded with
 # Kokoro by scripts/narrate.py and played by the page.
 WALKTHROUGH = "Walkthrough"
@@ -105,9 +105,9 @@ def scene_target(target):
     return "section", name.strip(), needle.strip() or None
 
 
-def check_walkthrough(text, by_name, multiplier):
+def check_walkthrough(text, by_name, multiplier, sections):
     """Scene count, words per scene and in total, spoken-text hygiene, and that every
-    target names a review section, text inside it, or a flowmap node."""
+    target names one of the document's sections, text inside it, or a flowmap node."""
     failures = []
     scenes, stray = walkthrough_scenes(text)
     for line in stray:
@@ -118,14 +118,14 @@ def check_walkthrough(text, by_name, multiplier):
         failures.append(f"Walkthrough: {len(scenes)} scenes, cap {MAX_SCENES}")
     maps = [b for lang, b in fences(by_name.get("Changes", "")) if lang == "flowmap"]
     nodes = {n["id"] for n in flowmap.parse("\n".join(maps[0]))[0]["nodes"]} if maps else set()
-    sections = {name for name, _ in REVIEW_SECTIONS}
+    sections = set(sections)
     total = 0
     for n, (target, words_text) in enumerate(scenes, start=1):
         kind, name, needle = scene_target(target)
         if kind == "node" and name not in nodes:
             failures.append(f"Walkthrough: scene {n} targets @{name}, which is not a flowmap node")
         elif kind == "section" and name not in sections:
-            failures.append(f"Walkthrough: scene {n} targets '{name}', which is not a review section")
+            failures.append(f"Walkthrough: scene {n} targets '{name}', which is not a section of this document")
         elif needle and needle.lower() not in by_name.get(name, "").lower():
             failures.append(f"Walkthrough: scene {n} looks for '{needle}' in {name}, which does not contain it")
         words = count_words(words_text)
@@ -432,7 +432,7 @@ def report(failures):
     return 0
 
 
-def check_plan(meta, body, multiplier, sections, disallowed=()):
+def check_plan(meta, body, multiplier, sections, disallowed=(), walkthrough=False):
     failures = list(disallowed)
     for key in ("title", "ticket"):
         if not meta.get(key):
@@ -441,8 +441,12 @@ def check_plan(meta, body, multiplier, sections, disallowed=()):
     found = split_sections(body)
     found_names = [name for name, _ in found]
     expected_names = [name for name, _, _ in sections]
+    walk = dict(found).get(WALKTHROUGH)
+    if found_names and found_names[-1] == WALKTHROUGH:
+        found, found_names = found[:-1], found_names[:-1]
     if found_names != expected_names:
-        failures.append("sections must be exactly, in order: " + " > ".join(expected_names))
+        failures.append("sections must be exactly, in order: " + " > ".join(expected_names)
+                        + f" (then an optional {WALKTHROUGH})")
         failures.append("found: " + " > ".join(found_names))
 
     rows, total_prose = [], 0
@@ -475,6 +479,13 @@ def check_plan(meta, body, multiplier, sections, disallowed=()):
         if not content.strip():
             failures.append(f"{name}: empty. Write 'No change.' if the layer is untouched")
         rows.append((name, words, limit, bullets, status))
+
+    if walk is not None and not walkthrough:
+        print(f"note: the {WALKTHROUGH} section is not checked and the page ignores it, because optional.walkthrough is false\n")
+    elif walk is not None:
+        walk_failures, spoken, spoken_cap = check_walkthrough(walk, dict(found), multiplier, expected_names)
+        failures += walk_failures
+        rows.append((WALKTHROUGH + " (spoken)", spoken, spoken_cap, 0, "OVER" if spoken > spoken_cap else "ok"))
 
     report_banned(body, PLAN_BANNED, failures)
 
@@ -575,7 +586,8 @@ def check_review(meta, body, multiplier, slices=None, walkthrough=False):
     if WALKTHROUGH in by_name and not walkthrough:
         print(f"note: the {WALKTHROUGH} section is not checked and the page ignores it, because optional.walkthrough is false\n")
     elif WALKTHROUGH in by_name:
-        walk_failures, spoken, spoken_cap = check_walkthrough(by_name[WALKTHROUGH], by_name, multiplier)
+        walk_failures, spoken, spoken_cap = check_walkthrough(by_name[WALKTHROUGH], by_name, multiplier,
+                                                              [n for n, _ in REVIEW_SECTIONS])
         failures += walk_failures
         rows.append((WALKTHROUGH + " (spoken)", spoken, spoken_cap, "OVER" if spoken > spoken_cap else "ok"))
 
@@ -610,7 +622,8 @@ def main(kind=None, argv=None):
     if document_kind == "plan":
         present = [name for name, _ in split_sections(body)]
         return check_plan(meta, body, multiplier, expected_plan_sections(profile, present),
-                          disallowed_plan_sections(profile, present))
+                          disallowed_plan_sections(profile, present),
+                          walkthrough=bool(profile.get("optional", {}).get("walkthrough", False)))
     return check_review(meta, body, multiplier, review_slices(profile),
                         walkthrough=bool(profile.get("optional", {}).get("walkthrough", False)))
 
