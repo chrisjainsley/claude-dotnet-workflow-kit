@@ -127,7 +127,15 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    then shows the captions without sound. The first run downloads the model (116 MB)
    once.
    Rebuild after any change to the Walkthrough, or the builder warns that a sentence
-   has no clip.
+   has no clip. Then **record the overview video**:
+   ```bash
+   python "SKILL_DIR/../../scripts/overview.py" plans/<slug>/review.md
+   ```
+   It plays the page's walkthrough in headless Chromium and saves a 1080p MP4 with a
+   title card to `plans/<slug>/overview/review.mp4`; the page gets a **Watch overview**
+   button for it. Pass the same `--range` or `--repo` the build takes. It re-records only
+   when the review or its clips changed. Exit 2 means Playwright or ffmpeg is missing:
+   say `skipped: overview video` with what it named and carry on.
    Then **build** from the repository root with the branch checked out and the base fetched:
    ```bash
    python "SKILL_DIR/scripts/build_review.py" plans/<slug>/review.md --out plans/<slug>/review.html
@@ -137,7 +145,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    override and `--repo` when the review lives outside the checkout. Read the warnings it
    prints: an unlinked File cell means the path did not match one changed file. Keep
    `--out` beside `review.md`: the page links evidence media by its `evidence/` path
-   and narration clips by their `walkthrough/` path, and the builder lists those files
+   narration clips by their `walkthrough/` path and the overview video by its `overview/` path, and the builder lists those files
    in `plans/<slug>/review.files.json`.
 9. **Publish.** With `artifacts: true`, use the Artifact tool: `file_path` is
    `review.html`, `favicon` 🔍 on the first publish only, one-sentence `description`,
@@ -231,6 +239,7 @@ agree, report what happened rather than what should have, diffs carry a decision
 - `assets/page.html` (repository root): the shared page shell, carrying the tiles, pills, collapsed hunks, linked file diffs, checklist, decision form and the walkthrough player, which plays the recorded clips.
 - `scripts/check_review.py`: budget and structure gate; exit 1 on any breach. Takes `--profile`. Wraps `scripts/check.py` (repository root) in review mode.
 - `scripts/narrate.py` (repository root): records the Walkthrough with Kokoro (`pip install kokoro-onnx`), one cached clip per sentence.
+- `scripts/overview.py` (repository root): records the walkthrough as an overview video (Playwright and ffmpeg).
 - `scripts/build_review.py`: markdown subset to HTML with the section-specific renderers; pulls per-file diffs from git. Wraps `scripts/render.py` (repository root) in review mode.
 - `references/exemplar.md`: a filled review for a real merged PR, identifiers scrubbed.
 - `sweep.md`: the reviewer sweep, run here when no fresh sweep exists and by `implement` at the end of its stage.

@@ -47,7 +47,8 @@ numbered scenes become a player bar under the header that scrolls to each scene'
 target, highlights it (a flowmap box gets its edges animated) and reads the line aloud.
 Clips recorded by scripts/narrate.py (walkthrough/<plan|review>/narration.json beside
 the source) play with each sentence captioned and are listed in <kind>.files.json; a sentence
-without a clip is captioned silently for as long as it would take to say.
+without a clip is captioned silently for as long as it would take to say. A video recorded
+by scripts/overview.py (overview/<plan|review>.mp4) adds a Watch overview button.
 """
 import argparse
 import base64
@@ -1010,6 +1011,39 @@ def narration_clips():
     return {c["text"]: c["file"] for c in data.get("clips", []) if (SOURCE_DIR / c.get("file", "")).is_file()}
 
 
+def overview_button():
+    """The Watch overview button when scripts/overview.py has recorded overview/<stem>.mp4;
+    the video and its poster are listed for publishing next to the page."""
+    video = SOURCE_DIR / "overview" / f"{SOURCE_STEM}.mp4"
+    if not video.is_file():
+        return ""
+    files = [f"overview/{SOURCE_STEM}.mp4"]
+    poster = video.with_suffix(".jpg")
+    if poster.is_file():
+        files.append(f"overview/{SOURCE_STEM}.jpg")
+    for path in files:
+        if path not in MEDIA_FILES:
+            MEDIA_FILES.append(path)
+    length = ""
+    stamp = video.with_suffix(".json")
+    try:
+        recorded = json.loads(stamp.read_text(encoding="utf-8"))
+        seconds = round(recorded.get("seconds", 0))
+        if seconds:
+            length = f'<span class="wt-len">{seconds // 60}:{seconds % 60:02d}</span>'
+        import overview
+        if recorded.get("fingerprint") and recorded["fingerprint"] != overview.fingerprint(SOURCE_DIR / f"{SOURCE_STEM}.md"):
+            WARNINGS.append(f"overview/{SOURCE_STEM}.mp4 was recorded before the latest changes; rerun scripts/overview.py")
+    except (OSError, ValueError):
+        pass
+    poster_attr = f' data-poster="{files[1]}"' if len(files) > 1 else ""
+    return (
+        f'<button type="button" class="wt-watch" id="wt-watch" data-src="{files[0]}"{poster_attr}>'
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h9v9h-9zM11.5 6.5l3-2v7l-3-2z"/></svg>'
+        f'<span>Watch overview</span>{length}</button>'
+    )
+
+
 def render_walkthrough(scenes):
     """The player bar: controls, a caption line and the scenes as JSON for the page script.
     Sentences with a recorded clip carry its path; the rest are captioned without sound."""
@@ -1056,6 +1090,7 @@ def render_walkthrough(scenes):
         '<span class="wt-track" aria-hidden="true"><i id="wt-fill"></i></span>'
         '<button type="button" class="wt-btn wt-stop" id="wt-stop" aria-label="Stop the walkthrough" hidden>'
         '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h10v10H3z"/></svg></button>'
+        + overview_button() +
         '</div>'
         '<p class="wt-caption" id="wt-caption" aria-live="polite" hidden></p>'
         f'<script type="application/json" class="wt-data">{payload}</script>'

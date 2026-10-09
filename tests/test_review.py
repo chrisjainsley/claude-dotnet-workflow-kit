@@ -454,3 +454,68 @@ def test_given_no_kokoro_then_narrate_exits_2(review_fixture_path, monkeypatch):
     monkeypatch.setattr(narrate, "kokoro_engine", lambda *a: None)
     assert narrate.main([str(review_fixture_path), "--profile", str(FIXTURES_DIR / "profile-walkthrough.json")]) == 2
     assert not (review_fixture_path.parent / "walkthrough").exists()
+
+
+def load_overview(name):
+    return import_module_from_path(name, RENDER_PY.parent / "overview.py")
+
+
+def test_given_frames_then_ffconcat_holds_each_until_the_next():
+    overview = load_overview("overview_concat")
+    text = overview.ffconcat([("f0.jpg", 10.0), ("f1.jpg", 10.5), ("f2.jpg", 12.0)], 13.25)
+    assert text.splitlines() == ["ffconcat version 1.0", "file f0.jpg", "duration 0.5000", "file f1.jpg",
+                                 "duration 1.5000", "file f2.jpg", "duration 1.2500", "file f2.jpg"]
+
+
+def test_given_played_clips_then_audio_graph_places_each_at_its_start():
+    overview = load_overview("overview_graph")
+    graph = overview.audio_graph([("/a.mp3", 100.75), ("/b.mp3", 104.0)], 100.0, 9.0)
+    assert "[1:a]aresample=48000,adelay=750:all=1[a0]" in graph
+    assert "[2:a]aresample=48000,adelay=4000:all=1[a1]" in graph
+    assert "[a0][a1]amix=inputs=2" in graph and "atrim=0:9.000" in graph
+    assert "anullsrc" in overview.audio_graph([], 100.0, 5.0)
+
+
+def test_given_walkthrough_off_or_tools_missing_then_overview_records_nothing(review_fixture_path, monkeypatch, capsys):
+    overview = load_overview("overview_gate")
+    assert overview.main([str(review_fixture_path), "--profile", str(FIXTURES_DIR / "profile-checks.json")]) == 0
+    assert "optional.walkthrough is false" in capsys.readouterr().out
+    monkeypatch.setattr(overview, "tools_missing", lambda: ["ffmpeg"])
+    assert overview.main([str(review_fixture_path), *map(str, WALK_ON)]) == 2
+    assert "needs ffmpeg" in capsys.readouterr().out
+    assert not (review_fixture_path.parent / "overview").exists()
+
+
+def test_given_clips_change_then_overview_fingerprint_changes(review_fixture_path):
+    overview = load_overview("overview_print")
+    narrate = load_narrate("narrate_print")
+    before = overview.fingerprint(review_fixture_path)
+    narrate.narrate(review_fixture_path, fake_synth([]), mp3=False)
+    assert overview.fingerprint(review_fixture_path) != before
+
+
+def test_given_overview_video_then_page_offers_and_publishes_it(review_fixture_path):
+    folder = review_fixture_path.parent / "overview"
+    folder.mkdir()
+    (folder / "review.mp4").write_bytes(b"\x00")
+    (folder / "review.jpg").write_bytes(b"\x00")
+    (folder / "review.json").write_text('{"seconds": 77.4}', encoding="utf-8")
+    out_path = review_fixture_path.parent / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef", *WALK_ON)
+    assert code == 0, out + err
+    page = out_path.read_text(encoding="utf-8")
+    assert 'id="wt-watch" data-src="overview/review.mp4" data-poster="overview/review.jpg"' in page
+    assert '<span class="wt-len">1:17</span>' in page
+    files = json.loads((review_fixture_path.parent / "review.files.json").read_text(encoding="utf-8"))
+    assert {"overview/review.mp4", "overview/review.jpg"} <= set(files)
+
+
+def test_given_overview_older_than_the_review_then_build_warns(review_fixture_path):
+    folder = review_fixture_path.parent / "overview"
+    folder.mkdir()
+    (folder / "review.mp4").write_bytes(b"\x00")
+    (folder / "review.json").write_text('{"seconds": 60, "fingerprint": "older"}', encoding="utf-8")
+    out_path = review_fixture_path.parent / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef", *WALK_ON)
+    assert code == 0, out + err
+    assert "recorded before the latest changes" in err

@@ -96,6 +96,10 @@ def reviewer_report(profile):
             rows.append(("walkthrough", "runs", "narrated by Kokoro on this machine"))
         else:
             rows.append(("walkthrough", "skipped", "captions only until `pip install kokoro-onnx`"))
+        from overview import tools_missing
+        missing = tools_missing()
+        rows.append(("overview video", "skipped" if missing else "runs",
+                     "needs " + " and ".join(missing) if missing else "recorded with Playwright and ffmpeg"))
     return rows
 
 
