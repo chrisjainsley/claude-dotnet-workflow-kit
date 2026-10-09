@@ -21,6 +21,7 @@ machine. Exit 2 when Kokoro is not installed; the page then shows the captions w
 sound.
 """
 import argparse
+import array
 import hashlib
 import io
 import json
@@ -78,8 +79,11 @@ def kokoro_engine(folder, voice=VOICE, speed=SPEED):
 
 
 def wav_bytes(samples, rate):
-    import numpy as np
-    pcm = (np.clip(samples, -1, 1) * 32767).astype("<i2").tobytes()
+    """16-bit mono WAV from float samples in -1..1, with the standard library only."""
+    pcm = array.array("h", (round(max(-1.0, min(1.0, float(v))) * 32767) for v in samples))
+    if sys.byteorder == "big":
+        pcm.byteswap()
+    pcm = pcm.tobytes()
     buffer = io.BytesIO()
     with wave.open(buffer, "wb") as w:
         w.setnchannels(1)
