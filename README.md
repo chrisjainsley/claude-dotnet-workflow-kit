@@ -98,6 +98,11 @@ plan; on Approve it goes straight on to Implement. If the page says to tell Clau
 "decided", the session could not be reached; say it in chat and the skill reads the
 stored choices.
 
+With `optional.walkthrough` on, the plan page also has **Walk me through it**: a
+narrated tour of what gets built, the riskiest decision and each open question with
+its recommendation, ending on the form. It works as the review's does, described
+below.
+
 ![Plan page showing Context, Specs and the Open questions form](docs/images/plan-page.png)
 
 ### implement
@@ -142,6 +147,21 @@ to full diffs, findings, the QA report and a rollout checklist. Choose **Approve
 **Request changes** and press **Send decision**. The page passes the decision to the
 session, which reads it with each open finding's fix or accept choice; on Approve it
 goes straight on to the pull request stage. Say "decided" in chat if the page asks.
+
+With `optional.walkthrough` on, the review (and the plan, see above) ends with a short
+narrated tour and the page gets a **Walk me through it** button under the header. It scrolls to each
+scene, highlights the row or flowmap box, animates the box's connections and plays
+the line with its caption. The voice is recorded when the review is built, by
+[Kokoro](https://github.com/thewh1teagle/kokoro-onnx), an open-source voice model
+that runs on your machine (`pip install kokoro-onnx`; the model downloads once). The
+text is never sent anywhere, and every reader hears the same voice in any browser.
+Without Kokoro installed, the tour plays as captions only.
+
+The same switch records the tour as an **overview video**: a 1080p MP4 with a title
+card, the voice and captions, which the page plays from **Watch overview** and which
+can be shared on its own. `scripts/overview.py` plays the page in headless Chromium,
+so it needs `pip install playwright`, `python -m playwright install chromium` and
+ffmpeg; without them the page keeps the tour and skips the video.
 
 ![Review page showing verdict tiles, the change diagram and decision form](docs/images/review-page.png)
 
@@ -333,6 +353,7 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `optional.dotnet-claude-kit` | `true`, `false` | `false` | Companion plugin availability. |
 | `optional.codex` | `true`, `false` | `false` | Enable the Codex second-opinion reviewer. |
 | `optional.roslyn-mcp` | `true`, `false` | `false` | Roslyn MCP availability for code-review-workflow. |
+| `optional.walkthrough` | `true`, `false` | `false` | Narrated walkthrough and overview video on the plan and review pages, voiced by Kokoro on your machine (`pip install kokoro-onnx`; the video also needs Playwright and ffmpeg). See [review](#review). |
 | `optional.jev` | `true`, `false` | `false` | Jev availability: a `TYPESAFE_API_KEY` or a `jev` MCP server. Detected by setup. See [Jev](#jev). |
 | `jev.flag_at` | Number from 0 to 1 | `0.75` | Probability at or above which a scored check becomes a finding at the rule's severity. |
 | `jev.review_at` | Number from 0 to 1, at most `flag_at` | `0.4` | Probability at or above which a scored check is listed as low with "confirm by reading". |

@@ -41,7 +41,14 @@ and links backticked File cells to full per-file diffs pulled from git for --ran
 (derived from the front matter when omitted), QA report renders scenario cards whose
 gherkin steps expand to the evidence captioned with their text,
 Rollout renders a persistent checklist, and Decision gets the approve /
-request-changes form.
+request-changes form. With the profile's optional.walkthrough on, a closing Walkthrough section (in a plan or a
+review) is not drawn as a section: its
+numbered scenes become a player bar under the header that scrolls to each scene's
+target, highlights it (a flowmap box gets its edges animated) and reads the line aloud.
+Clips recorded by scripts/narrate.py (walkthrough/<plan|review>/narration.json beside
+the source) play with each sentence captioned and are listed in <kind>.files.json; a sentence
+without a clip is captioned silently for as long as it would take to say. A video recorded
+by scripts/overview.py (overview/<plan|review>.mp4) adds a Watch overview button.
 """
 import argparse
 import base64
@@ -64,7 +71,7 @@ DEFAULT_TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "page.html"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit_profile import add_profile_arg, resolve_profile  # noqa: E402
-from check import STEP_RE, is_video, step_key  # noqa: E402
+from check import STEP_RE, WALKTHROUGH, is_video, scene_target, spoken_sentences, step_key, walkthrough_scenes  # noqa: E402
 import flowmap  # noqa: E402
 
 # Delivery Labs branding: the profile's `branding` flag (default true) switches it off.
@@ -91,6 +98,7 @@ BRAND_FOOTER = (
 )
 
 SOURCE_DIR = Path(".")
+SOURCE_STEM = "review"
 REPO_DIR = Path(".")
 KIND = "plan"
 MAX_IMAGE_WIDTH = 1600
@@ -111,6 +119,7 @@ FILE_STATUS = {}
 FLOW_EXAMPLES = {}
 FLOW_COUNT = [0]
 USED_FILES = []
+WALK_SCENES = []
 WARNINGS = []
 MEDIA_FILES = []
 HTTP_STATUS_RE = re.compile(r"^HTTP/\d(?:\.\d)?\s+(\d{3})\b")
@@ -988,6 +997,107 @@ def render_decision_form(open_findings, merged=False):
     return "".join(out)
 
 
+def narration_clips():
+    """{sentence: clip path} from walkthrough/<plan|review>/narration.json beside the
+    source, written by scripts/narrate.py; clips whose file is gone are left out."""
+    manifest = SOURCE_DIR / "walkthrough" / SOURCE_STEM / "narration.json"
+    if not manifest.is_file():
+        return {}
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except ValueError:
+        WARNINGS.append(f"{manifest} is not valid JSON; the walkthrough plays captions only")
+        return {}
+    return {c["text"]: c["file"] for c in data.get("clips", []) if (SOURCE_DIR / c.get("file", "")).is_file()}
+
+
+def overview_button():
+    """The Watch overview button when scripts/overview.py has recorded overview/<stem>.mp4;
+    the video and its poster are listed for publishing next to the page."""
+    video = SOURCE_DIR / "overview" / f"{SOURCE_STEM}.mp4"
+    if not video.is_file():
+        return ""
+    files = [f"overview/{SOURCE_STEM}.mp4"]
+    poster = video.with_suffix(".jpg")
+    if poster.is_file():
+        files.append(f"overview/{SOURCE_STEM}.jpg")
+    for path in files:
+        if path not in MEDIA_FILES:
+            MEDIA_FILES.append(path)
+    length = ""
+    stamp = video.with_suffix(".json")
+    try:
+        recorded = json.loads(stamp.read_text(encoding="utf-8"))
+        seconds = round(recorded.get("seconds", 0))
+        if seconds:
+            length = f'<span class="wt-len">{seconds // 60}:{seconds % 60:02d}</span>'
+        import overview
+        if recorded.get("fingerprint") and recorded["fingerprint"] != overview.fingerprint(SOURCE_DIR / f"{SOURCE_STEM}.md"):
+            WARNINGS.append(f"overview/{SOURCE_STEM}.mp4 was recorded before the latest changes; rerun scripts/overview.py")
+    except (OSError, ValueError):
+        pass
+    poster_attr = f' data-poster="{files[1]}"' if len(files) > 1 else ""
+    return (
+        f'<button type="button" class="wt-watch" id="wt-watch" data-src="{files[0]}"{poster_attr}>'
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h9v9h-9zM11.5 6.5l3-2v7l-3-2z"/></svg>'
+        f'<span>Watch overview</span>{length}</button>'
+    )
+
+
+def render_walkthrough(scenes):
+    """The player bar: controls, a caption line and the scenes as JSON for the page script.
+    Sentences with a recorded clip carry its path; the rest are captioned without sound."""
+    if not scenes:
+        return ""
+    clips = narration_clips()
+    data, missing = [], 0
+    for target, text in scenes:
+        kind, name, needle = scene_target(target)
+        lines = []
+        for sentence in spoken_sentences(text):
+            line = {"text": sentence}
+            if sentence in clips:
+                line["audio"] = clips[sentence]
+                if clips[sentence] not in MEDIA_FILES:
+                    MEDIA_FILES.append(clips[sentence])
+            else:
+                missing += 1
+            lines.append(line)
+        scene = {"text": text, "lines": lines}
+        if kind == "node":
+            scene["node"] = name
+        else:
+            scene["section"] = slug(name)
+            if needle:
+                scene["find"] = needle
+        data.append(scene)
+    if missing:
+        WARNINGS.append(f"walkthrough: {missing} sentence(s) have no recorded clip and play as captions only; run scripts/narrate.py")
+    payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
+    total = len(scenes)
+    return (
+        f'<section class="wt" id="wt" aria-label="Narrated walkthrough">'
+        '<div class="wt-bar">'
+        '<button type="button" class="wt-play" id="wt-play" aria-pressed="false">'
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><path class="i-play" d="M4 2.5v11l9-5.5z"/>'
+        '<path class="i-pause" d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/></svg>'
+        '<span class="wt-label">Walk me through it</span></button>'
+        '<button type="button" class="wt-btn" id="wt-prev" aria-label="Previous scene" disabled>'
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h2v10H3zM14 3v10L6 8z"/></svg></button>'
+        '<button type="button" class="wt-btn" id="wt-next" aria-label="Next scene">'
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 3h2v10h-2zM2 3v10l8-5z"/></svg></button>'
+        f'<span class="wt-step" id="wt-step">{total} scenes</span>'
+        '<span class="wt-track" aria-hidden="true"><i id="wt-fill"></i></span>'
+        '<button type="button" class="wt-btn wt-stop" id="wt-stop" aria-label="Stop the walkthrough" hidden>'
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h10v10H3z"/></svg></button>'
+        + overview_button() +
+        '</div>'
+        '<p class="wt-caption" id="wt-caption" aria-live="polite" hidden></p>'
+        f'<script type="application/json" class="wt-data">{payload}</script>'
+        '</section>'
+    )
+
+
 def parse_meta(text):
     meta = {}
     if text.startswith("---"):
@@ -1038,9 +1148,13 @@ def parse(text, kind=None):
     global KIND
     meta, sections = split_document(text)
     KIND = kind or infer_kind(meta, [name for name, _ in sections])
+    WALK_SCENES.clear()
     if KIND == "plan":
         output, questions = [], 0
         for name, lines in sections:
+            if name == WALKTHROUGH:
+                WALK_SCENES.extend(walkthrough_scenes("\n".join(lines))[0])
+                continue
             if name == QUESTIONS_SECTION:
                 body, count = render_questions(lines)
                 questions += count
@@ -1052,6 +1166,9 @@ def parse(text, kind=None):
         return meta, output, questions
     open_findings, output = [], []
     for name, lines in sections:
+        if name == WALKTHROUGH:
+            WALK_SCENES.extend(walkthrough_scenes("\n".join(lines))[0])
+            continue
         mode = REVIEW_MODES.get(name)
         if mode == "changes":
             lines = take_examples(lines)
@@ -1096,7 +1213,7 @@ def layer_map(sections):
     return {name: idx for idx, name in enumerate(layers)}
 
 
-def build(meta, sections, template, count=0, branded=True):
+def build(meta, sections, template, count=0, branded=True, walkthrough=False):
     nav, parts = [], []
     layers = layer_map(sections) if KIND == "plan" else {}
     for name, body in sections:
@@ -1130,6 +1247,7 @@ def build(meta, sections, template, count=0, branded=True):
         "COUNT": str(len(sections)),
         "QUESTIONS": str(count if KIND == "plan" else 0),
         "OPEN": str(count if KIND == "review" else 0),
+        "WALKTHROUGH": render_walkthrough(WALK_SCENES) if walkthrough else "",
         "BRAND_STYLE": BRAND_STYLE if branded else "",
         "FOOTER": BRAND_FOOTER if branded else "",
     }.items():
@@ -1149,8 +1267,9 @@ def main(kind=None, argv=None):
     add_profile_arg(ap)
     args = ap.parse_args(argv)
     profile = resolve_profile(explicit=args.profile)
-    global SOURCE_DIR, REPO_DIR, DIFF_RANGE
+    global SOURCE_DIR, SOURCE_STEM, REPO_DIR, DIFF_RANGE
     SOURCE_DIR = Path(args.source).resolve().parent
+    SOURCE_STEM = Path(args.source).stem
     REPO_DIR = Path(args.repo).resolve()
     text = Path(args.source).read_text(encoding="utf-8")
     META.clear()
@@ -1161,22 +1280,25 @@ def main(kind=None, argv=None):
         DIFF_RANGE = args.range or derive_range(META)
         load_file_stats()
     meta, sections, count = parse(text, document_kind)
+    walkthrough = bool(profile.get("optional", {}).get("walkthrough", False))
+    if WALK_SCENES and not walkthrough:
+        WARNINGS.append("the Walkthrough section is ignored because optional.walkthrough is false in the profile")
     page = build(meta, sections, Path(args.template).read_text(encoding="utf-8"), count,
-                 branded=bool(profile.get("branding", True)))
+                 branded=bool(profile.get("branding", True)), walkthrough=walkthrough)
     Path(args.out).write_text(page, encoding="utf-8", newline="\n")
     if document_kind == "plan":
         print(f"wrote {args.out} ({len(page):,} bytes, {len(sections)} sections, {count} answerable questions)")
     else:
         print(f"wrote {args.out} ({len(page):,} bytes, {len(sections)} sections, {count} open findings in the decision form, {len(USED_FILES)} linked file diffs from {DIFF_RANGE})")
-        # Evidence media is referenced by relative path, so it is published beside the
-        # page: the list below is the Artifact tool's `files` argument, with root = the
-        # review's folder.
-        out_dir = Path(args.out).resolve().parent
-        manifest = out_dir / "review.files.json"
-        manifest.write_text(json.dumps(sorted(MEDIA_FILES), indent=2) + "\n", encoding="utf-8", newline="\n")
-        print(f"evidence files: {len(MEDIA_FILES)} ({manifest.name})")
-        if MEDIA_FILES and out_dir != SOURCE_DIR:
-            WARNINGS.append(f"--out is not beside {Path(args.source).name}; the page's evidence/ paths will not resolve until the files sit next to it")
+    # Evidence media and walkthrough clips are referenced by relative path, so they are
+    # published beside the page: the list below is the Artifact tool's `files` argument,
+    # with root = the document's folder.
+    out_dir = Path(args.out).resolve().parent
+    manifest = out_dir / f"{document_kind}.files.json"
+    manifest.write_text(json.dumps(sorted(MEDIA_FILES), indent=2) + "\n", encoding="utf-8", newline="\n")
+    print(f"published files: {len(MEDIA_FILES)} ({manifest.name})")
+    if MEDIA_FILES and out_dir != SOURCE_DIR:
+        WARNINGS.append(f"--out is not beside {Path(args.source).name}; the page's relative media paths will not resolve until the files sit next to it")
     for warning in WARNINGS:
         print("warning: " + warning, file=sys.stderr)
     return 0

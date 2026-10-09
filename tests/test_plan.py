@@ -8,6 +8,8 @@ from conftest import (
     BUILD_PLAN_PY,
     CHECK_PLAN_PY,
     FIXTURES_DIR,
+    RENDER_PY,
+    import_module_from_path,
     run_py,
 )
 
@@ -189,3 +191,73 @@ def test_given_missing_dc_html_then_missing_figure(tmp_path):
 
     assert code == 0, out + err
     assert "Missing artboard: design/project/Gone.dc.html" in out_path.read_text(encoding="utf-8")
+
+
+WALK_ON = ("--profile", FIXTURES_DIR / "profile-walkthrough.json")
+
+
+def plan_scenes(page):
+    data = re.search(r'<script type="application/json" class="wt-data">(.*?)</script>', page, re.S).group(1)
+    return json.loads(data)
+
+
+def test_given_plan_walkthrough_on_then_check_validates_its_targets(plan_fixture_path):
+    code, out, err = run_py(CHECK_PLAN_PY, plan_fixture_path, *WALK_ON)
+    assert code == 0, out + err
+    assert "Walkthrough (spoken)" in out
+    text = plan_fixture_path.read_text(encoding="utf-8")
+    plan_fixture_path.write_text(text.replace("`Open questions > Backfill payer claims`", "`Open questions > Rewrite billing`", 1)
+                                     .replace("`Requirement`", "`@payer-grain`", 1), encoding="utf-8")
+    code, out, err = run_py(CHECK_PLAN_PY, plan_fixture_path, *WALK_ON)
+    assert code == 1
+    assert "'Rewrite billing' in Open questions" in out
+    assert "@payer-grain, which is not a flowmap node" in out
+
+
+def test_given_plan_walkthrough_off_then_ignored(tmp_path, plan_fixture_path):
+    code, out, err = run_py(CHECK_PLAN_PY, plan_fixture_path, "--profile", FIXTURES_DIR / "profile-checks.json")
+    assert code == 0, out + err
+    assert "optional.walkthrough is false" in out
+    out_path = tmp_path / "plan.html"
+    code, out, err = run_py(BUILD_PLAN_PY, plan_fixture_path, "--out", out_path, "--profile", FIXTURES_DIR / "profile-checks.json")
+    assert code == 0, out + err
+    page = out_path.read_text(encoding="utf-8")
+    assert 'id="wt"' not in page and 'id="walkthrough"' not in page
+
+
+def test_given_plan_walkthrough_before_open_questions_then_order_fails(plan_fixture_path):
+    text = plan_fixture_path.read_text(encoding="utf-8")
+    walk = text[text.index("\n## Walkthrough\n"):]
+    text = text.replace(walk, "\n").replace("\n## Open questions\n", walk + "\n## Open questions\n", 1)
+    plan_fixture_path.write_text(text, encoding="utf-8")
+    code, out, err = run_py(CHECK_PLAN_PY, plan_fixture_path, *WALK_ON)
+    assert code == 1
+    assert "then an optional Walkthrough" in out
+
+
+def test_given_plan_walkthrough_on_then_player_points_at_the_questions(plan_fixture_path):
+    narrate = import_module_from_path("narrate_plan_test", RENDER_PY.parent / "narrate.py")
+    narrate.narrate(plan_fixture_path, lambda text: ([0.0] * 300, 24000), mp3=False)
+    out_path = plan_fixture_path.parent / "plan.html"
+    code, out, err = run_py(BUILD_PLAN_PY, plan_fixture_path, "--out", out_path, *WALK_ON)
+    assert code == 0, out + err
+    page = out_path.read_text(encoding="utf-8")
+    assert '<section class="wt" id="wt"' in page
+    assert 'data-target="walkthrough"' not in page
+    scenes = plan_scenes(page)
+    assert (scenes[5]["section"], scenes[5]["find"]) == ("open-questions", "durable sign-in identity")
+    assert all("audio" in line for scene in scenes for line in scene["lines"])
+    files = json.loads((plan_fixture_path.parent / "plan.files.json").read_text(encoding="utf-8"))
+    assert files and all(f.startswith("walkthrough/plan/") for f in files)
+
+
+def test_given_plan_and_review_in_one_folder_then_recordings_keep_apart(plan_fixture_path):
+    narrate = import_module_from_path("narrate_shared_test", RENDER_PY.parent / "narrate.py")
+    review = plan_fixture_path.parent / "review.md"
+    review.write_text((FIXTURES_DIR / "review.md").read_text(encoding="utf-8"), encoding="utf-8")
+    silent = lambda text: ([0.0] * 300, 24000)
+    narrate.narrate(review, silent, mp3=False)
+    narrate.narrate(plan_fixture_path, silent, mp3=False)
+    root = plan_fixture_path.parent / "walkthrough"
+    assert len(list((root / "review").glob("*.wav"))) == 16
+    assert len(list((root / "plan").glob("*.wav"))) > 8

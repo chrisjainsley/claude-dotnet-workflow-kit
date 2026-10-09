@@ -43,6 +43,17 @@ or the document carries material the reader would never act on.
   differently after reading it. Renames, moved usings and generated snapshots are
   described in the file table, not shown.
 
+## Walkthrough rules
+
+The review's optional Walkthrough is heard, not read.
+
+- **One breath per sentence.** Under 20 words; the page speaks one sentence at a time.
+- **Say numbers as words.** "ten of eleven", "ninety days", never 10/11 or 90d.
+- **No markup.** Backticks, links, file paths and underscores are read out literally;
+  name the thing in words instead ("the mobile sign-in policy").
+- **Nothing new.** Every scene restates a fact already on the page, in the order a
+  reviewer would read it, and every number agrees with the tiles.
+
 ## Cut pass briefs
 
 Plan:

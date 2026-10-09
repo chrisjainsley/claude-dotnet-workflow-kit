@@ -33,6 +33,9 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
   Pass rows and the Verdict tiles against evidence before the page is built, and the
   sweep's `gate` result is a Verdict fact. See `docs/jev.md`. Skipped, never failed,
   when the MCP is not loaded.
+- `optional.walkthrough` (default false): when true, the review closes with a narrated
+  Walkthrough, recorded in step 8. When false, write no Walkthrough section and skip
+  step 8; the checker and the builder ignore one if it is there.
 
 ## Workflow
 
@@ -102,13 +105,38 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    contract or a QA capture grounds it; never invent a value. File cells hold the
    repo-relative path (or a unique tail) in backticks so the builder can find the file
    in the diff.
+   With `optional.walkthrough` true, close with a `## Walkthrough`: up to eight
+   numbered scenes, each a backticked target and one line written to be heard (the
+   skeleton has the format). The page plays it from **Walk me through it**: it scrolls
+   to each target, highlights it, animates a flowmap box's edges and plays the recorded
+   line. It restates the page in reading order and adds no claim of its own.
 6. **Run the check** and fix until OK; cut, never raise caps:
    ```bash
    python "SKILL_DIR/scripts/check_review.py" plans/<slug>/review.md
    ```
 7. **Cut pass** with the review brief in `docs/writing-rules.md`, applied by a cheaper
    subagent or by you.
-8. **Build** from the repository root with the branch checked out and the base fetched:
+8. **Record the walkthrough** when `optional.walkthrough` is true:
+   ```bash
+   python "SKILL_DIR/../../scripts/narrate.py" plans/<slug>/review.md
+   ```
+   Kokoro, an open-source voice model, runs on this machine and writes one clip per
+   sentence to `plans/<slug>/walkthrough/`, always in the same voice; nothing is sent
+   anywhere. Reruns record only the sentences that changed. Exit 2 means `kokoro-onnx`
+   is not installed: say `skipped: kokoro not installed` in chat and carry on; the page
+   then shows the captions without sound. The first run downloads the model (116 MB)
+   once.
+   Rebuild after any change to the Walkthrough, or the builder warns that a sentence
+   has no clip. Then **record the overview video**:
+   ```bash
+   python "SKILL_DIR/../../scripts/overview.py" plans/<slug>/review.md
+   ```
+   It plays the page's walkthrough in headless Chromium and saves a 1080p MP4 with a
+   title card to `plans/<slug>/overview/review.mp4`; the page gets a **Watch overview**
+   button for it. Pass the same `--range` or `--repo` the build takes. It re-records only
+   when the review or its clips changed. Exit 2 means Playwright or ffmpeg is missing:
+   say `skipped: overview video` with what it named and carry on.
+   Then **build** from the repository root with the branch checked out and the base fetched:
    ```bash
    python "SKILL_DIR/scripts/build_review.py" plans/<slug>/review.md --out plans/<slug>/review.html
    ```
@@ -116,8 +144,9 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    `<sha>^..<sha>` when `state: merged` and `commits` names the sha. Pass `--range` to
    override and `--repo` when the review lives outside the checkout. Read the warnings it
    prints: an unlinked File cell means the path did not match one changed file. Keep
-   `--out` beside `review.md`: the page links evidence media by its `evidence/` path,
-   and the builder lists those files in `plans/<slug>/review.files.json`.
+   `--out` beside `review.md`: the page links evidence media by its `evidence/` path
+   narration clips by their `walkthrough/` path and the overview video by its `overview/` path, and the builder lists those files
+   in `plans/<slug>/review.files.json`.
 9. **Publish.** With `artifacts: true`, use the Artifact tool: `file_path` is
    `review.html`, `favicon` 🔍 on the first publish only, one-sentence `description`,
    `capabilities` `{"db": {}, "comments": {}}`, so Send decision also passes the
@@ -125,7 +154,8 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    `ArtifactComments` `watch` on the URL before handing off, or the button falls back to
    asking for "decided". When `review.files.json` lists any files, also pass
    `root: plans/<slug>` and `files` set to that list, so each screenshot and video is
-   published at its `evidence/` path next to the page. Republishing from a new
+   published at its `evidence/` path and each narration clip at its `walkthrough/`
+   path next to the page. Republishing from a new
    session: run `list` with `scope: "files"` on the URL first, because the tool
    refuses to replace published paths the session has not seen. Invoke
    `artifact-design` and `artifact-capabilities` because the tool asks; the template
@@ -168,6 +198,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 | QA report | 350 words + gherkin + evidence, 10 images, 3 videos | Environment and test users, one scenario per behaviour tagged Acceptance or Manual with Pass, Fail or Blocked, Evidence with per-step proof, Classification (regression, pre-existing bug, environment issue, not run) on anything but Pass, the summary table, Not covered. When nothing was run, open with **No QA run.** and list every criterion under Not covered. |
 | Rollout | 90 words, 8 items | Ordered checklist with persistent ticks: infrastructure applied, config set, stacked order, migration, labels, hand-off. |
 | Decision | 60 words + form | Your recommendation in a sentence or two. The form is generated. |
+| Walkthrough (only with `optional.walkthrough`) | 220 spoken words, 8 scenes, 45 words each | Numbered scenes: `` `Section` ``, `` `Section > text in a row` `` or `` `@node-id` `` then one spoken line. Numbers as words, no markdown or links. Rendered as the player bar, not as a section. |
 
 `size: small` multiplies caps by 0.6 and `size: large` by 1.5.
 
@@ -205,8 +236,10 @@ agree, report what happened rather than what should have, diffs carry a decision
 ## Files
 
 - `assets/skeleton.md`: section skeleton with front matter.
-- `assets/page.html` (repository root): the shared page shell, carrying the tiles, pills, collapsed hunks, linked file diffs, checklist and decision form.
+- `assets/page.html` (repository root): the shared page shell, carrying the tiles, pills, collapsed hunks, linked file diffs, checklist, decision form and the walkthrough player, which plays the recorded clips.
 - `scripts/check_review.py`: budget and structure gate; exit 1 on any breach. Takes `--profile`. Wraps `scripts/check.py` (repository root) in review mode.
+- `scripts/narrate.py` (repository root): records the Walkthrough with Kokoro (`pip install kokoro-onnx`), one cached clip per sentence.
+- `scripts/overview.py` (repository root): records the walkthrough as an overview video (Playwright and ffmpeg).
 - `scripts/build_review.py`: markdown subset to HTML with the section-specific renderers; pulls per-file diffs from git. Wraps `scripts/render.py` (repository root) in review mode.
 - `references/exemplar.md`: a filled review for a real merged PR, identifiers scrubbed.
 - `sweep.md`: the reviewer sweep, run here when no fresh sweep exists and by `implement` at the end of its stage.

@@ -36,6 +36,9 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
   it is read, `jev_rerank` picks which linked items are worth reading, and `jev_decide`
   settles or preselects each open question from the research facts. See `docs/jev.md`.
   Every call is skipped, never failed, when the MCP is not loaded.
+- `optional.walkthrough` (default false): when true, the plan closes with a narrated
+  Walkthrough, recorded in step 9. When false, write no Walkthrough section and skip
+  the recording; the checker and the builder ignore one if it is there.
 
 ## Workflow
 
@@ -86,6 +89,12 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
    tracker's `![caption](context/<file>.png)` images. Gitignore `plans/` in the project if it is not
    already; the page is the deliverable, not the markdown. Read
    `references/exemplar.md` once first for the density to aim at.
+   With `optional.walkthrough` true, close with a `## Walkthrough` after Open questions:
+   up to eight numbered scenes, each a backticked target and one line written to be
+   heard (the skeleton has the format). It is for the person answering the plan: what
+   gets built, the rule the Specs pin down, the riskiest decision or rollout step, then
+   each open question with its recommendation, ending on the form. Point at a question
+   with `` `Open questions > words from its title` ``. It adds no claim of its own.
    **Decide with Jev** before the Decisions and Open questions sections are final, when
    `optional.jev` is true. For each question whose options you can name, load
    `jev_decide`. Pass the question as `decision` and the options as `candidates`
@@ -107,18 +116,36 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
 8. **Cut pass.** Spawn one subagent (a cheaper model is enough) with the plan brief in
    `docs/writing-rules.md`. Name the source path read-only and give an absolute output
    directory. Apply its deletions and rerun the check.
-9. **Build the page:**
+9. **Record the walkthrough** when `optional.walkthrough` is true:
+   ```bash
+   python "SKILL_DIR/../../scripts/narrate.py" plans/<slug>/plan.md
+   ```
+   Kokoro runs on this machine and writes one clip per sentence to
+   `plans/<slug>/walkthrough/plan/`; nothing is sent anywhere, and reruns record only
+   the sentences that changed. Exit 2 means `kokoro-onnx` is not installed: say
+   `skipped: kokoro not installed` in chat and carry on; the page then shows captions
+   without sound. Next **record the overview video**:
+   ```bash
+   python "SKILL_DIR/../../scripts/overview.py" plans/<slug>/plan.md
+   ```
+   It plays the walkthrough in headless Chromium and saves a 1080p MP4 with a title
+   card to `plans/<slug>/overview/plan.mp4`; the page gets a **Watch overview** button.
+   It re-records only when the plan or its clips changed. Exit 2 means Playwright or
+   ffmpeg is missing: say `skipped: overview video` and carry on. Then **build the page:**
    ```bash
    python "SKILL_DIR/scripts/build_plan.py" plans/<slug>/plan.md --out plans/<slug>/plan.html
    ```
-   Never hand-edit `plan.html`; it is regenerated from `plan.md` every time.
+   Never hand-edit `plan.html`; it is regenerated from `plan.md` every time. Keep `--out`
+   beside `plan.md`: the builder lists the walkthrough clips and the overview video in `plans/<slug>/plan.files.json`.
 10. **Publish.** With `artifacts: true`, use the Artifact tool: `file_path` is `plan.html`,
    `favicon` 🧅 on the first publish only, `description` one sentence naming the ticket,
    `capabilities` `{"db": {}, "comments": {}}`: `db` stores the answers and decision,
    and `comments` lets the form's Send button pass them to this session as an artifact
    comment. Invoke the `artifact-design` and `artifact-capabilities` skills because the
    tool asks for them, then leave the CSS and script alone. Republishing the same file
-   path keeps the URL and the stored answers. The publish result says whether this
+   path keeps the URL and the stored answers. When `plan.files.json` lists any files,
+   also pass `root: plans/<slug>` and `files` set to that list, so each walkthrough clip
+   and the overview video publish at their `walkthrough/plan/` and `overview/` paths next to the page. The publish result says whether this
    session watches the page; from a new session, run `ArtifactComments` `watch` on the
    URL first, or the button falls back to asking for "decided". With
    `artifacts: false`, tell the user the path of `plan.html` to open in a browser; the form still renders but cannot send, so take
@@ -174,6 +201,7 @@ both lists. Tests, decisions, risks and questions come last because they cut acr
 | Tests | 180 words | One table, Project / Class / Cases, cases as Given_Then names. One line for shared test infra changes. |
 | Decisions | 120 words, 6 bullets | "Chose X over Y because Z." Rationale only where a reader would ask why. |
 | Risks and rollout | 120 words, 5 bullets | What can go wrong, what must land first, how the QA environment verifies it. |
+| Walkthrough (only with `optional.walkthrough`) | 220 spoken words, 8 scenes, 45 words each | Numbered scenes: `` `Section` `` or `` `Section > text in it` `` then one spoken line. Numbers as words, no markdown or links. Rendered as the player bar, not as a section. |
 | Open questions | 180 words, 3 items | Question title, context, then nested options; exactly one `[x]` recommended option, preselected. "None." when everything is decided. |
 
 `size: small` multiplies caps by 0.6 and `size: large` by 1.5. A layer the ticket does

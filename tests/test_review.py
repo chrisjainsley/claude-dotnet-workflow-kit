@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -101,6 +102,8 @@ def test_given_legacy_mermaid_instead_of_flowmap_then_passes(review_fixture_path
     text = review_fixture_path.read_text(encoding="utf-8")
     mermaid = "```mermaid\nflowchart LR\n  A[relying party]:::changed --> B[session]:::ctx\n```\n"
     text = re.sub(FLOWMAP_RE, lambda _: mermaid, text, count=1, flags=re.S)
+    # With no layer map there are no boxes, so the walkthrough points at the section.
+    text = text.replace("`@web-rp`", "`Changes`").replace("`@mobile-rp`", "`Changes`")
     review_fixture_path.write_text(text, encoding="utf-8")
 
     code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path)
@@ -291,3 +294,228 @@ def test_given_nine_hunks_then_exit1(review_fixture_path):
 
     assert code == 1
     assert "9 diff hunks, cap 8" in out
+
+
+WALKTHROUGH_HEAD = "\n## Walkthrough\n"
+WALK_ON = ("--profile", FIXTURES_DIR / "profile-walkthrough.json")
+
+
+def scene_data(page):
+    data = re.search(r'<script type="application/json" class="wt-data">(.*?)</script>', page, re.S).group(1)
+    return json.loads(data)
+
+
+def test_given_walkthrough_targets_then_each_must_resolve(review_fixture_path):
+    text = review_fixture_path.read_text(encoding="utf-8")
+    assert WALKTHROUGH_HEAD in text
+    broken = (text.replace("`@web-rp`", "`@no-such-node`", 1)
+                  .replace("`Findings > useLogoutRedirect`", "`Findings > nowhere-on-the-page`", 1)
+                  .replace("`QA report`", "`Testing`", 1))
+    review_fixture_path.write_text(broken, encoding="utf-8")
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path, *WALK_ON)
+    assert code == 1
+    assert "@no-such-node, which is not a flowmap node" in out
+    assert "'nowhere-on-the-page' in Findings" in out
+    assert "'Testing', which is not a section of this document" in out
+
+
+def test_given_walkthrough_written_for_the_eye_then_check_fails(review_fixture_path):
+    text = review_fixture_path.read_text(encoding="utf-8")
+    text = text.replace("so ten of eleven acceptance criteria are delivered.",
+                        "so 10/11 criteria are delivered in `B2C_1A_SIGNUP_SIGNIN.xml`.", 1)
+    text = text.replace("8. `Decision`", "8. `Rollout` One more.\n9. `Decision`", 1)
+    review_fixture_path.write_text(text, encoding="utf-8")
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path, *WALK_ON)
+    assert code == 1
+    assert "scene 1 has a slash count" in out
+    assert "scene 1 has markdown or markup" in out
+    assert "9 scenes, cap 8" in out
+
+
+def test_given_walkthrough_off_then_section_is_not_checked_and_no_player(tmp_path, review_fixture_path):
+    text = review_fixture_path.read_text(encoding="utf-8")
+    review_fixture_path.write_text(text.replace("`@web-rp`", "`@no-such-node`", 1), encoding="utf-8")
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path, "--profile", FIXTURES_DIR / "profile-checks.json")
+    assert code == 0, out + err
+    assert "optional.walkthrough is false" in out
+    out_path = tmp_path / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef",
+                            "--profile", FIXTURES_DIR / "profile-checks.json")
+    assert code == 0, out + err
+    assert "ignored because optional.walkthrough is false" in err
+    page = out_path.read_text(encoding="utf-8")
+    assert 'id="wt"' not in page and 'id="walkthrough"' not in page and "{{" not in page
+
+
+def test_given_walkthrough_before_decision_then_section_order_fails(review_fixture_path):
+    text = review_fixture_path.read_text(encoding="utf-8")
+    walk = text[text.index(WALKTHROUGH_HEAD):]
+    text = text.replace(walk, "\n").replace("\n## Decision\n", walk + "\n## Decision\n", 1)
+    review_fixture_path.write_text(text, encoding="utf-8")
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path, *WALK_ON)
+    assert code == 1
+    assert "then an optional Walkthrough" in out
+
+
+def test_given_walkthrough_on_then_page_carries_the_player_not_a_section(tmp_path, review_fixture_path):
+    out_path = tmp_path / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef", *WALK_ON)
+    assert code == 0, out + err
+    assert "16 sentence(s) have no recorded clip" in err
+    page = out_path.read_text(encoding="utf-8")
+    assert '<section class="wt" id="wt"' in page
+    assert 'id="walkthrough"' not in page and 'data-target="walkthrough"' not in page
+    assert "<select" not in page[page.index('id="wt"'):page.index("</section>", page.index('id="wt"'))]
+    scenes = scene_data(page)
+    assert len(scenes) == 8
+    assert scenes[0]["section"] == "verdict" and "find" not in scenes[0]
+    assert scenes[1]["node"] == "web-rp"
+    assert (scenes[3]["section"], scenes[3]["find"]) == ("findings", "B2C_1A_MOBILE_SIGNIN")
+    assert [l["text"] for l in scenes[0]["lines"]] == [
+        "This change merged on the tenth of September.",
+        "Web members can now stay signed in for ninety days.",
+        "Mobile members cannot, so ten of eleven acceptance criteria are delivered.",
+    ]
+    assert "{{" not in page
+
+
+def test_given_page_template_then_no_browser_voice():
+    template = PAGE_TEMPLATE.read_text(encoding="utf-8")
+    assert "speechSynthesis" not in template and "wt-voice" not in template
+
+
+def test_given_no_walkthrough_then_check_passes_and_no_player(tmp_path, review_fixture_path):
+    text = review_fixture_path.read_text(encoding="utf-8")
+    review_fixture_path.write_text(text[: text.index(WALKTHROUGH_HEAD) + 1], encoding="utf-8")
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path, *WALK_ON)
+    assert code == 0, out + err
+    out_path = tmp_path / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef", *WALK_ON)
+    assert code == 0, out + err
+    page = out_path.read_text(encoding="utf-8")
+    assert 'id="wt"' not in page
+    assert "{{" not in page
+
+
+def fake_synth(calls):
+    def synth(text):
+        calls.append(text)
+        return [0.0, 0.1, -0.1] * 100, 24000
+    return synth
+
+
+def load_narrate(name):
+    return import_module_from_path(name, RENDER_PY.parent / "narrate.py")
+
+
+def test_given_walkthrough_then_narrate_records_each_sentence_once(review_fixture_path):
+    narrate = load_narrate("narrate_test")
+    calls = []
+    recorded, kept, removed = narrate.narrate(review_fixture_path, fake_synth(calls), mp3=False)
+    assert recorded == len(calls) == len(set(calls)) == 16
+    assert (kept, removed) == (0, 0)
+    clip_dir = review_fixture_path.parent / "walkthrough" / "review"
+    manifest = json.loads((clip_dir / "narration.json").read_text(encoding="utf-8"))
+    assert manifest["voice"] == "af_heart"
+    assert all((review_fixture_path.parent / c["file"]).is_file() for c in manifest["clips"])
+
+    # A changed line records only itself and drops its old clip.
+    text = review_fixture_path.read_text(encoding="utf-8")
+    review_fixture_path.write_text(text.replace("Nothing has run against a live tenant yet.", "No live tenant run exists yet.", 1), encoding="utf-8")
+    calls.clear()
+    recorded, kept, removed = narrate.narrate(review_fixture_path, fake_synth(calls), mp3=False)
+    assert calls == ["No live tenant run exists yet."]
+    assert (recorded, kept, removed) == (1, 15, 1)
+
+
+def test_given_recorded_clips_then_page_plays_and_publishes_them(review_fixture_path):
+    narrate = load_narrate("narrate_test2")
+    narrate.narrate(review_fixture_path, fake_synth([]), mp3=False)
+    (review_fixture_path.parent / "walkthrough" / "review" / (narrate.clip_name("The whole change is policy XML.") + ".wav")).unlink()
+    out_path = review_fixture_path.parent / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef", *WALK_ON)
+    assert code == 0, out + err
+    assert "1 sentence(s) have no recorded clip and play as captions only" in err
+    lines = [l for sc in scene_data(out_path.read_text(encoding="utf-8")) for l in sc["lines"]]
+    assert sum(1 for l in lines if "audio" not in l) == 1
+    files = json.loads((review_fixture_path.parent / "review.files.json").read_text(encoding="utf-8"))
+    assert len(files) == len(lines) - 1
+    assert all(f.startswith("walkthrough/review/") and f.endswith(".wav") for f in files)
+
+
+def test_given_walkthrough_off_then_narrate_records_nothing(review_fixture_path):
+    narrate = load_narrate("narrate_test3")
+    assert narrate.main([str(review_fixture_path), "--profile", str(FIXTURES_DIR / "profile-checks.json")]) == 0
+    assert not (review_fixture_path.parent / "walkthrough").exists()
+
+
+def test_given_no_kokoro_then_narrate_exits_2(review_fixture_path, monkeypatch):
+    narrate = load_narrate("narrate_test4")
+    monkeypatch.setattr(narrate, "kokoro_engine", lambda *a: None)
+    assert narrate.main([str(review_fixture_path), "--profile", str(FIXTURES_DIR / "profile-walkthrough.json")]) == 2
+    assert not (review_fixture_path.parent / "walkthrough").exists()
+
+
+def load_overview(name):
+    return import_module_from_path(name, RENDER_PY.parent / "overview.py")
+
+
+def test_given_frames_then_ffconcat_holds_each_until_the_next():
+    overview = load_overview("overview_concat")
+    text = overview.ffconcat([("f0.jpg", 10.0), ("f1.jpg", 10.5), ("f2.jpg", 12.0)], 13.25)
+    assert text.splitlines() == ["ffconcat version 1.0", "file f0.jpg", "duration 0.5000", "file f1.jpg",
+                                 "duration 1.5000", "file f2.jpg", "duration 1.2500", "file f2.jpg"]
+
+
+def test_given_played_clips_then_audio_graph_places_each_at_its_start():
+    overview = load_overview("overview_graph")
+    graph = overview.audio_graph([("/a.mp3", 100.75), ("/b.mp3", 104.0)], 100.0, 9.0)
+    assert "[1:a]aresample=48000,adelay=750:all=1[a0]" in graph
+    assert "[2:a]aresample=48000,adelay=4000:all=1[a1]" in graph
+    assert "[a0][a1]amix=inputs=2" in graph and "atrim=0:9.000" in graph
+    assert "anullsrc" in overview.audio_graph([], 100.0, 5.0)
+
+
+def test_given_walkthrough_off_or_tools_missing_then_overview_records_nothing(review_fixture_path, monkeypatch, capsys):
+    overview = load_overview("overview_gate")
+    assert overview.main([str(review_fixture_path), "--profile", str(FIXTURES_DIR / "profile-checks.json")]) == 0
+    assert "optional.walkthrough is false" in capsys.readouterr().out
+    monkeypatch.setattr(overview, "tools_missing", lambda: ["ffmpeg"])
+    assert overview.main([str(review_fixture_path), *map(str, WALK_ON)]) == 2
+    assert "needs ffmpeg" in capsys.readouterr().out
+    assert not (review_fixture_path.parent / "overview").exists()
+
+
+def test_given_clips_change_then_overview_fingerprint_changes(review_fixture_path):
+    overview = load_overview("overview_print")
+    narrate = load_narrate("narrate_print")
+    before = overview.fingerprint(review_fixture_path)
+    narrate.narrate(review_fixture_path, fake_synth([]), mp3=False)
+    assert overview.fingerprint(review_fixture_path) != before
+
+
+def test_given_overview_video_then_page_offers_and_publishes_it(review_fixture_path):
+    folder = review_fixture_path.parent / "overview"
+    folder.mkdir()
+    (folder / "review.mp4").write_bytes(b"\x00")
+    (folder / "review.jpg").write_bytes(b"\x00")
+    (folder / "review.json").write_text('{"seconds": 77.4}', encoding="utf-8")
+    out_path = review_fixture_path.parent / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef", *WALK_ON)
+    assert code == 0, out + err
+    page = out_path.read_text(encoding="utf-8")
+    assert 'id="wt-watch" data-src="overview/review.mp4" data-poster="overview/review.jpg"' in page
+    assert '<span class="wt-len">1:17</span>' in page
+    files = json.loads((review_fixture_path.parent / "review.files.json").read_text(encoding="utf-8"))
+    assert {"overview/review.mp4", "overview/review.jpg"} <= set(files)
+
+
+def test_given_overview_older_than_the_review_then_build_warns(review_fixture_path):
+    folder = review_fixture_path.parent / "overview"
+    folder.mkdir()
+    (folder / "review.mp4").write_bytes(b"\x00")
+    (folder / "review.json").write_text('{"seconds": 60, "fingerprint": "older"}', encoding="utf-8")
+    out_path = review_fixture_path.parent / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef", *WALK_ON)
+    assert code == 0, out + err
+    assert "recorded before the latest changes" in err

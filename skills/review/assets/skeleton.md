@@ -135,3 +135,11 @@ HTTP/1.1 201 Created
 
 ## Decision
 <!-- Your recommendation in one or two sentences. The approve / request-changes form is added by the builder. -->
+
+## Walkthrough
+<!-- Only when the profile's optional.walkthrough is true; otherwise delete this section. A narrated tour the page plays from a button under the header: it scrolls to each scene's target, highlights it, animates a flowmap box's edges, and plays the line, recorded with Kokoro by scripts/narrate.py (captions always show). Up to eight numbered scenes, each a backticked target then one spoken line of at most 45 words, 220 words in all. Targets: a section name (`Verdict`), a row or heading inside one (`Findings > text in that row`), or a flowmap node (`@node-id`). Write for the ear: plain sentences, numbers as words ("ten of eleven", not 10/11), no backticks, links or markdown. Every fact must already be on the page and agree with it; the walkthrough adds no claims. Order it as the reviewer would read: verdict, the change on the map, open findings, QA, rollout, recommendation. -->
+
+1. `Verdict` <the verdict in one spoken sentence, and the one number that matters>
+2. `@<node id>` <what changed at this box and why the reviewer should care>
+3. `Findings > <text in the open finding's row>` <the open finding and what it asks of the reviewer>
+4. `Decision` <the recommendation>

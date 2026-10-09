@@ -33,14 +33,14 @@ a { color: var(--accent); }
 .layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 0 36px; margin: 0 auto; padding: 28px 28px 80px; }
 .layout.kind-plan { max-width: 1180px; }
 .layout.kind-review { max-width: 1240px; }
-nav.rail { position: sticky; top: 24px; align-self: start; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+nav.rail { position: sticky; top: calc(24px + var(--wt-h, 0px)); align-self: start; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 nav.rail a { color: var(--muted); text-decoration: none; padding: 5px 10px; border-left: 2px solid var(--line); }
 nav.rail a.active { color: var(--ink); border-left-color: var(--accent); font-weight: 600; }
 nav.rail a:hover { color: var(--ink); }
 main { min-width: 0; }
 .kind-plan main { max-width: 78ch; }
 .kind-review main { max-width: 88ch; }
-.plan-section { padding: 22px 0 26px; border-bottom: 1px solid var(--line); }
+.plan-section { padding: 22px 0 26px; border-bottom: 1px solid var(--line); scroll-margin-top: calc(var(--wt-h, 0px) + 12px); }
 .plan-section:last-child { border-bottom: 0; }
 .section-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .section-head h2 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: -0.005em; }
@@ -269,9 +269,54 @@ table.fm-record th { font-weight: 400; white-space: nowrap; }
 table.fm-record td code { overflow-wrap: anywhere; }
 .fm-rec-note { font-size: 12px; color: var(--warn); }
 
+/* narrated walkthrough */
+.wt { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--card); border-bottom: 1px solid var(--line); padding: 10px 28px; }
+.wt-bar, .wt-caption { max-width: 1240px; margin: 0 auto; }
+.wt[hidden], .wt [hidden] { display: none; }
+.wt-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.wt svg { width: 14px; height: 14px; fill: currentColor; flex: none; }
+.wt-play { font: 600 14px/1 var(--sans); color: var(--paper); background: var(--accent); border: 0; border-radius: 999px; padding: 0 16px 0 13px; min-height: 36px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.wt-play .i-pause, .wt-play[aria-pressed="true"] .i-play { display: none; }
+.wt-play[aria-pressed="true"] .i-pause { display: inline; }
+.wt-btn { color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 999px; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.wt-btn:hover:not([disabled]) { color: var(--accent); border-color: var(--accent); }
+.wt-btn[disabled] { opacity: 0.4; cursor: default; }
+.wt-play:focus-visible, .wt-btn:focus-visible, .wt-watch { font: 600 13px/1 var(--sans); color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 999px; padding: 0 14px 0 12px; min-height: 36px; display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.wt-watch:hover { background: var(--card); }
+.wt-watch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wt-len { font: 500 12px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+dialog.diagram-modal .diagram-body video.overview { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; border-radius: 4px; }
+.wt-step { font: 500 12px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wt-track { flex: 1 1 80px; min-width: 60px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.wt-track i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.4s ease; }
+.wt-caption { margin-top: 10px; font-size: 15.5px; line-height: 1.5; text-wrap: pretty; }
+.wt-caption .s { color: var(--muted); transition: color 0.3s; }
+.wt-caption .s.now { color: var(--ink); }
+.wt-caption .wt-where { display: inline-block; margin-right: 8px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+body.wt-active .plan-section { transition: opacity 0.35s ease; }
+body.wt-active .plan-section:not(.wt-on) { opacity: 0.35; }
+.wt-spot { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; animation: wt-pulse 1.4s ease-out 2; }
+tr.wt-spot { outline: none; animation: none; }
+tr.wt-spot td { background: var(--accent-soft); transition: background 0.3s; }
+tr.wt-spot td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+@keyframes wt-pulse { from { box-shadow: 0 0 0 0 var(--accent-soft); } 60% { box-shadow: 0 0 0 10px var(--accent-soft); } to { box-shadow: 0 0 0 14px transparent; } }
+.tiles.wt-rise .tile { animation: wt-rise 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes wt-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.flowmap.wt-focus .fm-node { transition: opacity 0.3s; }
+.flowmap.wt-focus .fm-node:not(.wt-spot):not(.wt-near) { opacity: 0.35; }
+.fm-edges path.wt-dim { opacity: 0.2; }
+.fm-edges path.wt-flow { stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 7 5; animation: wt-dash 0.9s linear infinite; }
+.fm-edges .wt-dot { fill: var(--accent); stroke: var(--card); stroke-width: 2; }
+@keyframes wt-dash { to { stroke-dashoffset: -12; } }
+@media (prefers-reduced-motion: reduce) {
+  .wt-spot, .tiles.wt-rise .tile, .fm-edges path.wt-flow { animation: none; }
+  .fm-edges .wt-dot { display: none; }
+}
+
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; padding: 18px 16px 60px; }
-  nav.rail { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+  .wt { padding: 10px 16px; }
+    nav.rail { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
   nav.rail a { border-left: 0; border-bottom: 2px solid var(--line); padding: 4px 8px; }
   nav.rail a.active { border-bottom-color: var(--accent); }
 }
@@ -284,6 +329,7 @@ table.fm-record td code { overflow-wrap: anywhere; }
   <h1>{{TITLE}}</h1>
   <div class="chips">{{CHIPS}}</div>
 </header>
+{{WALKTHROUGH}}
 <div class="layout kind-{{KIND}}">
   <nav class="rail" aria-label="Sections">{{NAV}}</nav>
   <main>
@@ -393,6 +439,7 @@ table.fm-record td code { overflow-wrap: anywhere; }
   var fmModal = document.getElementById('fm-modal');
   var fmBody = document.getElementById('fm-body');
   var SVGNS = 'http://www.w3.org/2000/svg';
+  function reducedMotion() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
   function fmDraw(fig) {
     var grid = fig.querySelector('.fm-grid');
     var svg = fig.querySelector('.fm-edges');
@@ -401,6 +448,10 @@ table.fm-record td code { overflow-wrap: anywhere; }
     while (svg.firstChild) { svg.removeChild(svg.firstChild); }
     var view = fig.getAttribute('data-view');
     var g = grid.getBoundingClientRect();
+    // CSS zoom or a transform scales the measured boxes but not the svg's own units.
+    var scale = grid.offsetWidth ? g.width / grid.offsetWidth : 1;
+    function relX(v) { return (v - g.left) / scale; }
+    function relY(v) { return (v - g.top) / scale; }
     var defs = document.createElementNS(SVGNS, 'defs');
     [['a', 'var(--muted)'], ['e', 'var(--accent)']].forEach(function (m) {
       var marker = document.createElementNS(SVGNS, 'marker');
@@ -424,10 +475,10 @@ table.fm-record td code { overflow-wrap: anywhere; }
       if (!el || !el.offsetParent) { return null; }
       var r = el.getBoundingClientRect();
       var cell = el.closest('.fm-cell');
-      return { el: el, l: r.left - g.left, r: r.right - g.left, t: r.top - g.top, b: r.bottom - g.top,
-        cx: (r.left + r.right) / 2 - g.left, cy: (r.top + r.bottom) / 2 - g.top,
+      return { el: el, l: relX(r.left), r: relX(r.right), t: relY(r.top), b: relY(r.bottom),
+        cx: relX((r.left + r.right) / 2), cy: relY((r.top + r.bottom) / 2),
         col: parseInt(cell.style.gridColumnStart || cell.style.gridColumn, 10) - 1,
-        rowTop: cell.getBoundingClientRect().top - g.top };
+        rowTop: relY(cell.getBoundingClientRect().top) };
     }
     function between(s, t) {
       // Is another visible box in the same cell on the straight line from s to t?
@@ -436,16 +487,16 @@ table.fm-record td code { overflow-wrap: anywhere; }
       return Array.prototype.slice.call(s.el.closest('.fm-cell').querySelectorAll('.fm-node')).some(function (n) {
         if (n === s.el || n === t.el || !n.offsetParent) { return false; }
         var r = n.getBoundingClientRect();
-        var l = r.left - g.left;
-        var top = r.top - g.top;
-        return l >= lo - 2 && l < hi && top < Math.max(s.cy, t.cy) && r.bottom - g.top > Math.min(s.cy, t.cy);
+        var l = relX(r.left);
+        var top = relY(r.top);
+        return l >= lo - 2 && l < hi && top < Math.max(s.cy, t.cy) && relY(r.bottom) > Math.min(s.cy, t.cy);
       });
     }
     // Lines run only through the gaps between lanes and along the channel at the top of
     // each row's cells, never across a box; edges sharing a gap or channel are spread apart.
     var cols = Array.prototype.slice.call(grid.querySelectorAll('.fm-head')).map(function (h) {
       var r = h.getBoundingClientRect();
-      return { l: r.left - g.left, r: r.right - g.left };
+      return { l: relX(r.left), r: relX(r.right) };
     });
     function gapRight(i) { return i < cols.length - 1 ? (cols[i].r + cols[i + 1].l) / 2 : cols[i].r + 12; }
     function gapLeft(i) { return i > 0 ? gapRight(i - 1) : cols[0].l - 12; }
@@ -498,8 +549,26 @@ table.fm-record td code { overflow-wrap: anywhere; }
       var path = document.createElementNS(SVGNS, 'path');
       path.setAttribute('d', d);
       path.setAttribute('marker-end', 'url(#' + fig.id + '-head-' + (e.event ? 'e' : 'a') + ')');
-      if (e.event) { path.setAttribute('class', 'ev'); }
+      var cls = e.event ? ['ev'] : [];
+      // The walkthrough's current box: its edges flow, with a dot riding each one; the rest fade.
+      var spot = fig.getAttribute('data-wt-node');
+      if (spot) { cls.push(e.from === spot || e.to === spot ? 'wt-flow' : 'wt-dim'); }
+      if (cls.length) { path.setAttribute('class', cls.join(' ')); }
       svg.appendChild(path);
+      if (spot && (e.from === spot || e.to === spot) && !reducedMotion()) {
+        path.setAttribute('id', fig.id + '-wt-' + e.from + '-' + e.to);
+        var dot = document.createElementNS(SVGNS, 'circle');
+        dot.setAttribute('r', '4.5');
+        dot.setAttribute('class', 'wt-dot');
+        var ride = document.createElementNS(SVGNS, 'animateMotion');
+        ride.setAttribute('dur', '1.6s');
+        ride.setAttribute('repeatCount', 'indefinite');
+        var mpath = document.createElementNS(SVGNS, 'mpath');
+        mpath.setAttribute('href', '#' + path.getAttribute('id'));
+        ride.appendChild(mpath);
+        dot.appendChild(ride);
+        svg.appendChild(dot);
+      }
       if (e.n) {
         // A numbered badge; the key under the map carries the words.
         var badge = document.createElementNS(SVGNS, 'g');
@@ -570,6 +639,240 @@ table.fm-record td code { overflow-wrap: anywhere; }
     document.getElementById('fm-close').addEventListener('click', function () { fmModal.close(); });
     fmModal.addEventListener('click', function (e) { if (e.target === fmModal) { fmModal.close(); } });
     fmModal.addEventListener('close', function () { fmBody.innerHTML = ''; });
+  }
+  // Narrated walkthrough: each scene scrolls to its target, highlights it and plays the
+  // clips recorded with Kokoro when the review was built (scripts/narrate.py), one per
+  // sentence, with the sentence captioned. A sentence without a clip is captioned for as
+  // long as it would take to say, so the tour still runs.
+  var wt = document.getElementById('wt');
+  if (wt) {
+    var scenes = [];
+    try { scenes = JSON.parse(wt.querySelector('.wt-data').textContent); } catch (err) { scenes = []; }
+    var wtPlay = document.getElementById('wt-play');
+    var wtLabel = wtPlay.querySelector('.wt-label');
+    var wtPrev = document.getElementById('wt-prev');
+    var wtNext = document.getElementById('wt-next');
+    var wtStop = document.getElementById('wt-stop');
+    var wtStep = document.getElementById('wt-step');
+    var wtFill = document.getElementById('wt-fill');
+    var wtCaption = document.getElementById('wt-caption');
+    var clipCache = {};
+    var currentClip = null;
+    var current = -1;
+    var playing = false;
+    var token = 0;
+    function wait(ms, t) {
+      return new Promise(function (done) { setTimeout(function () { done(t === token); }, ms); });
+    }
+    function estimate(text) { return Math.max(1400, text.split(/\s+/).length * 400); }
+    function clip(src) {
+      if (!clipCache[src]) {
+        clipCache[src] = new Audio(src);
+        clipCache[src].preload = 'auto';
+      }
+      return clipCache[src];
+    }
+    function preload(i) {
+      if (!scenes[i]) { return; }
+      (scenes[i].lines || []).forEach(function (l) { if (l.audio) { clip(l.audio); } });
+    }
+    function sayOne(line, t) {
+      if (!line.audio) { return wait(estimate(line.text), t); }
+      return new Promise(function (done) {
+        var finished = false;
+        var audio = clip(line.audio);
+        function end(ok) {
+          if (finished) { return; }
+          finished = true;
+          clearTimeout(guard);
+          audio.onended = audio.onerror = null;
+          if (currentClip === audio) { currentClip = null; }
+          // A clip that will not load or play leaves its caption up for the time it would take.
+          if (!ok && t === token) { wait(estimate(line.text), t).then(done); return; }
+          done(t === token);
+        }
+        var guard = setTimeout(function () { end(true); }, estimate(line.text) * 3 + 5000);
+        currentClip = audio;
+        audio.currentTime = 0;
+        audio.onended = function () { end(true); };
+        audio.onerror = function () { end(false); };
+        var started = audio.play();
+        if (started && typeof started.catch === 'function') { started.catch(function () { end(false); }); }
+      });
+    }
+    function clearFocus() {
+      document.body.classList.remove('wt-active');
+      document.querySelectorAll('.wt-on, .wt-spot, .wt-near, .wt-focus, .wt-rise').forEach(function (el) {
+        el.classList.remove('wt-on', 'wt-spot', 'wt-near', 'wt-focus', 'wt-rise');
+      });
+      fmFigs.forEach(function (fig) {
+        if (fig.hasAttribute('data-wt-node')) { fig.removeAttribute('data-wt-node'); fmDraw(fig); }
+      });
+    }
+    function reveal(el, block) {
+      var d = el.closest('details');
+      while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); }
+      el.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: block });
+    }
+    function focusNode(id) {
+      var node = document.querySelector('.fm-node[data-node="' + id + '"]');
+      if (!node) { return null; }
+      var fig = node.closest('figure.flowmap');
+      var views = (node.getAttribute('data-views') || '').split(' ');
+      if (views.indexOf(fig.getAttribute('data-view')) < 0 && views[0]) {
+        var b = fig.querySelector('.fm-toggle button[data-view="' + views[0] + '"]');
+        if (b) { b.click(); }
+      }
+      var data = fig._fmData || { edges: [] };
+      data.edges.forEach(function (e) {
+        var other = e.from === id ? e.to : e.to === id ? e.from : null;
+        var near = other && fig.querySelector('.fm-node[data-node="' + other + '"]');
+        if (near) { near.classList.add('wt-near'); }
+      });
+      node.classList.add('wt-spot');
+      fig.classList.add('wt-focus');
+      fig.setAttribute('data-wt-node', id);
+      fmDraw(fig);
+      var section = fig.closest('.plan-section');
+      if (section) { section.classList.add('wt-on'); }
+      return fig;
+    }
+    function findIn(section, needle) {
+      var want = needle.toLowerCase();
+      var picks = section.querySelectorAll('tbody tr, .tile, fieldset.q, h3, h4, details > summary, li, .fm-node, pre, figure, p');
+      for (var i = 0; i < picks.length; i++) {
+        if (picks[i].textContent.toLowerCase().indexOf(want) >= 0) { return picks[i]; }
+      }
+      return null;
+    }
+    function show(i) {
+      var scene = scenes[i];
+      current = i;
+      clearFocus();
+      document.body.classList.add('wt-active');
+      var where = '';
+      var target = null;
+      if (scene.node) {
+        target = focusNode(scene.node);
+        where = 'Changes';
+      } else {
+        var section = document.getElementById(scene.section);
+        if (section) {
+          section.classList.add('wt-on');
+          where = section.querySelector('h2') ? section.querySelector('h2').textContent : '';
+          target = section;
+          var hit = scene.find ? findIn(section, scene.find) : null;
+          if (hit) { hit.classList.add('wt-spot'); target = hit; }
+          var tiles = section.querySelector('.tiles');
+          if (tiles && !hit) {
+            Array.prototype.slice.call(tiles.children).forEach(function (tile, n) { tile.style.animationDelay = (n * 110) + 'ms'; });
+            void tiles.offsetWidth;
+            tiles.classList.add('wt-rise');
+          }
+        }
+      }
+      if (target) { reveal(target, target.classList.contains('plan-section') ? 'start' : 'center'); }
+      wtCaption.hidden = false;
+      wtCaption.innerHTML = '';
+      var tag = document.createElement('span');
+      tag.className = 'wt-where';
+      tag.textContent = where;
+      wtCaption.appendChild(tag);
+      (scene.lines || []).forEach(function (line) {
+        var span = document.createElement('span');
+        span.className = 's';
+        span.textContent = line.text + ' ';
+        wtCaption.appendChild(span);
+      });
+      preload(i + 1);
+      wtStep.textContent = (i + 1) + ' of ' + scenes.length;
+      wtFill.style.width = ((i + 1) / scenes.length * 100) + '%';
+      wtPrev.disabled = i <= 0;
+      wtNext.disabled = i >= scenes.length - 1;
+      wtStop.hidden = false;
+    }
+    function setPlaying(on) {
+      playing = on;
+      wtPlay.setAttribute('aria-pressed', String(on));
+      wtLabel.textContent = on ? 'Pause' : current >= 0 && current < scenes.length - 1 ? 'Resume' : 'Walk me through it';
+    }
+    function silence() {
+      token++;
+      if (currentClip) { currentClip.pause(); currentClip = null; }
+    }
+    async function play(from) {
+      silence();
+      var t = token;
+      setPlaying(true);
+      for (var i = Math.max(0, from); i < scenes.length; i++) {
+        show(i);
+        var parts = wtCaption.querySelectorAll('.s');
+        var lines = scenes[i].lines || [];
+        for (var n = 0; n < parts.length; n++) {
+          parts[n].classList.add('now');
+          if (!(await sayOne(lines[n], t))) { return; }
+          parts[n].classList.remove('now');
+        }
+        if (!(await wait(450, t))) { return; }
+      }
+      setPlaying(false);
+      wtLabel.textContent = 'Play again';
+    }
+    function pause() {
+      silence();
+      setPlaying(false);
+    }
+    function stop() {
+      silence();
+      current = -1;
+      setPlaying(false);
+      clearFocus();
+      wtCaption.hidden = true;
+      wtStop.hidden = true;
+      wtStep.textContent = scenes.length + ' scenes';
+      wtFill.style.width = '0';
+      wtPrev.disabled = true;
+      wtNext.disabled = false;
+    }
+    wtPlay.addEventListener('click', function () {
+      if (playing) { pause(); return; }
+      preload(Math.max(0, current));
+      play(current >= 0 && current < scenes.length - 1 ? current : 0);
+    });
+    function jump(i) {
+      if (i < 0 || i >= scenes.length) { return; }
+      if (playing) { play(i); } else { silence(); show(i); setPlaying(false); }
+    }
+    wtPrev.addEventListener('click', function () { jump(current - 1); });
+    wtNext.addEventListener('click', function () { jump(current + 1); });
+    wtStop.addEventListener('click', stop);
+    // The recorded overview plays in the full-size dialog; it pauses a running tour.
+    var wtWatch = document.getElementById('wt-watch');
+    if (wtWatch && modal && modalBody && typeof modal.showModal === 'function') {
+      wtWatch.addEventListener('click', function () {
+        if (playing) { pause(); }
+        modalBody.innerHTML = '';
+        var v = document.createElement('video');
+        v.className = 'overview';
+        v.controls = true;
+        v.playsInline = true;
+        v.preload = 'auto';
+        if (wtWatch.dataset.poster) { v.poster = wtWatch.dataset.poster; }
+        v.src = wtWatch.dataset.src;
+        modalBody.appendChild(v);
+        modal.showModal();
+        var started = v.play();
+        if (started && typeof started.catch === 'function') { started.catch(function () { /* the controls stay for a manual start */ }); }
+      });
+    } else if (wtWatch) { wtWatch.hidden = true; }
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && current >= 0 && !document.querySelector('dialog[open]')) { stop(); }
+    });
+    window.addEventListener('pagehide', silence);
+    if ('ResizeObserver' in window) {
+      new ResizeObserver(function () { document.documentElement.style.setProperty('--wt-h', wt.offsetHeight + 'px'); }).observe(wt);
+    }
+    if (!scenes.length) { wt.hidden = true; }
   }
 })();
 (async function () {

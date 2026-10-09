@@ -83,7 +83,7 @@ def test_given_video_captioned_with_scenario_title_then_plays_in_grid_without_wa
     assert "names no step" not in log
     files = json.loads((tmp_path / "review.files.json").read_text(encoding="utf-8"))
     assert files == ["evidence/run.webm", "evidence/wallet.png"]
-    assert "evidence files: 2 (review.files.json)" in log
+    assert "published files: 2 (review.files.json)" in log
 
 
 def test_given_two_images_on_a_scenario_then_one_grid(evidence_review, tmp_path):
