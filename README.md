@@ -157,12 +157,6 @@ that runs on your machine (`pip install kokoro-onnx`; the model downloads once).
 text is never sent anywhere, and every reader hears the same voice in any browser.
 Without Kokoro installed, the tour plays as captions only.
 
-The same switch records the tour as an **overview video**: a 1080p MP4 with a title
-card, the voice and captions, which the page plays from **Watch overview** and which
-can be shared on its own. `scripts/overview.py` plays the page in headless Chromium,
-so it needs `pip install playwright`, `python -m playwright install chromium` and
-ffmpeg; without them the page keeps the tour and skips the video.
-
 ![Review page showing verdict tiles, the change diagram and decision form](docs/images/review-page.png)
 
 ### next
@@ -353,7 +347,7 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `optional.dotnet-claude-kit` | `true`, `false` | `false` | Companion plugin availability. |
 | `optional.codex` | `true`, `false` | `false` | Enable the Codex second-opinion reviewer. |
 | `optional.roslyn-mcp` | `true`, `false` | `false` | Roslyn MCP availability for code-review-workflow. |
-| `optional.walkthrough` | `true`, `false` | `false` | Narrated walkthrough and overview video on the plan and review pages, voiced by Kokoro on your machine (`pip install kokoro-onnx`; the video also needs Playwright and ffmpeg). See [review](#review). |
+| `optional.walkthrough` | `true`, `false` | `false` | Narrated walkthrough on the plan and review pages, voiced by Kokoro on your machine (`pip install kokoro-onnx`). See [review](#review). |
 | `optional.jev` | `true`, `false` | `false` | Jev availability: a `TYPESAFE_API_KEY` or a `jev` MCP server. Detected by setup. See [Jev](#jev). |
 | `jev.flag_at` | Number from 0 to 1 | `0.75` | Probability at or above which a scored check becomes a finding at the rule's severity. |
 | `jev.review_at` | Number from 0 to 1, at most `flag_at` | `0.4` | Probability at or above which a scored check is listed as low with "confirm by reading". |

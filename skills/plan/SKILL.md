@@ -124,19 +124,12 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
    `plans/<slug>/walkthrough/plan/`; nothing is sent anywhere, and reruns record only
    the sentences that changed. Exit 2 means `kokoro-onnx` is not installed: say
    `skipped: kokoro not installed` in chat and carry on; the page then shows captions
-   without sound. Next **record the overview video**:
-   ```bash
-   python "SKILL_DIR/../../scripts/overview.py" plans/<slug>/plan.md
-   ```
-   It plays the walkthrough in headless Chromium and saves a 1080p MP4 with a title
-   card to `plans/<slug>/overview/plan.mp4`; the page gets a **Watch overview** button.
-   It re-records only when the plan or its clips changed. Exit 2 means Playwright or
-   ffmpeg is missing: say `skipped: overview video` and carry on. Then **build the page:**
+   without sound. Then **build the page:**
    ```bash
    python "SKILL_DIR/scripts/build_plan.py" plans/<slug>/plan.md --out plans/<slug>/plan.html
    ```
    Never hand-edit `plan.html`; it is regenerated from `plan.md` every time. Keep `--out`
-   beside `plan.md`: the builder lists the walkthrough clips and the overview video in `plans/<slug>/plan.files.json`.
+   beside `plan.md`: the builder lists the walkthrough clips in `plans/<slug>/plan.files.json`.
 10. **Publish.** With `artifacts: true`, use the Artifact tool: `file_path` is `plan.html`,
    `favicon` 🧅 on the first publish only, `description` one sentence naming the ticket,
    `capabilities` `{"db": {}, "comments": {}}`: `db` stores the answers and decision,
@@ -145,7 +138,7 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
    tool asks for them, then leave the CSS and script alone. Republishing the same file
    path keeps the URL and the stored answers. When `plan.files.json` lists any files,
    also pass `root: plans/<slug>` and `files` set to that list, so each walkthrough clip
-   and the overview video publish at their `walkthrough/plan/` and `overview/` paths next to the page. The publish result says whether this
+   publishes at its `walkthrough/plan/` path next to the page. The publish result says whether this
    session watches the page; from a new session, run `ArtifactComments` `watch` on the
    URL first, or the button falls back to asking for "decided". With
    `artifacts: false`, tell the user the path of `plan.html` to open in a browser; the form still renders but cannot send, so take
