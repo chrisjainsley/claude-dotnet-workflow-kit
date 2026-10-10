@@ -10,6 +10,7 @@ it; skills and the check/build scripts only read it.
 
 Run directly to print the resolved profile:  python kit_profile.py [--profile <file>]
 or only the stage order /next runs:          python kit_profile.py --order
+or the bug-fix run's order (no plan gate):   python kit_profile.py --order --fix
 """
 import argparse
 import json
@@ -54,6 +55,9 @@ STAGE_CHECK_KEYS = ("id", "prompt", "on_fail")
 STAGE_ON_FAIL = ("fix", "stop")
 STAGE_LABELS = {"start": "Start", "plan": "Plan", "implement": "Implement", "test": "Test",
                 "review": "Review", "pull_request": "PR"}
+# A bug-fix run (the fix skill) replaces the plan stage with this one.
+FIX_STAGE = {"id": "repro", "label": "Reproduce"}
+CHECK_STAGES = STAGES + (FIX_STAGE["id"],)
 EXTRA_STAGE_KEYS = ("id", "label", "after", "run", "done_when", "gate")
 EXTRA_STAGE_LABEL_MAX = 12
 
@@ -266,8 +270,8 @@ def validate_stage_checks(profile):
     if not isinstance(stages, dict):
         return ["stage_checks must be an object keyed by stage"]
     for stage, checks in stages.items():
-        if stage not in STAGES:
-            problems.append(f"stage_checks: unknown stage {stage!r}; allowed: {', '.join(STAGES)}")
+        if stage not in CHECK_STAGES:
+            problems.append(f"stage_checks: unknown stage {stage!r}; allowed: {', '.join(CHECK_STAGES)}")
             continue
         if not isinstance(checks, list):
             problems.append(f"stage_checks.{stage} must be a list")
@@ -312,7 +316,7 @@ def validate_extra_stages(profile):
         stage_id = stage.get("id")
         if not isinstance(stage_id, str) or not CHECK_ID.match(stage_id):
             problems.append(f"{label}: id must match {CHECK_ID.pattern}; got {stage_id!r}")
-        elif stage_id in STAGES:
+        elif stage_id in CHECK_STAGES:
             problems.append(f"{label}: id {stage_id!r} is a built-in stage")
         elif stage_id in known:
             problems.append(f"{label}: duplicate id {stage_id!r}")
@@ -345,15 +349,20 @@ def extra_stages(profile):
     ]
 
 
-def pipeline_order(profile):
+def pipeline_order(profile, fix=False):
     """Every stage in run order as {id, label}: the built-ins with each extra stage slotted
-    after the stage it names. This is the list /next writes to the state file's `order`."""
+    after the stage it names. This is the list /next writes to the state file's `order`.
+    A bug-fix run swaps the plan stage for the reproduce stage, and an extra stage set
+    after the plan follows the reproduce stage instead."""
     order = [{"id": stage, "label": STAGE_LABELS[stage]} for stage in STAGES]
+    if fix:
+        order[STAGES.index("plan")] = dict(FIX_STAGE)
     for stage in extra_stages(profile):
         ids = [entry["id"] for entry in order]
-        if stage["after"] not in ids or stage["id"] in ids:
+        after = FIX_STAGE["id"] if fix and stage["after"] == "plan" else stage["after"]
+        if after not in ids or stage["id"] in ids:
             continue
-        order.insert(ids.index(stage["after"]) + 1, {"id": stage["id"], "label": stage["label"]})
+        order.insert(ids.index(after) + 1, {"id": stage["id"], "label": stage["label"]})
     return order
 
 
@@ -456,11 +465,12 @@ def add_profile_arg(parser):
 def main():
     ap = add_profile_arg(argparse.ArgumentParser(description=__doc__.splitlines()[0]))
     ap.add_argument("--order", action="store_true", help="print only the pipeline's stage order as JSON")
+    ap.add_argument("--fix", action="store_true", help="with --order, the bug-fix run's order: reproduce in place of plan")
     args = ap.parse_args()
     profile = resolve_profile(explicit=args.profile)
     problems = validate(profile)
     if args.order:
-        print(json.dumps(pipeline_order(profile)))
+        print(json.dumps(pipeline_order(profile, fix=args.fix)))
         return 1 if problems else 0
     print(json.dumps({k: v for k, v in profile.items() if not k.startswith("_")}, indent=2))
     print(f"source: {profile['_source']}", file=sys.stderr)

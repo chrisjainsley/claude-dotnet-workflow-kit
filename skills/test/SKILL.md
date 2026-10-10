@@ -1,6 +1,6 @@
 ---
 name: test
-description: Run the Test stage for a branch: the build and the unit and integration suites first, then the approved plan's acceptance scenarios against the profile's QA environment, opening the draft PR and applying the deploy label when that environment needs one, and write a BDD-format QA report of what was actually tested, covering acceptance runs and manual checks and never unit or integration suites, posted where the profile's qa.evidence says. Use whenever the user says "test", "run the scenarios", "qa", "qa report", "write up the testing", "document what we tested", "/qa-report", or when the kit's pipeline reaches the Test stage. Not for a bare "dotnet test" run with nothing to report. Also produces pre-hand-off QA notes, testing guidance written before anyone tests, covering what changed, how to test it per persona, test data and accounts, edge cases, out of scope, and environment or flag setup. Use notes mode whenever the user says "qa notes", "test notes", "notes for QA", or passes the literal argument "notes".
+description: Run the Test stage for a branch, the build and the unit and integration suites first, then the approved plan's acceptance scenarios against the profile's QA environment, opening the draft PR and applying the deploy label when that environment needs one, and write a BDD-format QA report of what was actually tested, covering acceptance runs and manual checks and never unit or integration suites, posted where the profile's qa.evidence says. Use whenever the user says "test", "run the scenarios", "qa", "qa report", "write up the testing", "document what we tested", "/qa-report", or when the kit's pipeline reaches the Test stage. Not for a bare "dotnet test" run with nothing to report. Also produces pre-hand-off QA notes, testing guidance written before anyone tests, covering what changed, how to test it per persona, test data and accounts, edge cases, out of scope, and environment or flag setup. Use notes mode whenever the user says "qa notes", "test notes", "notes for QA", or passes the literal argument "notes".
 ---
 
 # Test
@@ -45,7 +45,11 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    `pipeline.qa` when set. When `qa.environment` is not `local`, push the branch, open
    the draft PR through the scm adapter if none exists and apply `qa.deploy_label`, then
    wait for the deployment before running. Fix failures on the branch and rerun until
-   green, unless a fix would change the ticket's scope. With `optional.jev`, bucket the
+   green, unless a fix would change the ticket's scope. In a bug-fix run (the state
+   file has a `stages.repro` entry), also run each Tests row the plan marks "regression
+   area", with the filter it names; its acceptance scenarios count as acceptance runs
+   in the report, and the fix skill's `before` evidence is a Manual test row showing the
+   bug before the fix. With `optional.jev`, bucket the
    failures first. Load `jev_classify` with one item per failing test or scenario: the
    name plus the assertion message, under 2000 characters. Pass the plan's Requirement
    and a one-line summary of the change as `context`. The classes: `real_regression`

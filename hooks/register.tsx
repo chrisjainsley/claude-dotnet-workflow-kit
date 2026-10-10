@@ -34,6 +34,7 @@ const DEFAULT_ORDER = ['start', 'plan', 'implement', 'test', 'review', 'pull_req
 const DEFAULT_LABELS: Record<string, string> = {
   start: 'Start',
   plan: 'Plan',
+  repro: 'Reproduce',
   implement: 'Implement',
   test: 'Test',
   review: 'Review',

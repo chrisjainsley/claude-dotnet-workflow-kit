@@ -11,6 +11,7 @@ pytestmark = pytest.mark.skipif(
 
 SKILL_NAMES = (
     "start",
+    "fix",
     "plan",
     "implement",
     "test",
@@ -34,7 +35,7 @@ def test_given_profile_defaults_then_readme_lists_every_field():
     assert missing == [], f"README.md is missing these profile fields: {missing}"
 
 
-def test_given_six_skills_then_readme_has_a_section_each():
+def test_given_seven_skills_then_readme_has_a_section_each():
     text = readme_text()
     headings = re.findall(r"(?m)^###\s+(.+)$", text)
     missing = [name for name in SKILL_NAMES if not any(heading.strip() == name for heading in headings)]

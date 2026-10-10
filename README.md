@@ -5,7 +5,7 @@ implementation, review and QA hand-off. It builds plan and review pages with enf
 word budgets, so you can read the proposed work and the results before approving each.
 
 One project profile sets your architecture, tests, tracker and QA workflow. Use the
-six skills, start, plan, implement, test, review and next, together or on their own,
+seven skills, start, fix, plan, implement, test, review and next, together or on their own,
 with or without a ticket tracker or the Artifact tool.
 
 [Install](#install) | [Workflow](#workflow) | [Skills](#skills) | [Progress bar](#progress-bar) | [/goal](#running-with-goal) | [Branding](#branding) | [Profile reference](#profile-reference) | [dotnet-claude-kit](#dotnet-claude-kit) | [Jev](#jev) | [Contributing](#contributing)
@@ -70,6 +70,13 @@ before the review checkpoint. The kit never merges; a person approves every merg
 Requesting changes returns the pipeline to implementation with your notes and
 per-finding fix or accept choices. The draft stays a draft until approval.
 
+For a bug, start with `fix` instead. It replaces Start and Plan with a Reproduce stage,
+has no plan gate, and approves its own review when the fix is verified:
+
+```text
+/dotnet-workflow-kit:fix 1234
+```
+
 ## Skills
 
 ### start
@@ -78,6 +85,19 @@ Use to start work from an ID, issue URL or untracked slug. It creates and pushes
 branch from `base_branch` using `branch_pattern`. With a tracker, it assigns the item
 to `user` and moves it to the configured active state. It then renames the session
 when supported and hands off to plan.
+
+### fix
+
+Use to fix a bug hands-off. It branches as start does, then tries to reproduce the bug
+in the system running locally through `stack.local_run` (an Aspire AppHost on ports of
+its own, Docker or plain `dotnet run`), saving before evidence. It carries on when the
+bug will not reproduce. It writes a failing regression test, finds the regression
+area (the feature files and test classes beside the code the fix touches) and writes a
+small plan with no gate. Implement, test and review then run as usual, and Test also
+runs the regression area. When the bug reproduced, its scenario now passes, everything
+is green and no finding is open, the review approves itself and the pull request is
+marked ready. Otherwise the run stops at the review checkpoint and says why. It asks a
+question only when the ticket cannot say what correct looks like.
 
 ### plan
 
@@ -353,7 +373,7 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `jev.review_at` | Number from 0 to 1, at most `flag_at` | `0.4` | Probability at or above which a scored check is listed as low with "confirm by reading". |
 | `checks` | List of `{id, rule, severity, files}` | `[]` | Review checks the conventions reviewer enforces; `files` is an optional glob. Edited in the file, validated by `scripts/doctor.py`. |
 | `extra_stages` | List of `{id, label, after, run, done_when, gate}` | `[]` | The team's own `/next` stages. `after` names a built-in stage other than `pull_request`, or an earlier extra stage; `run` is a slash command or an instruction; `done_when` is the yes/no question that marks it done; `gate: true` stops for you after it. `label` is at most 12 characters and shows on the progress bar. Edited in the file. |
-| `stage_checks` | Object of stage name to a list of `{id, prompt, on_fail}` | `{}` | Yes/no prompts a `/next` stage must pass before it is marked done. Stages: `start`, `plan`, `implement`, `test`, `review`, `pull_request`. `on_fail` is `fix` (default, keep working the stage) or `stop` (blocker). Edited in the file. |
+| `stage_checks` | Object of stage name to a list of `{id, prompt, on_fail}` | `{}` | Yes/no prompts a `/next` stage must pass before it is marked done. Stages: `start`, `plan`, `implement`, `test`, `review`, `pull_request`, and `repro` in a bug-fix run. `on_fail` is `fix` (default, keep working the stage) or `stop` (blocker). Edited in the file. |
 
 Validation requires a tracker when `qa.evidence` is `work-item`. Both `bug-hunt` and
 `conventions` remain in the reviewer list.
@@ -456,7 +476,7 @@ skipped wording and the checks reference.
 |---|---|
 | `.claude-plugin/` | Plugin and marketplace manifests. |
 | `commands/setup.md` | Setup command instructions. |
-| `skills/` | Six skills, the reviewer sweep and their supporting files. |
+| `skills/` | Seven skills, the reviewer sweep and their supporting files. |
 | `adapters/` | Tracker, source control, architecture, QA and stack instructions. |
 | `assets/` | Shared page shell. |
 | `scripts/` | Profile, setup, checks, rendering and the Jev checks scorer. |
