@@ -239,6 +239,17 @@ def test_given_extra_stages_then_slotted_after_their_anchor_in_file_order():
     assert profile_mod.extra_stages(prof)[1]["gate"] is True
 
 
+def test_given_fix_run_then_reproduce_replaces_plan_and_takes_its_extra_stages():
+    prof = fresh_defaults()
+    prof["extra_stages"] = [{**SECURITY, "id": "triage", "label": "Triage", "after": "plan"}]
+    prof["stage_checks"] = {"repro": [{"id": "repro-logged", "prompt": "Is the repro outcome recorded?"}]}
+    assert profile_mod.validate(prof) == []
+    order = profile_mod.pipeline_order(prof, fix=True)
+    assert [s["id"] for s in order] == ["start", "repro", "triage", "implement", "test", "review", "pull_request"]
+    assert order[1] == {"id": "repro", "label": "Reproduce"}
+    assert [s["id"] for s in profile_mod.pipeline_order(prof)][1:3] == ["plan", "triage"]
+
+
 @pytest.mark.parametrize(
     "extra,fragment",
     [

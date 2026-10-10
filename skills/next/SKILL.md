@@ -46,21 +46,29 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
 | 4 | Review | `/dotnet-workflow-kit:review`, built after Test so it reflects the final diff; do not post to the tracker yet | State `review.artifactUrl` and `review.decision`. **Gate: the checkpoint.** |
 | 5 | Pull request | Scm adapter: open the draft if Test did not, resolve threads (`pipeline.resolve_comments` when set), then once approved post the QA report per `qa.evidence`, mark the PR ready, apply `qa.handoff_label`, move the item to `tracker_states.qa_ready` (or the adapter's default) | 0 unresolved threads, checks green, PR ready; state `pullRequest.done`. A person merges. |
 
+## Bug-fix runs
+
+`/dotnet-workflow-kit:fix` starts a bug-fix run in place of Start and Plan. A state file with a `stages.repro` entry is one; build its order with `kit_profile.py --order --fix`. The Reproduce row replaces the Plan row. It is done when `stages.repro` is done and `plans/<id>-<slug>/plan.md` exists; until then the next action is `/dotnet-workflow-kit:fix`. There is no plan gate. Implement, Test and Review run as above, with two differences:
+
+- Test also runs the regression area: the plan's Tests rows marked "regression area". A red one is a Test failure like any other.
+- At the checkpoint, approve the review yourself when all of these hold: `stages.repro.outcome` is `reproduced`, the bug's scenario now passes, the suites and the regression area are green, no finding is open, and every stage check passed. Record `review.decision` as `approve` with the note "auto-approved: bug fix verified", and send one message that opens with the checkpoint's first line word for word, then gives the review link, its Verdict line and the note. Go straight on to stage 5 without waiting. When any of them fails, stop at the checkpoint as usual, and name the condition that failed in the summary paragraph. A bug that was never reproduced always stops here, since nothing showed the fix works.
+
 Bug-fixing for a sweep finding or a Test failure is never its own row: the stage that found it stays not-done, with the finding or bug in its evidence column, and fixing it is the next action inside that stage.
 
 ## Extra stages
 
-The profile's `extra_stages` add the team's own stages, each `{id, label, after, run, done_when, gate}`. `python "SKILL_DIR/../../scripts/kit_profile.py" --order` prints the full run order with each extra stage slotted after the stage it names; write that list to the state file's `order` on every run. An extra stage runs when the stage before it is done: run `run`, a slash command or a plain instruction, then answer `done_when`, a yes/no question, the way stage checks are answered below. Yes marks it done. No keeps it in progress, and fixing what the answer found is the next action inside it. With `gate: true`, stop after it is done and before the next stage, set `stages.<id>.waiting` to true, and clear it once the user replies. Record each as `stages.<id>`: `{"done", "at", "waiting", "note"}`. An extra stage gets a row in the status table, in run order.
+The profile's `extra_stages` add the team's own stages, each `{id, label, after, run, done_when, gate}`. `python "SKILL_DIR/../../scripts/kit_profile.py" --order` prints the full run order with each extra stage slotted after the stage it names; write that list to the state file's `order` on every run, adding `--fix` when `stages.repro` exists. An extra stage runs when the stage before it is done: run `run`, a slash command or a plain instruction, then answer `done_when`, a yes/no question, the way stage checks are answered below. Yes marks it done. No keeps it in progress, and fixing what the answer found is the next action inside it. With `gate: true`, stop after it is done and before the next stage, set `stages.<id>.waiting` to true, and clear it once the user replies. Record each as `stages.<id>`: `{"done", "at", "waiting", "note"}`. An extra stage gets a row in the status table, in run order.
 
 ## Stage checks
 
-The profile's `stage_checks` add the team's own conditions to the Done-when column. Each stage key holds a list of `{id, prompt, on_fail}`. The keys are `start`, `plan`, `implement`, `test`, `review` and `pull_request`. A `prompt` is a yes/no question that a yes answer satisfies. Run them when the built-in rule for a stage is met and before marking it done. For the plan and review stages, run them before presenting the page, never in place of the user's decision.
+The profile's `stage_checks` add the team's own conditions to the Done-when column. Each stage key holds a list of `{id, prompt, on_fail}`. The keys are `start`, `plan`, `implement`, `test`, `review` and `pull_request`, plus `repro` for a bug-fix run. A `prompt` is a yes/no question that a yes answer satisfies. Run them when the built-in rule for a stage is met and before marking it done. For the plan and review stages, run them before presenting the page, never in place of the user's decision.
 
 The evidence each stage is judged on:
 
 | Stage | Evidence |
 |---|---|
 | start | the fetched ticket text and the branch name |
+| repro | the repro evidence, the regression test's red run and `plan.md` |
 | plan | `plan.md` and the stored answers |
 | implement | the diff (`--range origin/<base>...HEAD`) and the sweep report |
 | test | the raw build and test runner output and the QA report |
@@ -172,7 +180,7 @@ A stop is a finished run, not pending work, so `/goal` conditions such as "/next
 
 ## Goals
 
-The kit's hooks set the run's goals; this skill never runs `/goal` itself. When the plan is recorded as approved, they set `/goal /next has reached the review checkpoint`, met by the checkpoint's first line. When the review decision is recorded as `approve`, they set `/goal complete /next: the pull request is ready`, met by the final message's first line. Keep both lines word for word, and record the plan approval and the review decision in the state file as soon as they happen, since that is what the hooks watch. While `current.blocked` is true the hooks keep the goal quiet, so a blocker does not re-prompt.
+The kit's hooks set the run's goals; this skill never runs `/goal` itself. When the plan is recorded as approved, they set `/goal /next has reached the review checkpoint`, met by the checkpoint's first line. When the review decision is recorded as `approve`, they set `/goal complete /next: the pull request is ready`, met by the final message's first line. Keep both lines word for word, and record the plan approval and the review decision in the state file as soon as they happen, since that is what the hooks watch. A bug-fix run writes `stages.plan` as done when the fix skill writes its plan, and an auto-approved review records its decision the same way, so the same two goals apply. While `current.blocked` is true the hooks keep the goal quiet, so a blocker does not re-prompt.
 
 ## The pull request (stage 5)
 

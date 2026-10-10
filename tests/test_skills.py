@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKILLS = ("start", "plan", "implement", "test", "review", "next")
+SKILLS = ("start", "fix", "plan", "implement", "test", "review", "next")
 OLD_NAMES = ("start-ticket", "visual-plan", "mega-review", "qa-report", "visual-review")
 FRONT_MATTER = re.compile(r"^---\nname: (?P<name>[a-z0-9-]+)\ndescription: (?P<description>.+?)\n---\n", re.S)
 

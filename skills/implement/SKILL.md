@@ -45,7 +45,9 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
    the tracker's design images under `context/` count the same way.
 2. **Confirm the branch and a clean tree.** The branch should match the profile's
    `branch_pattern`; `git status --short` should be empty. A dirty tree means someone is
-   mid-edit: list the files and ask before continuing.
+   mid-edit: list the files and ask before continuing. A bug-fix run is the exception:
+   its tree holds the regression test the fix skill wrote, red, and it goes into the
+   commit of the layer that fixes it.
 3. **Walk the plan's layers in order**, one commit per layer that has a change
    (Domain, Application, Infrastructure, API, Tests for clean architecture; Slice,
    Persistence, Integration, Endpoint, Tests for vertical slices). For each layer:

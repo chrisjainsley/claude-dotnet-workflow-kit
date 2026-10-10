@@ -43,7 +43,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit_profile import (  # noqa: E402
-    CHECK_KEYS, STAGES, add_profile_arg, enabled_checks, get, resolve_profile, stage_checks, validate, validate_checks,
+    CHECK_KEYS, CHECK_STAGES, add_profile_arg, enabled_checks, get, resolve_profile, stage_checks, validate, validate_checks,
 )
 from render import SECRET_PATTERNS  # noqa: E402
 
@@ -617,7 +617,7 @@ def main(argv=None):
     ap.add_argument("--rules", help="extra rules JSON (same shape as the profile's checks)")
     ap.add_argument("--extract", nargs="+", metavar="MD", help="extract rules from these markdown files and stop")
     ap.add_argument("--check-rules", action="store_true", help="ask whether each profile check is verifiable from a hunk")
-    ap.add_argument("--stage", choices=STAGES, help="answer the profile's stage_checks for this /next stage")
+    ap.add_argument("--stage", choices=CHECK_STAGES, help="answer the profile's stage_checks for this /next stage")
     ap.add_argument("--evidence", nargs="*", default=[], metavar="FILE", help="evidence files for --stage")
     ap.add_argument("--out", help="write the JSON result here")
     ap.add_argument("--dry-run", action="store_true", help="build the requests, send nothing")
