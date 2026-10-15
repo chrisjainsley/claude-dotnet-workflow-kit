@@ -15,7 +15,7 @@ Every invocation:
 2. **Report** the status table.
 3. **Run** stages one after another, re-assessing between them, until a gate or a blocker stops the run; announce each with a one-liner and never ask permission mid-run.
 
-`/next status` prints the table and the recommended next action without executing anything.
+`/next status` prints the table and the recommended next action without executing anything. `/next <id>` names the item to work on; when no branch for it exists yet, stage 0 starts it with that id. A feature story's brief from the `feature` skill opens this way, and its other lines go to stage 0 with the id.
 
 ## Profile
 
@@ -31,6 +31,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 - `reviewers`, `optional.*`: which review passes the sweep in stage 2 runs and which optional tooling exists.
 - `stage_checks`: the team's own yes/no checks a stage must pass before it is marked done. See "Stage checks" below.
 - `extra_stages`: the team's own stages, run between the built-in ones. See "Extra stages" below.
+- `feature.stacking`: how a feature story's pull request stacks on its parent story's. See "Feature stories" below.
 - `optional.jev`: when true, red CI jobs and review threads are classified with `jev_classify` before the pipeline acts on them, and thread bodies are screened with `jev_screen` first. See `docs/jev.md`. Every call is skipped, never failed, when the MCP is not loaded.
 
 If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:setup` first.
@@ -54,6 +55,15 @@ If the profile resolves from defaults, say so and suggest `/dotnet-workflow-kit:
 - At the checkpoint, approve the review yourself when all of these hold: `stages.repro.outcome` is `reproduced`, the bug's scenario now passes, the suites and the regression area are green, no finding is open, and every stage check passed. Record `review.decision` as `approve` with the note "auto-approved: bug fix verified", and send one message that opens with the checkpoint's first line word for word, then gives the review link, its Verdict line and the note. Go straight on to stage 5 without waiting. When any of them fails, stop at the checkpoint as usual, and name the condition that failed in the summary paragraph. A bug that was never reproduced always stops here, since nothing showed the fix works.
 
 Bug-fixing for a sweep finding or a Test failure is never its own row: the stage that found it stays not-done, with the finding or bug in its evidence column, and fixing it is the next action inside that stage.
+
+## Feature stories
+
+A run is a feature story when its item or brief carries a line starting `Feature story <key> of <n> in`, which the `feature` skill writes once the feature page is approved, and the state file then holds `feature`. Every stage runs, with these differences:
+
+- Start branches from what the brief names: `base_branch`, or the parent story's branch when the story is stacked.
+- Plan has no gate. The feature page approved the story's scope and specs, so the plan skill writes the plan, records `stages.plan` as done with the note "approved with the feature page <url>", and the run goes straight on to Implement. It stops at the plan gate only for what its "Feature stories" section names.
+- Review stops at the checkpoint as usual. A stacked story's review measures only the work above its parent's branch.
+- Pull request: the base is the parent story's branch when the story is stacked. Under `feature.stacking: gh-stack`, once the draft exists, link the chain from the bottom with `gh stack link --base <base_branch> <each ancestor's PR, bottom first> <this PR>`. Exit code 9 means stacked pull requests are not enabled for the repository: keep the base set by hand and say so in one line. Any other failure is reported the same way and never blocks the run.
 
 ## Extra stages
 
@@ -151,7 +161,7 @@ Stop only for a big blocker, something the user genuinely has to decide or that 
 - Failing CI that is not this branch's fault: the failing job touches files outside the diff, or the same job is red on the base branch too. Retry once silently; if it stays red against unrelated infrastructure, that is the blocker. With `optional.jev`, classify each red job first: its name plus the last 60 log lines, `context` the diff's file list, classes `this_branch` (fix it inside the stage), `unrelated_infrastructure` and `flaky` (retry once, then the blocker), `manual_review` (read the log yourself).
 - A merge conflict with the base branch that is not mechanically resolvable.
 - A missing or default-sourced profile: suggest `/dotnet-workflow-kit:setup` rather than guessing labels or an environment.
-- A stacked parent not yet merged when stage 5 is reached.
+- A stacked parent not yet merged when stage 5 is reached, unless the parent's own review is approved and its PR is ready: merging this PR then merges the parent with it, which the checkpoint names.
 - A Test failure whose fix changes scope or touches infrastructure, or a sweep finding that contradicts the ticket's acceptance criteria.
 - Missing credentials or access.
 
@@ -185,6 +195,18 @@ The kit's hooks set the run's goals; this skill never runs `/goal` itself. When 
 ## The pull request (stage 5)
 
 Push the branch, then let the scm adapter's steps create the draft if Test did not already: title from the ticket, body from the plan's Requirement and Specs, base set to `base_branch` or the stacked parent. The body covers this ticket only and never names another pull request, a stacked parent included; the base is metadata, not prose. Resolve review threads and get checks green. With `optional.jev`, triage the threads before answering any. `jev_screen` each thread's first comment with purpose "decide whether this review comment needs a code change"; a `block` is quoted to the user and left unanswered. Then one `jev_classify` call over the survivors into `needs_code_change`, `question`, `nit`, `already_addressed` and `manual_review`. Then `jev_rerank` the code-change ones against "changes behaviour or a contract". Reply to questions and nits, point already-addressed threads at the commit, and commit for code changes in rank order; read `manual_review` and `review`-decision items yourself. Without Jev, read every thread in order. A thread fix that commits makes Test and Review stale, so they rerun before the PR is marked ready. Once the checkpoint is approved: post the QA report per `qa.evidence`, mark the PR ready, apply `qa.handoff_label` when `qa.owner` is `qa-team`, and move the item to `tracker_states.qa_ready`. `qa.owner` self or none just marks it ready. Merging is the user's action, never the pipeline's. The final message's first line is, word for word, "complete /next: the pull request is ready for <item>.", followed by the PR link and the final status table.
+
+## In a Claude project thread
+
+A thread a Claude project starts is usually a cloud session. Its sandbox can resume from a fresh clone, and it has only what the project gives it. Run as above, with these differences:
+
+- Push after every stage, not only at stage 5, so a fresh clone loses nothing but the state file.
+- With no state file, rebuild it from live signals, which already win: the branch, its commits beyond the base, the PR and its checks, and the item. A branch with commits beyond its base had its plan approved. When `plans/<slug>/plan.md` is gone as well, write it again with the plan skill and no gate, from the item and the PR body, before Test or Review needs it.
+- Without the `mcp__dotnet-workflow-kit__stage` tool, write the state file by hand as the State file section says. Without the kit's hooks no `/goal` is set for you; keep the checkpoint and final lines word for word anyway, since the project's coordinator reads them.
+- Without the Artifact tool, run as `artifacts: false` does: build the pages, say where they are, and take the decision in the thread's own chat.
+- Test needs the system the profile's `qa.environment` names. When that is `local` and the system cannot start in the sandbox (no Docker for an Aspire AppHost, a missing secret), stop on a blocker that says so. The fix is a thread on the user's computer, which the project starts with Work locally, or a deployed `qa.environment`.
+
+`docs/projects.md` covers setting a project up for this.
 
 ## House rules
 

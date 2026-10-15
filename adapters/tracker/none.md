@@ -20,6 +20,16 @@ the normal way; skip any tracker-specific step.
 There is no parent feature, sibling story or attachment to pull. The plan's Context
 section is built entirely from what the user said and from the code itself.
 
+## Fetch a feature
+
+The PRD is a file in the repository or the user's own description. There are no
+existing children to reuse.
+
+## Create a child item
+
+Nothing is created. Each story is a slug, `<key>-<story slug>`, and its brief carries
+the story and its acceptance criteria, since there is no item for the thread to fetch.
+
 ## Post the QA report
 
 Nothing is posted anywhere. The QA report still gets written, since it is useful to

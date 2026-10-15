@@ -4,9 +4,12 @@
 Usage:
   python check.py plans/<slug>/plan.md [--profile <profile.json>]
   python check.py plans/<slug>/review.md
+  python check.py plans/<slug>/feature.md
 
-`--kind plan|review` picks the rule set; without it the kind is inferred from the
-## section names, then from the front matter. Plan sections and caps come from the
+`--kind plan|review|feature` picks the rule set; without it a `kind: feature` front
+matter line wins, then the kind is inferred from the ## section names, then from the
+rest of the front matter. A feature page's sections are fixed (FEATURE_SECTIONS) and its
+Stories table and Story specs are validated by feature_order.py. Plan sections and caps come from the
 profile's architecture (scripts/kit_profile.py); review sections are the same for every
 architecture, and --profile is accepted there so the command lines match.
 
@@ -20,8 +23,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kit_profile import (  # noqa: E402
-    add_profile_arg, disallowed_plan_sections, expected_plan_sections, resolve_profile, review_slices,
+    FEATURE_SECTIONS, add_profile_arg, disallowed_plan_sections, expected_plan_sections, resolve_profile,
+    review_slices,
 )
+import feature_order  # noqa: E402
 import flowmap  # noqa: E402
 
 SIZE_MULTIPLIER = {"small": 0.6, "standard": 1.0, "large": 1.5}
@@ -399,6 +404,8 @@ def table_rows(text):
 
 
 def infer_kind(meta, section_names):
+    if meta.get("kind", "").strip().lower() == "feature":
+        return "feature"
     names = set(section_names)
     if names & {"Verdict", "Changes", "Findings", "Decision", "QA report", "Rollout"}:
         return "review"
@@ -494,6 +501,16 @@ def check_plan(meta, body, multiplier, sections, disallowed=(), walkthrough=Fals
         print(f"{name:<20}{words:>7}{limit:>6}{bullets:>7}  {status}")
     print(f"{'total prose':<20}{total_prose:>7}{round(sum(c for _, c, _ in sections) * multiplier):>6}")
     return report(failures)
+
+
+def check_feature(meta, body, multiplier):
+    """A feature page: the plan rules over FEATURE_SECTIONS, plus its stories."""
+    found = feature_order.sections(body)
+    stories, problems = feature_order.parse_stories(found.get(feature_order.STORIES_SECTION, ""))
+    if not problems:
+        problems = feature_order.validate(stories, feature_order.parse_specs(found.get(feature_order.SPECS_SECTION, "")))
+    print(f"stories {len(stories)}/{feature_order.MAX_STORIES}")
+    return check_plan(meta, body, multiplier, FEATURE_SECTIONS, problems)
 
 
 def check_review(meta, body, multiplier, slices=None, walkthrough=False):
@@ -604,7 +621,7 @@ def check_review(meta, body, multiplier, slices=None, walkthrough=False):
 def main(kind=None, argv=None):
     ap = add_profile_arg(argparse.ArgumentParser(description=__doc__.splitlines()[0]))
     ap.add_argument("source")
-    ap.add_argument("--kind", choices=("plan", "review"), default=kind,
+    ap.add_argument("--kind", choices=("plan", "review", "feature"), default=kind,
                     help="rule set; inferred from the sections and front matter when omitted")
     args = ap.parse_args(argv)
 
@@ -619,6 +636,8 @@ def main(kind=None, argv=None):
         return 1
     multiplier = SIZE_MULTIPLIER[size]
     profile = resolve_profile(explicit=args.profile)
+    if document_kind == "feature":
+        return check_feature(meta, body, multiplier)
     if document_kind == "plan":
         present = [name for name, _ in split_sections(body)]
         return check_plan(meta, body, multiplier, expected_plan_sections(profile, present),

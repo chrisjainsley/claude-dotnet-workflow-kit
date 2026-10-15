@@ -148,7 +148,7 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
         `stages.plan` gets `artifactUrl`, `designUrl` when a canvas was made, and `done: false`.
     The progress bar reads an unapproved plan with a page as waiting on the user. When the
     user approves, set `done: true` and `at`; the kit's hooks then set the run's `/goal`.
-12. **Hand off in chat.** The link or path, the canvas link when one was made, one line
+12. **Hand off in chat.** For a feature story, follow "Feature stories" below instead. The link or path, the canvas link when one was made, one line
     on which services and areas the work touches, and ask the user to answer the open
     questions and pick Approve or Revise on the page (or reply in chat). That message
     is the approval gate; do not add a separate "does this look right". Inside
@@ -172,6 +172,24 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
     path. The document is the source of truth, not the chat. Before any republish of a
     plan with a canvas, read the canvas artboards again into `design/project/`, since
     the reviewer may have edited them on the canvas.
+
+## Feature stories
+
+A ticket whose body or brief carries a line starting `Feature story <key> of <n> in` was
+split out by the `feature` skill, and its scope and acceptance criteria were approved
+on the feature page that line links. Plan it as above, with these differences:
+
+- Specs: copy the item's Gherkin block verbatim. Add a scenario only for a sibling case
+  the code shows the story must keep working, and never change an approved one.
+- Context: name the feature page and the story's key; front matter `size` is the size
+  the feature page gave the story, and `base` is the branch the story forked from.
+- No gate. After step 10, set `stages.plan` to `done: true`, `at`, `artifactUrl` and
+  `note: "approved with the feature page <url>"`, say in one line that the plan follows
+  the approved feature, and go straight on to Implement as step 13's approve path does.
+- Stop at the gate after all, as step 12 says, only when the plan has an open question
+  that neither the feature page nor the code settles, or needs a change outside the
+  story's specs, such as a contract, schema or shared type another story in the feature
+  relies on. Say which in the hand-off.
 
 ## Section order and budget
 

@@ -46,6 +46,7 @@ QUESTIONS = [
     ("branch_kinds.bug", "Branch kind prefix for bugs", None),
     ("tracker_states.active", "Tracker state name for work in progress (blank: adapter default)", None),
     ("tracker_states.qa_ready", "Tracker state or column name for QA hand-off (blank: adapter default)", None),
+    ("feature.stacking", "How a feature's dependent stories stack their pull requests (off: wait for the merge)", ENUMS["feature.stacking"]),
     ("stack.data", "Data access", ENUMS["stack.data"]),
     ("stack.api", "API style", ENUMS["stack.api"]),
     ("stack.messaging", "Messaging", ENUMS["stack.messaging"]),

@@ -30,6 +30,31 @@ sibling issues with `gh issue list --repo example-org/example-repo --label <shar
 Attachments are inline image links in the body; fetch one with a plain HTTP request
 when the plan needs the screenshot.
 
+## Fetch a feature
+
+A feature is a parent issue. Its children are sub-issues:
+
+```bash
+gh api repos/example-org/example-repo/issues/<number>/sub_issues --jq '.[] | {number, title, state}'
+```
+
+On a host without sub-issues, the children are the issues the body lists as a task list
+(`- [ ] #123`); fetch each one the same way.
+
+## Create a child item
+
+Create the story, then attach it to the feature as a sub-issue. The sub-issues API takes
+the child's internal `id`, not its `number`:
+
+```bash
+gh issue create --repo example-org/example-repo --title "<story>" --body-file story.md
+gh api -X POST repos/example-org/example-repo/issues/<parent number>/sub_issues   -F sub_issue_id="$(gh api repos/example-org/example-repo/issues/<child number> --jq .id)"
+```
+
+`gh issue create` prints the new issue's URL; its last segment is the number. When the
+sub-issues call fails, add `Parent: #<parent number>` as the body's first line instead,
+which "Fetch a ticket" already reads.
+
 ## Post the QA report
 
 Post the QA report section as an issue comment, never by closing or reopening the

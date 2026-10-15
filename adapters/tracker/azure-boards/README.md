@@ -35,6 +35,26 @@ omit `--org`/`--project` and let it read the profile's `tracker_project` instead
 writes `context/context.md` with the parent feature, sibling stories and any linked
 design attachments, and downloads image attachments alongside it.
 
+## Fetch a feature
+
+A feature is a Feature or Epic work item. Its children are the
+`System.LinkTypes.Hierarchy-Forward` relations that `--expand relations` returns, as in
+"Fetch a ticket"; fetch each id the same way.
+
+## Create a child item
+
+Create the story with the process's story type (`User Story` in Agile, `Product Backlog
+Item` in Scrum, `Issue` in Basic), then link it under the feature:
+
+```bash
+az boards work-item create --type "User Story" --title "<story>"   --description "<html>" --fields "Microsoft.VSTS.Common.AcceptanceCriteria=<html>"
+az boards work-item relation add --id <child id> --relation-type parent --target-id <feature id>
+```
+
+The create call returns the new item as JSON; its `id` is the story's id. Description
+and acceptance criteria are HTML fields: wrap the Gherkin in `<pre>` and keep it plain
+ASCII.
+
 ## Post the QA report
 
 Post the QA report section as a work item comment, never as a state change:
