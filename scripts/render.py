@@ -33,7 +33,9 @@ Question ids derive from the title text, so a republish keeps answers already st
 as long as the title is unchanged.
 
 Review mode: Verdict becomes stat tiles, Plan versus delivered and Findings render
-status pills, Changes draws its ```flowmap as a layer map (scripts/flowmap.py) whose
+status pills, each open finding's "#### `location`" explanation (What happened, Why it
+matters, How bad) folds into an expandable row under its table row and into its
+decision-form question, Changes draws its ```flowmap as a layer map (scripts/flowmap.py) whose
 nodes take their status from git, toggle between the base and the branch, and open
 their file diff and any @id example fences in a dialog, pairs "#### title" with a
 ```diff fence into collapsed hunks
@@ -531,7 +533,8 @@ def render_flowmap(body):
     )
 
 
-def render_table(lines, pill_columns=(), file_column=None):
+def render_table(lines, pill_columns=(), file_column=None, after_row=None):
+    """after_row(row) may return extra html (a whole <tr>) to place under that row."""
     rows = parse_table(lines)
     if not rows:
         return ""
@@ -545,8 +548,54 @@ def render_table(lines, pill_columns=(), file_column=None):
             else:
                 cells.append(f"<td>{pill(cell) if idx in pill_columns else inline(cell)}</td>")
         out.append("<tr>" + "".join(cells) + "</tr>")
+        if after_row:
+            out.append(after_row(row) or "")
     out.append("</tbody></table></div>")
     return "".join(out)
+
+
+EXPLAIN_LABELS = ("What happened", "Why it matters", "How bad")
+EXPLAIN_RE = re.compile(r"^\*\*(" + "|".join(EXPLAIN_LABELS) + r"):?\*\*:?\s*(.*)$")
+
+
+def finding_key(location):
+    return location.strip().strip("`").strip().lower()
+
+
+def take_explanations(lines):
+    """Split a Findings section into (other lines, {location key: [(label, text)]}).
+
+    An explanation is a "#### `location`" heading followed by **What happened:**,
+    **Why it matters:** and **How bad:** paragraphs; a line without a label continues
+    the paragraph above it."""
+    rest, explained, i = [], {}, 0
+    while i < len(lines):
+        if not lines[i].startswith("#### "):
+            rest.append(lines[i])
+            i += 1
+            continue
+        key, parts = finding_key(lines[i][5:]), []
+        i += 1
+        while i < len(lines) and not lines[i].startswith(("#### ", "### ", "|")):
+            text = lines[i].strip()
+            m = EXPLAIN_RE.match(text)
+            if m:
+                parts.append([m.group(1), m.group(2).strip()])
+            elif text and parts:
+                parts[-1][1] = (parts[-1][1] + " " + text).strip()
+            elif text:
+                parts.append(["", text])
+            i += 1
+        explained[key] = [tuple(p) for p in parts]
+    return rest, explained
+
+
+def render_explanation(parts):
+    body = "".join(
+        f'<p><span class="explain-label">{html.escape(label)}</span> {inline(text)}</p>' if label else f"<p>{inline(text)}</p>"
+        for label, text in parts
+    )
+    return f'<details class="explain"><summary>What happened, why it matters, how bad</summary>{body}</details>'
 
 
 def render_tiles(lines):
@@ -639,6 +688,9 @@ def render_code(lang, body):
 def render_blocks(lines, mode=None, state=None):
     out, i = [], 0
     tile_done = False
+    explanations = {}
+    if mode == "findings":
+        lines, explanations = take_explanations(lines)
     while i < len(lines):
         line = lines[i]
         if not line.strip():
@@ -688,11 +740,17 @@ def render_blocks(lines, mode=None, state=None):
             elif mode == "plan":
                 out.append(render_table(table, pill_columns=(1,)))
             elif mode == "findings":
-                out.append(render_table(table, pill_columns=(0, 3)))
-                if state is not None:
-                    for row in parse_table(table)[1:]:
-                        if len(row) >= 4 and row[3].strip().lower() == "open":
-                            state.append((row[1], row[2]))
+                def explain_row(row, width=len(parse_table(table)[0])):
+                    if len(row) < 4 or row[3].strip().lower() != "open":
+                        return ""
+                    parts = explanations.pop(finding_key(row[1]), None)
+                    if not parts:
+                        WARNINGS.append(f"Findings: open finding at {row[1]} has no #### explanation")
+                    detail = render_explanation(parts) if parts else ""
+                    if state is not None:
+                        state.append((row[1], row[2], detail))
+                    return f'<tr class="explain-row"><td colspan="{width}">{detail}</td></tr>' if detail else ""
+                out.append(render_table(table, pill_columns=(0, 3), after_row=explain_row))
             elif mode == "qa":
                 out.append(render_table(table, pill_columns=(3,)))
             elif mode == "changes":
@@ -726,6 +784,9 @@ def render_blocks(lines, mode=None, state=None):
             out.append(f'<p class="qa-not"><span class="qa-label">Not covered</span> {inline(text[len("**Not covered:**"):].strip())}</p>')
         else:
             out.append(f"<p>{inline(text)}</p>")
+    for key, parts in explanations.items():
+        WARNINGS.append(f"Findings: explanation '{key}' matches no open finding's Location")
+        out.append(render_explanation(parts))
     return "\n".join(out)
 
 
@@ -986,9 +1047,9 @@ def render_decision_form(open_findings, merged=False):
     out.append(f'<label class="opt"><input type="radio" name="verdict" value="changes"><span class="opt-body"><span class="opt-label">{changes_label}</span><span class="opt-detail">{changes_detail}</span></span></label>')
     out.append('<textarea name="notes" rows="3" placeholder="Notes for the author, optional on approve"></textarea>')
     out.append("</fieldset>")
-    for n, (location, finding) in enumerate(open_findings, start=1):
+    for n, (location, finding, detail) in enumerate(open_findings, start=1):
         fid = f"finding-{n}"
-        out.append(f'<fieldset class="d finding" data-fid="{fid}"><legend>Open finding {n}: {inline(location)}</legend><p class="qsub">{inline(finding)}</p>')
+        out.append(f'<fieldset class="d finding" data-fid="{fid}"><legend>Open finding {n}: {inline(location)}</legend><p class="qsub">{inline(finding)}</p>{detail}')
         out.append(f'<label class="opt inline"><input type="radio" name="{fid}" value="fix"><span class="opt-label">Fix before merge</span></label>')
         out.append(f'<label class="opt inline"><input type="radio" name="{fid}" value="accept"><span class="opt-label">Accept as is</span></label>')
         out.append("</fieldset>")

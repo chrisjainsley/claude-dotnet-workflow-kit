@@ -175,7 +175,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
     (inside `/next`, carry on with the pipeline; on its own, run the scm adapter's
     mark-ready steps). **On changes:** fix the branch, rebuild the review, republish
     to the same path. Open findings marked `accept` move to the Findings table as
-    accepted with the reviewer's note as the reason. For a merged PR, open findings
+    accepted with the reviewer's note as the reason, and their explanations go. For a merged PR, open findings
     marked `fix` become follow-up work items instead of branch fixes.
 
 ## Section order and budget
@@ -186,7 +186,7 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
 | Plan versus delivered | 160 words + table | One row per spec scenario and plan decision: done, changed or dropped, with a one-line reason for anything but done. |
 | Changes | 300 words + 1 flowmap + 8 hunks | One line for what the reviewer must not miss. One flowmap layer map of the changed components, the path between them and their tests, with grounded examples for API, table and event nodes. Then per service a Slice / File / Change table whose File cells open the full per-file diff, and the load-bearing hunks as collapsed diffs under 60 lines each. |
 | Contracts and coordination | 140 words + table | API contract and snapshot, new events and their topics, storage and infrastructure as code, configuration keys, migrations, client apps, tenants, name collisions. Rows are illustrative; keep only what someone else has to act on. |
-| Findings | 200 words + table | Severity, location, finding, status, note. Accepted needs a reason. Open rows become accept or fix radios in the decision form. |
+| Findings | 200 words + table, plus 120 words per open finding | Severity, location, finding, status, note. Accepted needs a reason. Under the table, every open finding gets an explanation under a `####` heading that repeats its Location cell with three paragraphs: **What happened:** the change or omission in plain terms, **Why it matters:** who or what it breaks and when, **How bad:** the severity restated with blast radius and likelihood. The page folds each into an expandable row under its finding and into its decision-form question. Open rows become accept or fix radios in the decision form. |
 | QA report | 350 words + gherkin + evidence, 10 images, 3 videos | Environment and test users, one scenario per behaviour tagged Acceptance or Manual with Pass, Fail or Blocked, Evidence with per-step proof, Classification (regression, pre-existing bug, environment issue, not run) on anything but Pass, the summary table, Not covered. When nothing was run, open with **No QA run.** and list every criterion under Not covered. |
 | Rollout | 90 words, 8 items | Ordered checklist with persistent ticks: infrastructure applied, config set, stacked order, migration, labels, hand-off. |
 | Decision | 60 words + form | Your recommendation in a sentence or two. The form is generated. |
