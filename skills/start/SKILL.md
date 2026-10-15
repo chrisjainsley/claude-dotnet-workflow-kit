@@ -81,7 +81,8 @@ Resolve the profile first: `python "SKILL_DIR/../../scripts/kit_profile.py"`. It
    naming the work, such as "Get todo by id"), `branch`, `order` (the output of
    `python "SKILL_DIR/../../scripts/kit_profile.py" --order`) and
    `stages.start` as `{"done": true, "at": "<ISO time>"}`. For a feature story, also
-   write `feature`: `{"key", "page", "base": "<branch it forked from>"}`. When the session runs in a git
+   write `feature`: `{"key", "page", "base": "<branch it forked from>"}`, by hand in
+   either case, since the stage tool does not set it. When the session runs in a git
    worktree (its `.git` is a file, not a folder), also write `worktree`, the worktree's
    absolute path (`git rev-parse --show-toplevel`), and `repo`, the absolute path
    `git rev-parse --path-format=absolute --git-common-dir` prints: the progress bar

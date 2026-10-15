@@ -39,6 +39,13 @@ Not yet verified with the kit; check each on a small feature first:
   environment, not your machine's `gh`, `az` or Jira credentials. Give the environment
   what the tracker adapter calls, through network secrets or the setup script.
 
+- **`gh stack link` on a growing chain.** With `gh-stack`, each stacked story links the
+  chain from the bottom when its PR opens, so the third story relinks the first two.
+  Check on a three-story chain that this extends the stack rather than failing; when it
+  fails, the run keeps the bases set by hand and says so.
+- **GitHub sub-issues.** Creating a story under a parent issue uses the sub-issues API.
+  When it fails, the story gets a `Parent:` line instead.
+
 The kit's hooks, progress bar and `stage` tool run on your machine. In a cloud thread
 `/next` writes its state file by hand and rebuilds it from the branch, the PR and the
 item when a sandbox restarts from a fresh clone. See "In a Claude project thread" in
