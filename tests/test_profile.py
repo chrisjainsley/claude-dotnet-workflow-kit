@@ -281,3 +281,16 @@ def test_given_duplicate_extra_stage_ids_then_rejected():
     prof = fresh_defaults()
     prof["extra_stages"] = [SECURITY, SECURITY]
     assert any("duplicate id 'security'" in p for p in profile_mod.validate(prof))
+
+
+def test_given_defaults_then_features_stack_by_base():
+    assert fresh_defaults()["feature"]["stacking"] == "base"
+
+
+def test_given_gh_stack_without_github_then_rejected():
+    prof = fresh_defaults()
+    prof["feature"]["stacking"] = "gh-stack"
+    prof["scm"] = "azure-repos"
+    assert any("feature.stacking gh-stack needs scm github" in p for p in profile_mod.validate(prof))
+    prof["scm"] = "github"
+    assert profile_mod.validate(prof) == []

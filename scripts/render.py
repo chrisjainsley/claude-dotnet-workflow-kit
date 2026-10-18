@@ -5,8 +5,9 @@ Usage:
   python render.py plans/<slug>/plan.md --out plans/<slug>/plan.html
   python render.py plans/<slug>/review.md --out plans/<slug>/review.html --range <a>..<b>
 
-`--kind plan|review` picks the document mode; without it the kind is inferred from
-the ## section names, then from the front matter. `--template` defaults to the
+`--kind plan|review|feature` picks the document mode; without it a `kind: feature` front
+matter line wins, then the kind is inferred from the ## section names, then from the rest
+of the front matter. A feature page renders like a plan, form and all, labelled Feature. `--template` defaults to the
 repository's assets/page.html.
 `--profile` names the kit profile; by default the project then user file is read.
 Its `branding` flag (default true) adds the Delivery Labs colours and the attribution
@@ -128,8 +129,12 @@ HEADER_RE = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]+:\s")
 
 NON_LAYER_SECTIONS = {
     "Context", "Requirement", "Specs", "Designs", "Tests", "Decisions",
-    "Risks and rollout", "Open questions",
+    "Risks and rollout", "Open questions", "Stories", "Story specs", "Delivery order",
 }
+# A feature page renders in plan mode (the same answer form and decision store) under
+# its own label; main() sets this when the document is a feature.
+PAGE_LABEL = ""
+CONTEXT_SUMMARY = {"Plan": "Parent feature, area and designs", "Feature": "Source, area and designs"}
 SHORT = {
     "Risks and rollout": "Risks", "Open questions": "Questions",
     "Plan versus delivered": "Plan vs delivered", "Contracts and coordination": "Contracts",
@@ -983,6 +988,16 @@ PLAN_DECISION = (
     '<textarea name="notes" rows="3" placeholder="Notes for the plan, optional on approve"></textarea>'
     "</fieldset>"
 )
+FEATURE_DECISION = (PLAN_DECISION
+    .replace("Take these answers and start implementing straight away.",
+             "Take these answers, create the stories and print a brief for each.")
+    .replace("Revise the plan", "Revise the feature")
+    .replace("the plan is rebuilt", "the feature page is rebuilt")
+    .replace("Notes for the plan", "Notes for the feature"))
+
+
+def decision_form():
+    return FEATURE_DECISION if PAGE_LABEL == "Feature" else PLAN_DECISION
 
 
 def render_questions(lines):
@@ -991,7 +1006,7 @@ def render_questions(lines):
     if not LIST_RE.match(first):
         return (
             render_blocks(lines)
-            + '<form class="qform" id="qform" autocomplete="off">' + PLAN_DECISION
+            + '<form class="qform" id="qform" autocomplete="off">' + decision_form()
             + '<div class="qfoot"><span class="qstatus" id="qstatus"></span>'
             '<button type="submit" id="qsend">Send decision</button></div></form>'
         ), 0
@@ -1023,7 +1038,7 @@ def render_questions(lines):
         else:
             out.append(f'<textarea name="{qid}" rows="3" placeholder="Constraints, accounts to use, files that must not move..."></textarea>')
         out.append("</fieldset>")
-    out.append(PLAN_DECISION)
+    out.append(decision_form())
     out.append(
         '<div class="qfoot"><span class="qcount" id="qcount"></span>'
         '<span class="qstatus" id="qstatus"></span>'
@@ -1152,6 +1167,8 @@ def split_document(text):
 
 
 def infer_kind(meta, section_names):
+    if meta.get("kind", "").strip().lower() == "feature":
+        return "feature"
     names = set(section_names)
     if names & set(REVIEW_MODES) or "Decision" in names:
         return "review"
@@ -1185,7 +1202,8 @@ def parse(text, kind=None):
                 body, count = render_questions(lines)
                 questions += count
             elif name == CONTEXT_SECTION:
-                body = f'<details class="context"><summary>Parent feature, area and designs</summary>{render_blocks(lines)}</details>'
+                summary = CONTEXT_SUMMARY[PAGE_LABEL or "Plan"]
+                body = f'<details class="context"><summary>{summary}</summary>{render_blocks(lines)}</details>'
             else:
                 body = render_blocks(lines)
             output.append((name, body))
@@ -1246,7 +1264,7 @@ def build(meta, sections, template, count=0, branded=True, walkthrough=False):
         sid = slug(name)
         layer = layers.get(name) if KIND == "plan" else None
         layer_attr = "" if layer is None else f' data-layer="{layer}"'
-        marker = onion_svg(layer, len(layers)) if KIND == "plan" else ""
+        marker = onion_svg(layer, len(layers)) if KIND == "plan" and layers else ""
         nav.append(f'<a href="#{sid}" data-target="{sid}">{html.escape(SHORT.get(name, name))}</a>')
         parts.append(
             f'<section class="plan-section" id="{sid}"{layer_attr}>'
@@ -1255,7 +1273,7 @@ def build(meta, sections, template, count=0, branded=True, walkthrough=False):
         )
     chip_keys = PLAN_CHIP_KEYS if KIND == "plan" else REVIEW_CHIP_KEYS
     chips = [render_chip(key, meta[key]) for key in chip_keys if meta.get(key)]
-    label = "Plan" if KIND == "plan" else "Review"
+    label = PAGE_LABEL or ("Plan" if KIND == "plan" else "Review")
     title = meta.get("title", "")
     page = template
     for key, value in {
@@ -1286,14 +1304,14 @@ def main(kind=None, argv=None):
     ap.add_argument("source")
     ap.add_argument("--out", required=True)
     ap.add_argument("--template", default=str(DEFAULT_TEMPLATE), help="page template (default: assets/page.html)")
-    ap.add_argument("--kind", choices=("plan", "review"), default=kind,
+    ap.add_argument("--kind", choices=("plan", "review", "feature"), default=kind,
                     help="document mode; inferred from the sections and front matter when omitted")
     ap.add_argument("--range", help="review only: git diff range for per-file diffs; default origin/<base>...HEAD, or <sha>^..<sha> when state is merged")
     ap.add_argument("--repo", default=".", help="review only: repository root to run git in (default: current directory)")
     add_profile_arg(ap)
     args = ap.parse_args(argv)
     profile = resolve_profile(explicit=args.profile)
-    global SOURCE_DIR, SOURCE_STEM, REPO_DIR, DIFF_RANGE
+    global SOURCE_DIR, SOURCE_STEM, REPO_DIR, DIFF_RANGE, PAGE_LABEL
     SOURCE_DIR = Path(args.source).resolve().parent
     SOURCE_STEM = Path(args.source).stem
     REPO_DIR = Path(args.repo).resolve()
@@ -1305,14 +1323,15 @@ def main(kind=None, argv=None):
     if document_kind == "review":
         DIFF_RANGE = args.range or derive_range(META)
         load_file_stats()
-    meta, sections, count = parse(text, document_kind)
+    PAGE_LABEL = "Feature" if document_kind == "feature" else ""
+    meta, sections, count = parse(text, "plan" if document_kind == "feature" else document_kind)
     walkthrough = bool(profile.get("optional", {}).get("walkthrough", False))
     if WALK_SCENES and not walkthrough:
         WARNINGS.append("the Walkthrough section is ignored because optional.walkthrough is false in the profile")
     page = build(meta, sections, Path(args.template).read_text(encoding="utf-8"), count,
                  branded=bool(profile.get("branding", True)), walkthrough=walkthrough)
     Path(args.out).write_text(page, encoding="utf-8", newline="\n")
-    if document_kind == "plan":
+    if document_kind in ("plan", "feature"):
         print(f"wrote {args.out} ({len(page):,} bytes, {len(sections)} sections, {count} answerable questions)")
     else:
         print(f"wrote {args.out} ({len(page):,} bytes, {len(sections)} sections, {count} open findings in the decision form, {len(USED_FILES)} linked file diffs from {DIFF_RANGE})")

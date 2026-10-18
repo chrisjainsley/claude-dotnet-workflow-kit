@@ -52,6 +52,10 @@ QA report on approve. Each file has these headings:
   state.
 - **Context for the plan** - how to pull a parent feature, sibling stories and design
   links for the plan's collapsed Context section.
+- **Fetch a feature** - how `feature` lists the children an epic, feature or parent
+  item already has, so existing children become stories instead of duplicates.
+- **Create a child item** - how `feature` creates a story under the feature's item once
+  the feature page is approved, with its body and its parent link.
 - **Post the QA report** - where the QA report section goes on approve, and any
   formatting the tracker needs (plain text only, how dashes and code fences render,
   what must never appear in a comment the tracker would auto-link).

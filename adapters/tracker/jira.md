@@ -38,6 +38,28 @@ Fetch the parent with `.../issue/<parent-key>`, siblings with a JQL search
 (`.../search?jql=parent=<parent-key>`), and attachments from the `fields.attachment`
 array on the issue response, each with its own download URL.
 
+## Fetch a feature
+
+A feature is an epic or any issue with children. List them with JQL:
+
+```bash
+curl -s -u "$JIRA_EMAIL:$JIRA_API_TOKEN" -G "$JIRA_BASE_URL/rest/api/3/search"   --data-urlencode "jql=parent=<KEY>" --data-urlencode "fields=summary,status,issuetype"
+```
+
+## Create a child item
+
+Create the story with the feature as its parent. Use the project's story issue type,
+which is `Story` in most Jira templates:
+
+```bash
+curl -s -u "$JIRA_EMAIL:$JIRA_API_TOKEN" -X POST "$JIRA_BASE_URL/rest/api/3/issue"   -H "Content-Type: application/json"   -d '{"fields": {"project": {"key": "<PROJECT>"}, "parent": {"key": "<KEY>"},
+       "issuetype": {"name": "Story"}, "summary": "<story>",
+       "description": {"type": "doc", "version": 1, "content": [...]}}}'
+```
+
+The response's `key` is the new story's id. Put the acceptance criteria in the
+description as an ADF code block with `language: gherkin`.
+
 ## Post the QA report
 
 Post the QA report as a comment, in Atlassian Document Format, never as a transition:

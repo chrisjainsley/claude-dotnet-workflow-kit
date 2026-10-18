@@ -5,8 +5,8 @@ implementation, review and QA hand-off. It builds plan and review pages with enf
 word budgets, so you can read the proposed work and the results before approving each.
 
 One project profile sets your architecture, tests, tracker and QA workflow. Use the
-seven skills, start, fix, plan, implement, test, review and next, together or on their own,
-with or without a ticket tracker or the Artifact tool.
+eight skills, start, fix, feature, plan, implement, test, review and next, together or on
+their own, with or without a ticket tracker or the Artifact tool.
 
 [Install](#install) | [Workflow](#workflow) | [Skills](#skills) | [Progress bar](#progress-bar) | [/goal](#running-with-goal) | [Branding](#branding) | [Profile reference](#profile-reference) | [dotnet-claude-kit](#dotnet-claude-kit) | [Jev](#jev) | [Contributing](#contributing)
 
@@ -77,6 +77,16 @@ has no plan gate, and approves its own review when the fix is verified:
 /dotnet-workflow-kit:fix 1234
 ```
 
+For a whole feature or PRD, start with `feature`. It splits the work into stories, plans
+the feature on one page for a single approval, then creates the stories and prints one
+`/next` brief each. Each story runs every stage, with no plan gate, and stops at its
+own review checkpoint. In a [Claude project](docs/projects.md) the briefs run as
+parallel threads, and dependent stories stack their pull requests:
+
+```text
+/dotnet-workflow-kit:feature 1200
+```
+
 ## Skills
 
 ### start
@@ -98,6 +108,23 @@ runs the regression area. When the bug reproduced, its scenario now passes, ever
 is green and no finding is open, the review approves itself and the pull request is
 marked ready. Otherwise the run stops at the review checkpoint and says why. It asks a
 question only when the ticket cannot say what correct looks like.
+
+### feature
+
+Use to deliver a PRD, epic or feature story by story. It reads the PRD from the
+tracker, a file or chat, reuses the children the feature already has, and splits the
+rest into up to twelve stories, each one pull request with Gherkin acceptance criteria.
+`scripts/feature_order.py` groups the stories into waves by their dependencies and
+works out what each branches from, following `feature.stacking`. A script checks the
+page's budget and rejects a cycle or a story without specs.
+
+The feature page has the stories, their specs, the delivery order, decisions, risks and
+open questions, with the plan's answer form. Nothing reaches the tracker until you
+approve it. On approval it creates the stories under the feature and prints one brief
+per story, opening with `/dotnet-workflow-kit:next <id>`. Each story's plan follows the
+approved specs with no gate, and stops only when the story needs something the feature
+page did not settle. [Running a feature in a Claude project](docs/projects.md) covers
+running the briefs as threads, and what is not yet verified there.
 
 ### plan
 
@@ -358,6 +385,7 @@ For example, `testing.tdd` lives inside the `testing` object. Empty strings appe
 | `stack.errors` | `result`, `exceptions` | `"exceptions"` | Error handling conventions. |
 | `stack.local_run` | `aspire`, `docker`, `plain` | `"plain"` | How to start the system for local QA. |
 | `stack.frontend` | `none`, `blazor`, `razor`, `react`, `angular`, `vue`, `javascript` | `"none"` | Whether the repo has a frontend and which kind; see the plan skill. |
+| `feature.stacking` | `off`, `base`, `gh-stack` | `"base"` | How a feature's dependent story stacks on its parent: `base` branches from the parent and sets it as the PR base, `gh-stack` also links a linear chain with GitHub's `gh stack` (needs `scm` `github`), `off` waits for the parent to merge. See [feature](#feature). |
 | `reviewers` | `bug-hunt`, `conventions`, `kit`, `security-scan`, `convention-learner`, `code-review-workflow` | `["bug-hunt", "conventions"]` | Reviewer sweep passes; the two built-ins always run. |
 | `pipeline.execute` | Free text | `""` | Execution command; blank implements the plan directly. |
 | `pipeline.resolve_comments` | Free text | `""` | Comment-resolution command; blank uses the SCM adapter. |
@@ -476,7 +504,7 @@ skipped wording and the checks reference.
 |---|---|
 | `.claude-plugin/` | Plugin and marketplace manifests. |
 | `commands/setup.md` | Setup command instructions. |
-| `skills/` | Seven skills, the reviewer sweep and their supporting files. |
+| `skills/` | Eight skills, the reviewer sweep and their supporting files. |
 | `adapters/` | Tracker, source control, architecture, QA and stack instructions. |
 | `assets/` | Shared page shell. |
 | `scripts/` | Profile, setup, checks, rendering and the Jev checks scorer. |

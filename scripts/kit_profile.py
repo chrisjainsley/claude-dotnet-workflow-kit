@@ -37,6 +37,7 @@ ENUMS = {
     "stack.errors": ("result", "exceptions"),
     "stack.local_run": ("aspire", "docker", "plain"),
     "stack.frontend": ("none", "blazor", "razor", "react", "angular", "vue", "javascript"),
+    "feature.stacking": ("off", "base", "gh-stack"),
 }
 
 BUILT_IN_REVIEWERS = ("bug-hunt", "conventions")
@@ -79,6 +80,7 @@ DEFAULTS = {
     "stack": {"data": "ef-core", "api": "minimal-api", "messaging": "none", "errors": "exceptions", "local_run": "plain", "frontend": "none"},
     "reviewers": list(BUILT_IN_REVIEWERS),
     "pipeline": {"execute": "", "resolve_comments": "", "qa": "", "open_pr_in_browser": True, "auto_fix_pr": True},
+    "feature": {"stacking": "base"},
     "optional": {"dotnet-claude-kit": False, "codex": False, "roslyn-mcp": False, "jev": False, "walkthrough": False},
     "jev": {"flag_at": 0.75, "review_at": 0.4},
     "checks": [],
@@ -121,6 +123,14 @@ PLAN_SECTIONS = {
 }
 PLAN_SECTIONS["ddd-clean"] = PLAN_SECTIONS["clean"]
 PLAN_SECTIONS["modular-monolith"] = PLAN_SECTIONS["clean"]
+
+# The feature page's sections: one page for a whole PRD, approved once before the
+# per-story threads start. Its stories and their specs are checked by feature_order.py.
+FEATURE_SECTIONS = [
+    ("Context", 150, None), ("Requirement", 120, None), ("Stories", 260, None), ("Story specs", 60, None),
+    ("Delivery order", 140, None), ("Decisions", 120, 6), ("Risks and rollout", 120, 5),
+    ("Open questions", 180, 3),
+]
 
 # Sections a plan may carry but never has to: name -> (section it follows, cap, max bullets).
 # Designs holds the screens for a frontend change and is only allowed when the profile
@@ -212,6 +222,8 @@ def validate(profile):
     kinds = profile.get("branch_kinds", {})
     if not isinstance(kinds, dict) or not kinds.get("feature") or not kinds.get("bug"):
         problems.append("branch_kinds needs non-empty feature and bug values")
+    if get(profile, "feature.stacking") == "gh-stack" and profile.get("scm") != "github":
+        problems.append("feature.stacking gh-stack needs scm github; use base instead")
     problems += validate_jev(profile)
     problems += validate_checks(profile)
     problems += validate_stage_checks(profile)
