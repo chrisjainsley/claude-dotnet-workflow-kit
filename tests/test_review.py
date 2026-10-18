@@ -454,3 +454,32 @@ def test_given_no_kokoro_then_narrate_exits_2(review_fixture_path, monkeypatch):
     monkeypatch.setattr(narrate, "kokoro_engine", lambda *a: None)
     assert narrate.main([str(review_fixture_path), "--profile", str(FIXTURES_DIR / "profile-walkthrough.json")]) == 2
     assert not (review_fixture_path.parent / "walkthrough").exists()
+
+
+def test_given_open_findings_then_explanations_render_under_rows_and_in_form(tmp_path, review_fixture_path):
+    out_path = tmp_path / "review.html"
+    code, out, err = run_py(BUILD_REVIEW_PY, review_fixture_path, "--out", out_path, "--range", "deadbeef^..deadbeef")
+    assert code == 0, out + err
+    html = out_path.read_text(encoding="utf-8")
+    assert html.count('<tr class="explain-row">') == 2
+    assert html.count('<details class="explain">') == 4
+    assert '<span class="explain-label">How bad</span>' in html
+    form = html[html.index('id="dform"'):]
+    assert form.count('<details class="explain">') == 2
+
+
+def test_given_open_finding_without_explanation_then_check_fails(review_fixture_path):
+    text = review_fixture_path.read_text(encoding="utf-8")
+    start = text.index("#### `web-client useLogoutRedirect.tsx`")
+    review_fixture_path.write_text(text[:start] + text[text.index("## QA report", start):], encoding="utf-8", newline="\n")
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path)
+    assert code == 1
+    assert "open finding at `web-client uselogoutredirect.tsx` needs" in out
+
+
+def test_given_explanation_missing_label_then_check_fails(review_fixture_path):
+    text = review_fixture_path.read_text(encoding="utf-8")
+    review_fixture_path.write_text(text.replace("**How bad:** medium.", "medium.", 1), encoding="utf-8", newline="\n")
+    code, out, err = run_py(CHECK_REVIEW_PY, review_fixture_path)
+    assert code == 1
+    assert "needs a **How bad:** paragraph" in out

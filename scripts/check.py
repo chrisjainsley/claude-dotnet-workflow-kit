@@ -53,6 +53,10 @@ REVIEW_SECTIONS = [
     ("Rollout", 90),
     ("Decision", 60),
 ]
+# Each open finding carries a "#### `location`" explanation under the Findings table,
+# budgeted on its own rather than against the section cap.
+EXPLAIN_LABELS = ("What happened", "Why it matters", "How bad")
+MAX_EXPLAIN_WORDS = 120
 MAX_HUNKS = 8
 MAX_HUNK_LINES = 60
 MAX_ROLLOUT_ITEMS = 8
@@ -393,6 +397,16 @@ def count_words(text):
     return len(re.findall(r"[A-Za-z0-9][A-Za-z0-9'./#:_-]*", text))
 
 
+def split_explanations(findings):
+    """(Findings text without its explanations, [(location heading, body)])."""
+    parts = re.split(r"^#### (.+?)\s*$", findings, flags=re.M)
+    return parts[0], [(parts[k].strip(), parts[k + 1]) for k in range(1, len(parts), 2)]
+
+
+def finding_key(location):
+    return location.strip().strip("`").strip().lower()
+
+
 def count_bullets(text):
     return len(re.findall(r"^(?:[-*]|\d+\.)\s+", text, flags=re.M))
 
@@ -528,7 +542,7 @@ def check_review(meta, body, multiplier, slices=None, walkthrough=False):
     rows, total = [], 0
     for name, cap in REVIEW_SECTIONS:
         content = by_name.get(name, "")
-        prose, _ = strip_fences(content)
+        prose, _ = strip_fences(split_explanations(content)[0] if name == "Findings" else content)
         words = count_words(prose)
         total += words
         limit = round(cap * multiplier)
@@ -573,6 +587,21 @@ def check_review(meta, body, multiplier, slices=None, walkthrough=False):
             failures.append(f"Findings: status must be fixed, accepted or open: '{r[3]}'")
         if r[3].lower() == "accepted" and (len(r) < 5 or not r[4].strip()):
             failures.append(f"Findings: accepted finding needs a reason in Note: '{r[2][:40]}'")
+    open_keys = {finding_key(r[1]) for r in frows if len(r) >= 4 and r[3].lower() == "open"}
+    explained = {}
+    for location, text in split_explanations(findings)[1]:
+        key = finding_key(location)
+        explained[key] = text
+        if key not in open_keys:
+            failures.append(f"Findings: explanation '#### {location}' matches no open finding's Location")
+        for label in EXPLAIN_LABELS:
+            if not re.search(r"^\*\*" + label + r":?\*\*", text, flags=re.M):
+                failures.append(f"Findings: explanation for {location} needs a **{label}:** paragraph")
+        words, limit = count_words(text), round(MAX_EXPLAIN_WORDS * multiplier)
+        if words > limit:
+            failures.append(f"Findings: explanation for {location} is {words} words, cap {limit}")
+    for key in sorted(open_keys - explained.keys()):
+        failures.append(f"Findings: open finding at `{key}` needs a '#### `location`' explanation (What happened, Why it matters, How bad)")
 
     qa = by_name.get("QA report", "")
     scenarios = re.findall(r"^#### .+?`(Acceptance test|Manual test)`\s+\*\*(Pass|Fail|Blocked)\*\*", qa, flags=re.M)

@@ -122,6 +122,22 @@ B2C caps `SessionExpiryInSeconds` at 86400 and ignores `refresh_token_lifetime_s
 | low | `B2C_1A_ACCOUNTLINK_EXTENSIONS.xml:457` | nothing automated covers the behaviour | accepted | policy XML has no test host; deploy smoke is the only gate |
 | info | `B2C_1A_SIGNUP_SIGNIN.xml:12` | `SessionExpiryType` and `SessionExpiryInSeconds` left at their defaults | accepted | members who decline keep today's rolling 24 hour session |
 
+#### `B2C_1A_MOBILE_SIGNIN.xml:583`
+
+**What happened:** the change added `KeepAliveInDays` and the keep me signed in checkbox to the web sign-in policy only. The mobile relying party at line 583 was left as it was, and its journey still calls the self-asserted profile that has no checkbox.
+
+**Why it matters:** the ticket's acceptance criteria cover mobile members too. If the app signs in through this policy, they never see the option and keep today's 24 hour session, so the story ships half done while the work item says otherwise.
+
+**How bad:** high. Every mobile sign-in is affected if the app uses this policy, and nothing fails loudly; it only shows up as members asking why the option is missing.
+
+#### `web-client useLogoutRedirect.tsx`
+
+**What happened:** native sign-out clears the app's tokens and redirects home without calling the B2C `end_session` endpoint, so the B2C session cookie survives log out.
+
+**Why it matters:** today that cookie lasts 24 hours at most. Once a persistent keep me signed in cookie exists on this path, a member who logs out on a shared device stays signed in at B2C for days and the next person to open sign-in walks straight into their account.
+
+**How bad:** medium. No harm until mobile gets the option, then an account exposure on shared devices; fix it before the first finding is closed.
+
 ## QA report
 
 **Environment:** sandbox | **Date:** 2026-09-23 | **Test users:** qa-member-1, qa-member-2

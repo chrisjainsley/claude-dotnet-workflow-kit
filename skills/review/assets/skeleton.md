@@ -97,6 +97,16 @@ test <rule-tests>: <TestClass>
 | Severity | Location | Finding | Status | Note |
 |---|---|---|---|---|
 | high | `<path>:<line>` | <one sentence> | fixed | |
+| medium | `<path>:<line>` | <one sentence> | open | |
+
+#### `<path>:<line>`
+<!-- One per open finding, heading = its Location cell. Up to 120 words, folded into an expandable row under the finding. Delete when nothing is open. -->
+
+**What happened:** <the change or omission, in plain terms>
+
+**Why it matters:** <who or what it breaks, and when>
+
+**How bad:** <severity restated with blast radius and likelihood>
 
 ## QA report
 <!-- Same structure the test skill posts to the work item. Environment and date line, then one #### per behaviour verified, tagged Acceptance test or Manual test with Pass, Fail or Blocked, a gherkin fence, an Evidence line, and a Classification line (regression | pre-existing bug | environment issue | not run) for anything but Pass. After the Evidence line, the proof that decided the result: an http fence for an API call (the request as sent, then the response from its status line; the page splits them into two panes and indents JSON), ![caption](evidence/<file>.png) for a screenshot, ![caption](evidence/<file>.webm) for a video, a sql or text fence for a query and its rows, never a markdown table. Each fence's caption (the words after the language) and each image or video caption repeats the gherkin step it proves, case and spacing are ignored; a whole-run video may take the scenario title instead. Fences fold into their step; screenshots and videos show in a grid under the steps. Media files live in evidence/ beside this file and publish next to the page. Credentials become <redacted>. At most ten images and three videos, 15 MB a file. Unit and integration suites are not QA and do not appear. If nothing was run, open with **No QA run.** and put every criterion under Not covered instead of inventing a Blocked row. End with the summary table and Not covered. -->

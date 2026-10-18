@@ -143,6 +143,17 @@ fieldset.q legend { padding: 0; font-weight: 600; font-size: 15px; display: bloc
 .pill-done, .pill-fixed, .pill-pass, .pill-low, .pill-info { color: var(--ok); border-color: var(--ok); background: var(--ok-soft); }
 .pill-changed, .pill-accepted, .pill-medium, .pill-blocked { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
 .pill-dropped, .pill-open, .pill-high, .pill-fail { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
+tr:has(+ tr.explain-row) > td { border-bottom: 0; }
+tr.explain-row > td { padding-top: 0; }
+details.explain { border: 1px solid var(--line); border-radius: 6px; background: var(--paper); margin: 0 0 4px; }
+details.explain summary { cursor: pointer; padding: 7px 12px; font-size: 13px; color: var(--muted); list-style: none; display: flex; align-items: center; gap: 8px; }
+details.explain summary::-webkit-details-marker { display: none; }
+details.explain summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); transition: transform 120ms; }
+details.explain[open] summary::before { transform: rotate(45deg); }
+details.explain[open] summary { border-bottom: 1px solid var(--line); color: var(--ink); }
+details.explain > p { margin: 8px 12px; font-size: 13.5px; }
+details.explain .explain-label { font-weight: 600; margin-right: 4px; }
+fieldset.d details.explain { margin: 0 0 10px; }
 details.hunk { border: 1px solid var(--line); border-radius: 6px; background: var(--card); margin: 8px 0; }
 details.hunk summary { cursor: pointer; padding: 9px 14px; font-size: 13.5px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 8px; }
 details.hunk summary::-webkit-details-marker { display: none; }
