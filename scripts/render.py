@@ -927,6 +927,16 @@ PLAN_DECISION = (
     '<textarea name="notes" rows="3" placeholder="Notes for the plan, optional on approve"></textarea>'
     "</fieldset>"
 )
+FEATURE_DECISION = (PLAN_DECISION
+    .replace("Take these answers and start implementing straight away.",
+             "Take these answers, create the stories and print a brief for each.")
+    .replace("Revise the plan", "Revise the feature")
+    .replace("the plan is rebuilt", "the feature page is rebuilt")
+    .replace("Notes for the plan", "Notes for the feature"))
+
+
+def decision_form():
+    return FEATURE_DECISION if PAGE_LABEL == "Feature" else PLAN_DECISION
 
 
 def render_questions(lines):
@@ -935,7 +945,7 @@ def render_questions(lines):
     if not LIST_RE.match(first):
         return (
             render_blocks(lines)
-            + '<form class="qform" id="qform" autocomplete="off">' + PLAN_DECISION
+            + '<form class="qform" id="qform" autocomplete="off">' + decision_form()
             + '<div class="qfoot"><span class="qstatus" id="qstatus"></span>'
             '<button type="submit" id="qsend">Send decision</button></div></form>'
         ), 0
@@ -967,7 +977,7 @@ def render_questions(lines):
         else:
             out.append(f'<textarea name="{qid}" rows="3" placeholder="Constraints, accounts to use, files that must not move..."></textarea>')
         out.append("</fieldset>")
-    out.append(PLAN_DECISION)
+    out.append(decision_form())
     out.append(
         '<div class="qfoot"><span class="qcount" id="qcount"></span>'
         '<span class="qstatus" id="qstatus"></span>'

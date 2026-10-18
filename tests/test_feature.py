@@ -121,6 +121,8 @@ def test_given_fixture_then_page_renders_as_feature(tmp_path):
     assert "<title>Feature - Expiring loyalty points</title>" in page
     assert 'class="onion"' not in page, "a feature page has no architecture layers"
     assert "1 answerable questions" in out
+    assert "create the stories" in page and "Revise the feature" in page
+    assert "start implementing" not in page
 
 
 def test_given_briefs_then_each_names_next_and_its_start(tmp_path):
