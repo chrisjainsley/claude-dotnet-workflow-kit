@@ -7,6 +7,10 @@ size: standard
 date: 2026-10-15
 ---
 
+## Summary
+
+A feature from issue #120. Loyalty points never expire today, so the balance owed to members only grows and old points sit on the books forever. When this feature ships, points expire twelve months after they were earned, oldest first, members are warned by email thirty days ahead, and statements show when points will expire. It is split into four stories that ship one pull request each.
+
 ## Context
 
 Source: issue #120, "Points expire after twelve months". Area: the Loyalty service, its `PointsLedger` aggregate and the nightly jobs host. No child issues existed, so all four stories are new.

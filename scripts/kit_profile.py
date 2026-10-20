@@ -111,12 +111,12 @@ NEEDS_MCP = {"code-review-workflow": "roslyn-mcp"}
 # Clean is the exercised path; vertical is defined and marked untested in the README.
 PLAN_SECTIONS = {
     "clean": [
-        ("Context", 150, None), ("Requirement", 100, None), ("Specs", 40, None),
+        ("Summary", 120, None), ("Context", 150, None), ("Requirement", 100, None), ("Specs", 40, None),
         ("Domain", 100, None), ("Application", 160, None), ("Infrastructure", 120, None), ("API", 60, None),
         ("Tests", 180, None), ("Decisions", 120, 6), ("Risks and rollout", 120, 5), ("Open questions", 180, 3),
     ],
     "vertical": [
-        ("Context", 150, None), ("Requirement", 100, None), ("Specs", 40, None),
+        ("Summary", 120, None), ("Context", 150, None), ("Requirement", 100, None), ("Specs", 40, None),
         ("Slice", 200, None), ("Persistence", 100, None), ("Integration", 100, None), ("Endpoint", 60, None),
         ("Tests", 180, None), ("Decisions", 120, 6), ("Risks and rollout", 120, 5), ("Open questions", 180, 3),
     ],
@@ -127,7 +127,7 @@ PLAN_SECTIONS["modular-monolith"] = PLAN_SECTIONS["clean"]
 # The feature page's sections: one page for a whole PRD, approved once before the
 # per-story threads start. Its stories and their specs are checked by feature_order.py.
 FEATURE_SECTIONS = [
-    ("Context", 150, None), ("Requirement", 120, None), ("Stories", 260, None), ("Story specs", 60, None),
+    ("Summary", 120, None), ("Context", 150, None), ("Requirement", 120, None), ("Stories", 260, None), ("Story specs", 60, None),
     ("Delivery order", 140, None), ("Decisions", 120, 6), ("Risks and rollout", 120, 5),
     ("Open questions", 180, 3),
 ]

@@ -4,6 +4,7 @@
 
 The plan runs in dependency order, from the requirement outward through the layers:
 
+- Summary: what the item is and why it matters, for a reader returning cold.
 - Context: parent feature, siblings, area, design links.
 - Requirement: the change in product terms plus one concrete example.
 - Specs: the Gherkin scenarios that become acceptance tests.

@@ -89,6 +89,8 @@ Anything else, decide, and write the decision as a Decisions bullet in the plan.
    `dotnet test <test project> --filter "FullyQualifiedName~<Feature>"`.
 6. **Write the plan.** Write `plans/<id>-<slug>/plan.md` from
    `SKILL_DIR/../plan/assets/skeleton.md` with `size: small`:
+   - Summary: that this is a bug, what goes wrong, who hits it and how often, and what
+     the fix changes, in plain words for someone returning cold.
    - Requirement: expected against actual, then one line, "Repro: <outcome>, <how>".
    - Specs: the bug as one Gherkin scenario, written as the fixed behaviour, plus any
      sibling case the fix must keep working. Up to three.

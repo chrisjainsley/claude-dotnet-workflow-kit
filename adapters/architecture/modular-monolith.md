@@ -6,7 +6,7 @@ monolith asks for on top.
 
 ## Plan sections
 
-Same order as Clean Architecture: Context, Requirement, Specs, Domain, Application,
+Same order as Clean Architecture: Summary, Context, Requirement, Specs, Domain, Application,
 Infrastructure, API, Tests, Decisions, Risks and rollout, Open questions. Name the
 owning module in Context, and note in Infrastructure whether the change adds or
 changes a module's public contract.

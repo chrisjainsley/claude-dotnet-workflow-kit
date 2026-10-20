@@ -7,7 +7,7 @@ asks for on top.
 
 ## Plan sections
 
-Same order as Clean Architecture: Context, Requirement, Specs, Domain, Application,
+Same order as Clean Architecture: Summary, Context, Requirement, Specs, Domain, Application,
 Infrastructure, API, Tests, Decisions, Risks and rollout, Open questions. The Domain
 section carries more weight here: expect aggregate roots with enforced invariants,
 value objects, and domain events named for what happened, not what changed.

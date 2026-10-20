@@ -98,7 +98,7 @@ def test_given_vertical_profile_then_check_expects_slice_sections(tmp_path, plan
 VERTICAL_FIXTURE_PATH = FIXTURES_DIR / "plan-vertical.md"
 VERTICAL_PROFILE_PATH = FIXTURES_DIR / "profile-vertical.json"
 VERTICAL_SECTIONS = [
-    "Context", "Requirement", "Specs", "Slice", "Persistence", "Integration",
+    "Summary", "Context", "Requirement", "Specs", "Slice", "Persistence", "Integration",
     "Endpoint", "Tests", "Decisions", "Risks and rollout", "Open questions",
 ]
 
