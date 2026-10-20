@@ -7,6 +7,9 @@ size: standard
 date: <YYYY-MM-DD>
 ---
 
+## Summary
+<!-- The first thing a reader sees, written for someone coming back cold after days away. Plain prose, no code. What the feature is and where it came from, the problem it solves for users or operators, what is true when every story has shipped, and anything that makes it urgent or blocks it. Readable without the PRD, the Context or the code. -->
+
 ## Context
 <!-- Collapsed on the page. Where the PRD came from (tracker link, file path or "described in chat"), the area it touches (services, bounded contexts, key aggregates), existing child items reused as stories, and design links. -->
 

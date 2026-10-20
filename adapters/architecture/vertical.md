@@ -9,6 +9,7 @@ CI alongside the `clean` fixture.
 The plan still runs from the requirement outward, with the middle four sections
 replaced by one slice-shaped path:
 
+- Summary: what the item is and why it matters, for a reader returning cold.
 - Context: parent feature, siblings, area, design links.
 - Requirement: the change in product terms plus one concrete example.
 - Specs: the Gherkin scenarios that become acceptance tests.

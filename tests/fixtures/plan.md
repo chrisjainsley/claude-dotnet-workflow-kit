@@ -7,6 +7,9 @@ size: standard
 date: 2026-09-11
 ---
 
+## Summary
+A story under the Free Tier Integrity work. New Free accounts get 1,000 Loyalty Points (about $10) as a signup gift, but the gift is given per account, so anyone can farm it by opening a second account with an email alias. This story gives the gift once per person paying, judged by the email address with any plus-alias removed. A repeat signup still works and still earns points normally; it just gets no gift, and is not told. It stacks on PR 3081, which first made granted points expire.
+
 ## Context
 **Parent feature:** [AB#17440 Loyalty Points: Airdrops and Offer Integrity](https://dev.azure.com/example-org/Example%20Project/_workitems/edit/17440) (Feature, New). Eighth chunk under the Free Tier Integrity epic AB#17391; builds on AB#17431, which issues granted credit, and follows the onboarding quests feature AB#17435.
 

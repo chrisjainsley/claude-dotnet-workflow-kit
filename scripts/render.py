@@ -128,7 +128,7 @@ HTTP_STATUS_RE = re.compile(r"^HTTP/\d(?:\.\d)?\s+(\d{3})\b")
 HEADER_RE = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]+:\s")
 
 NON_LAYER_SECTIONS = {
-    "Context", "Requirement", "Specs", "Designs", "Tests", "Decisions",
+    "Summary", "Context", "Requirement", "Specs", "Designs", "Tests", "Decisions",
     "Risks and rollout", "Open questions", "Stories", "Story specs", "Delivery order",
 }
 # A feature page renders in plan mode (the same answer form and decision store) under

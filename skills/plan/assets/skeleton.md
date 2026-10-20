@@ -7,6 +7,9 @@ size: standard
 date: <YYYY-MM-DD>
 ---
 
+## Summary
+<!-- The first thing a reader sees, written for someone coming back cold after days away. Plain prose, no code. Say what kind of item this is (story, bug, change or spike) and its ticket title; what happens today and why that is a problem, or for a bug what goes wrong and who hits it; what this work changes when it is done; and anything that makes it urgent or blocks it. Readable without the ticket, the Context or the code. -->
+
 ## Context
 <!-- Collapsed on the page. Gather it the way the tracker adapter says (Azure Boards: scripts/fetch_context.py <id> --out plans/<slug>/context) and paste the stub here, then fill in Area. Parent feature with link and one-line purpose; sibling stories with state; Area = services, bounded context, key aggregates or handlers; design links and screenshots as ![caption](context/file.png). -->
 

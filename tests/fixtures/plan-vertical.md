@@ -7,6 +7,9 @@ size: standard
 date: 2026-09-12
 ---
 
+## Summary
+A story for self-serve order tracking. Buyers today have to contact support to find out where an order is, because nothing they can call returns its status. This story adds one endpoint that a signed-in buyer calls with an order id to get the order's state, its tracking number once shipped, and the expected delivery date. Buyers can only see their own orders. Nothing else in ordering changes.
+
 ## Context
 **Parent feature:** Order Tracking self-serve, so a buyer can check a shipment without
 contacting support.

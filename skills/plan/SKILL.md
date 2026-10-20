@@ -201,6 +201,7 @@ both lists. Tests, decisions, risks and questions come last because they cut acr
 
 | Section | Cap (standard) | What belongs |
 |---|---|---|
+| Summary | 120 words | First on the page and never collapsed, for a reader returning cold. What kind of item it is (story, bug, change, spike), what happens today and why it is a problem (for a bug, what goes wrong and who hits it), what is true when this ships, and anything urgent or blocking. Plain prose, no code; readable without the ticket. |
 | Context | 150 words + images | Collapsed by default. Parent feature (link, state, purpose), sibling stories with state, the area (services, bounded context, key types), design links and screenshots. The plan must read without opening it. |
 | Requirement | 100 words | The change in product terms, then one concrete example with realistic data. Not the ticket text. |
 | Specs | 40 words + one Gherkin fence | The scenarios that become the acceptance tests, up to six, verbatim. With `testing.acceptance: none` they are still the contract; say how they are driven (integration tests, manual). |

@@ -17,7 +17,7 @@ open it yourself.
 
 ## Open it in a browser
 
-Open the `.html` file directly from disk. Every section renders: Context, Requirement,
+Open the `.html` file directly from disk. Every section renders: Summary, Context, Requirement,
 Specs and the rest of the plan; Verdict, Changes, Findings and the rest of the review.
 The page looks the same as the published version because it is the same template.
 A plan's Designs section renders its artboards from the copies under
