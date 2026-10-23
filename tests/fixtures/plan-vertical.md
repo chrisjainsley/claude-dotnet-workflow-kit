@@ -45,6 +45,55 @@ Feature: Order status endpoint
     Then the response is 403 Forbidden
 ```
 
+## Architecture
+One new feature folder in OrdersService over tables that already exist. No other service or infrastructure changes.
+
+```flowmap
+lanes: Endpoint, Slice, Persistence
+rows: OrdersService
+
+node endpoint: GetOrderStatusEndpoint
+  lane: Endpoint
+  file: src/OrdersService/Features/OrderStatus/GetOrderStatusEndpoint.cs
+  status: new
+  note: GET /orders/{orderId}/status
+
+node handler: GetOrderStatusHandler
+  lane: Slice
+  file: src/OrdersService/Features/OrderStatus/GetOrderStatusHandler.cs
+  status: new
+  note: ownership check, maps to OrderStatusResponse
+
+node reader: OrderStatusReader
+  lane: Persistence
+  file: src/OrdersService/Features/OrderStatus/OrderStatusReader.cs
+  status: new
+  note: one Dapper query joining Order and Shipment
+
+node tables: Order and Shipment tables
+  lane: Persistence
+  status: context
+  kind: table
+
+test handler-tests: GetOrderStatusHandlerTests
+  covers: handler
+  file: tests/OrdersService.Tests/GetOrderStatusHandlerTests.cs
+  status: new
+
+test endpoint-tests: GetOrderStatusEndpointTests
+  covers: endpoint
+  file: tests/OrdersService.API.Tests/GetOrderStatusEndpointTests.cs
+  status: new
+
+endpoint -> handler
+handler -> reader: GetAsync
+reader -> tables
+```
+
+```json @endpoint Response, shipped order
+{"status":"Shipped","trackingNumber":"1Z999","eta":"2026-09-16"}
+```
+
 ## Slice
 `Features/OrderStatus/GetOrderStatusEndpoint.cs` maps `GET /orders/{orderId}/status` to
 `GetOrderStatusHandler`, which loads the order, checks ownership, and maps to

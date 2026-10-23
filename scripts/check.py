@@ -125,7 +125,8 @@ def check_walkthrough(text, by_name, multiplier, sections):
         failures.append("Walkthrough: no scenes; drop the section or add '1. `Verdict` spoken line'")
     if len(scenes) > MAX_SCENES:
         failures.append(f"Walkthrough: {len(scenes)} scenes, cap {MAX_SCENES}")
-    maps = [b for lang, b in fences(by_name.get("Changes", "")) if lang == "flowmap"]
+    maps = [b for name in ("Changes", "Architecture")
+            for lang, b in fences(by_name.get(name, "")) if lang == "flowmap"]
     nodes = {n["id"] for n in flowmap.parse("\n".join(maps[0]))[0]["nodes"]} if maps else set()
     sections = set(sections)
     total = 0
@@ -241,6 +242,21 @@ def check_changes_diagram(changes, slices):
         errors += flowmap.validate_examples(examples, spec)
         failures += ["Changes: flowmap " + e for e in errors]
     return failures
+
+
+def check_architecture_diagram(architecture, slices):
+    """A plan's Architecture section holds one ```flowmap of the proposed change: lanes
+    are the profile's slices, rows the services, and every node states its status since
+    there is no diff yet. Example fences attach to its nodes by an @id caption."""
+    blocks = captioned_fences(architecture)
+    maps = [b for lang, _, b, _ in blocks if lang == "flowmap"]
+    if len(maps) != 1:
+        return [f"Architecture: needs exactly one ```flowmap of the proposed change, found {len(maps)}"]
+    examples = [(lang, caption, body) for lang, caption, body, _ in blocks if flowmap.example_target(caption)]
+    spec, errors = flowmap.parse(maps[0])
+    errors += flowmap.validate(spec, slices, planned=True)
+    errors += flowmap.validate_examples(examples, spec)
+    return ["Architecture: flowmap " + e for e in errors]
 
 
 def step_key(text):
@@ -453,7 +469,7 @@ def report(failures):
     return 0
 
 
-def check_plan(meta, body, multiplier, sections, disallowed=(), walkthrough=False):
+def check_plan(meta, body, multiplier, sections, disallowed=(), walkthrough=False, slices=None):
     failures = list(disallowed)
     for key in ("title", "ticket"):
         if not meta.get(key):
@@ -492,6 +508,8 @@ def check_plan(meta, body, multiplier, sections, disallowed=(), walkthrough=Fals
                 failures.append("Specs: no Gherkin scenario found in a fenced block")
             if scenarios > MAX_SCENARIOS:
                 failures.append(f"Specs: {scenarios} scenarios, cap {MAX_SCENARIOS}")
+        if name == "Architecture" and content.strip():
+            failures += check_architecture_diagram(content, slices)
         if name == "Open questions":
             for question in re.split(r"^\d+\.\s", prose, flags=re.M)[1:]:
                 options = re.findall(r"^\s+[-*]\s+\[([xX ])\]", question, flags=re.M)
@@ -671,7 +689,8 @@ def main(kind=None, argv=None):
         present = [name for name, _ in split_sections(body)]
         return check_plan(meta, body, multiplier, expected_plan_sections(profile, present),
                           disallowed_plan_sections(profile, present),
-                          walkthrough=bool(profile.get("optional", {}).get("walkthrough", False)))
+                          walkthrough=bool(profile.get("optional", {}).get("walkthrough", False)),
+                          slices=review_slices(profile))
     return check_review(meta, body, multiplier, review_slices(profile),
                         walkthrough=bool(profile.get("optional", {}).get("walkthrough", False)))
 

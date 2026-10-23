@@ -91,7 +91,7 @@ Values: `clean`, `vertical`, `ddd-clean`, `modular-monolith`.
 Read by both document skills for section and slice naming. Headings:
 
 - **Plan sections** - the section list and word caps `plan` uses beyond
-  the shared Summary, Context, Requirement, Specs, Tests, Decisions, Risks and rollout, and
+  the shared Summary, Context, Requirement, Specs, Architecture, Tests, Decisions, Risks and rollout, and
   Open questions; for `clean` these are Domain, Application, Infrastructure, API, for
   `vertical` they are Slice, Persistence, Integration, Endpoint.
 - **Review slices** - the same layer names as they appear as Slice values in the

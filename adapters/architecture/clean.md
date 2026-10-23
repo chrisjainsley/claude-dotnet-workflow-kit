@@ -8,6 +8,8 @@ The plan runs in dependency order, from the requirement outward through the laye
 - Context: parent feature, siblings, area, design links.
 - Requirement: the change in product terms plus one concrete example.
 - Specs: the Gherkin scenarios that become acceptance tests.
+- Architecture: a flowmap of the proposed change across the Domain, Application,
+  Infrastructure and API lanes, a row per service, infrastructure changes included.
 - Domain: aggregates, value objects, events and enums, as signatures.
 - Application: handlers, use cases and service interfaces, with their guarantees.
 - Infrastructure: persistence, messaging, configuration and external services, as a table.

@@ -13,6 +13,8 @@ replaced by one slice-shaped path:
 - Context: parent feature, siblings, area, design links.
 - Requirement: the change in product terms plus one concrete example.
 - Specs: the Gherkin scenarios that become acceptance tests.
+- Architecture: a flowmap of the proposed change across the Slice, Persistence,
+  Integration and Endpoint lanes, a row per service, infrastructure changes included.
 - Slice: the feature folder, its request and handler, in one place instead of split
   across layers.
 - Persistence: what the slice reads or writes and how.
