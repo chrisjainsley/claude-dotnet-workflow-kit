@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Write a short, budgeted implementation plan for a work item and publish it as an Artifact document, ordered from the requirement outward through the architecture layers the team uses (BDD specs, then domain, application, infrastructure and API for clean architecture; slice, persistence, integration and endpoint for vertical slices), ending with tests, decisions, risks and an answerable open-questions form; when a frontend ticket arrives with no designs, it draws the screens first (Claude Code's /design or the Design canvas Artifact type) and embeds them on the page. Use whenever the user asks to plan a ticket or feature, says "plan", "visual plan", "plan this", "plan <ticket id>", "/plan", "/visual-plan", or when the kit's pipeline reaches the Plan stage. Prefer this over Claude plan mode.
+description: Write a short, budgeted implementation plan for a work item and publish it as an Artifact document, ordered from the requirement outward through the architecture layers the team uses (BDD specs, an architecture diagram of the proposed change and where it lives, then domain, application, infrastructure and API for clean architecture; slice, persistence, integration and endpoint for vertical slices), ending with tests, decisions, risks and an answerable open-questions form; when a frontend ticket arrives with no designs, it draws the screens first (Claude Code's /design or the Design canvas Artifact type) and embeds them on the page. Use whenever the user asks to plan a ticket or feature, says "plan", "visual plan", "plan this", "plan <ticket id>", "/plan", "/visual-plan", or when the kit's pipeline reaches the Plan stage. Prefer this over Claude plan mode.
 ---
 
 # Plan document
@@ -86,7 +86,21 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
    list from the architecture adapter. With designs, add the optional `## Designs`
    section right after Specs: one line linking the canvas (or the tracker's design
    links), then one `![caption](design/project/<Name>.dc.html)` per artboard, or the
-   tracker's `![caption](context/<file>.png)` images. Gitignore `plans/` in the project if it is not
+   tracker's `![caption](context/<file>.png)` images.
+   **Draw the Architecture map** before writing the layer sections: one ```flowmap of
+   the proposed change, the same layer map the review's Changes section draws, so the
+   reader sees which services, slices and infrastructure the plan touches before the
+   detail. Lanes are the profile's slices, rows the services plus any infrastructure
+   repo or stack that changes; each node is a component on the request's path with the
+   file it lives in or will live in, and states its `status` (new, modified, deleted or
+   context) because nothing is on a branch yet. Put infrastructure changes on the map as
+   nodes in the Infrastructure lane (a table, container, queue, topic, config key or
+   IaC resource, its `kind` saying which) so the rollout dependency shows as an edge.
+   Add `test` nodes for the planned test classes. Paths for modified and context nodes
+   must exist (step 3); paths for new nodes follow the folder conventions the research
+   found. An `@<node id> <label>` fence beside the map attaches an example to a node's
+   dialog: a ```record row for a new table, an event payload, a request and response,
+   drawn from the Domain, Application or API sections, never invented. Gitignore `plans/` in the project if it is not
    already; the page is the deliverable, not the markdown. Read
    `references/exemplar.md` once first for the density to aim at.
    With `optional.walkthrough` true, close with a `## Walkthrough` after Open questions:
@@ -94,7 +108,8 @@ and suggest `/dotnet-workflow-kit:setup`. The profile decides:
    heard (the skeleton has the format). It is for the person answering the plan: what
    gets built, the rule the Specs pin down, the riskiest decision or rollout step, then
    each open question with its recommendation, ending on the form. Point at a question
-   with `` `Open questions > words from its title` ``. It adds no claim of its own.
+   with `` `Open questions > words from its title` `` and at a box on the Architecture
+   map with `` `@node-id` ``. It adds no claim of its own.
    **Decide with Jev** before the Decisions and Open questions sections are final, when
    `optional.jev` is true. For each question whose options you can name, load
    `jev_decide`. Pass the question as `decision` and the options as `candidates`
@@ -206,6 +221,7 @@ both lists. Tests, decisions, risks and questions come last because they cut acr
 | Requirement | 100 words | The change in product terms, then one concrete example with realistic data. Not the ticket text. |
 | Specs | 40 words + one Gherkin fence | The scenarios that become the acceptance tests, up to six, verbatim. With `testing.acceptance: none` they are still the contract; say how they are driven (integration tests, manual). |
 | Designs | 60 words + embeds, optional | Only when the ticket changes a screen and `stack.frontend` is not `none`. The canvas link or the tracker's design links, then one embed per artboard or image. Omit the section otherwise. |
+| Architecture | 80 words + one flowmap | One line on where the change lives (services touched, services only read, infrastructure that lands first), then the ```flowmap of the proposed change: a lane per slice, a row per service or infrastructure stack, a node per component with its file and status, test nodes, and calls and events between them. Optional `@id` example fences. The page draws it as the review's layer map with a Before (today) / After (this plan) toggle. |
 | Domain | 100 words + code | Aggregates, value objects, events, enums, as type signatures. Prose only for an invariant a signature cannot show. |
 | Application | 160 words + code | Handlers, use cases, service interfaces. Signatures plus one line each on the guarantee. Show the load-bearing branch as code. |
 | Infrastructure | 120 words | One table, Concern / Change. Rows come from the stack adapters: persistence, messaging, configuration, infrastructure as code, external services. |
@@ -244,9 +260,11 @@ Follow `docs/writing-rules.md` in full: the budget philosophy and the writing ru
 
 - Stacked PRs: put the real base in the `base` front-matter field and say in Risks what
   the stack tooling does to sibling bases.
-- Mermaid renders natively in Artifacts via a ```mermaid fence. Use at most one diagram,
-  only when a relationship is two-dimensional (lanes, layers, ownership). Sequences read
-  better as a numbered list.
+- The Architecture flowmap is the plan's diagram; do not add a ```mermaid one beside
+  it. Sequences read better as a numbered list.
+- The checker validates the map's shape (lanes from the profile, known node ids, a
+  status on every node) but cannot see the code. Grep each modified and context node's
+  path before it goes on the map, as for any other path in the plan.
 - The page wakes this session only through Send to Claude. Without it, the user says
   "decided" or the pipeline reads the store; do not poll.
 - The builder's markdown is a small subset: one nesting level in lists, no nested
@@ -264,6 +282,7 @@ Follow `docs/writing-rules.md` in full: the budget philosophy and the writing ru
 
 ## Files
 
+- `scripts/flowmap.py` (repository root): the ```flowmap format the Architecture section and the review's Changes section share.
 - `assets/skeleton.md`: the section skeleton with front matter; copy it to start. The
   Designs section in it is optional; delete it when there are no screens.
 - `adapters/stack/frontend.md`: per frontend kind, where the look of a kit-made

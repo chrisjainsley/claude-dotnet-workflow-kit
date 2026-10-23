@@ -112,11 +112,13 @@ NEEDS_MCP = {"code-review-workflow": "roslyn-mcp"}
 PLAN_SECTIONS = {
     "clean": [
         ("Summary", 120, None), ("Context", 150, None), ("Requirement", 100, None), ("Specs", 40, None),
+        ("Architecture", 80, None),
         ("Domain", 100, None), ("Application", 160, None), ("Infrastructure", 120, None), ("API", 60, None),
         ("Tests", 180, None), ("Decisions", 120, 6), ("Risks and rollout", 120, 5), ("Open questions", 180, 3),
     ],
     "vertical": [
         ("Summary", 120, None), ("Context", 150, None), ("Requirement", 100, None), ("Specs", 40, None),
+        ("Architecture", 80, None),
         ("Slice", 200, None), ("Persistence", 100, None), ("Integration", 100, None), ("Endpoint", 60, None),
         ("Tests", 180, None), ("Decisions", 120, 6), ("Risks and rollout", 120, 5), ("Open questions", 180, 3),
     ],

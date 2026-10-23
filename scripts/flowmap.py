@@ -1,4 +1,7 @@
-"""Parse and validate the review's ```flowmap block: the layer map of a change.
+"""Parse and validate a ```flowmap block: the layer map of a change.
+
+The review draws one in its Changes section, from git; the plan draws one in its
+Architecture section, for the change it proposes.
 
 The block is plain lines, so a review can be written and diffed by hand:
 
@@ -24,7 +27,7 @@ The block is plain lines, so a review can be written and diffed by hand:
 service, or per journey) and default to a single unnamed row. A `node` sits in one lane
 and row; a `test` sits in the Tests strip under the lane of the node it `covers`.
 `status` (new, modified, deleted, context, missing) defaults to the file's git status at
-render time; `view` (before, after, both) defaults from the status: new nodes exist only
+render time in a review; a plan has no diff yet, so every node in it states its status; `view` (before, after, both) defaults from the status: new nodes exist only
 after, deleted nodes only before. `->` is a call, `~>` an event or message; an edge shows
 in a view when both of its nodes do, and a `before:` or `after:` prefix limits it further.
 
@@ -87,8 +90,9 @@ def parse(text):
     return spec, errors
 
 
-def validate(spec, slices=None):
-    """Structural errors in a parsed spec; slices are the profile's allowed lane names."""
+def validate(spec, slices=None, planned=False):
+    """Structural errors in a parsed spec; slices are the profile's allowed lane names.
+    planned is true for a plan's map, which has no git status to fall back on."""
     errors = []
     lanes, rows = spec["lanes"], spec["rows"]
     if not lanes:
@@ -118,6 +122,8 @@ def validate(spec, slices=None):
             errors.append(f"node '{nid}': lane '{node.get('lane', '')}' is not in the lanes line")
         if node.get("row") and node["row"] not in rows:
             errors.append(f"node '{nid}': row '{node['row']}' is not in the rows line")
+        if planned and not node.get("status"):
+            errors.append(f"node '{nid}': a plan's map has no diff yet, so give it 'status: new', modified, deleted or context")
         if node.get("status") and node["status"] not in STATUSES:
             errors.append(f"node '{nid}': status must be one of {', '.join(STATUSES)}")
         if node.get("view") and node["view"] not in VIEWS:

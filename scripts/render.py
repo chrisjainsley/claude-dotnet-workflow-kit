@@ -27,7 +27,10 @@ faithfully.
 
 Plan mode: the "Context" section renders collapsed inside a <details> element, each
 section head carries an onion ring marking its architecture layer, and "Open
-questions" becomes the answer form. Each numbered item is a question, nested
+questions" becomes the answer form. "Architecture" draws its ```flowmap as the same
+layer map the review uses, for the proposed change: each node's status comes from the
+map itself, Before is the code today and After is the plan, and a node's dialog holds
+its note and any @id example fences instead of a diff. Each numbered item is a question, nested
 "- [x] **Label.** detail" lines become radio options ([x] is the recommended,
 preselected one), and a question with no options becomes a free-text answer.
 Question ids derive from the title text, so a republish keeps answers already stored
@@ -128,7 +131,7 @@ HTTP_STATUS_RE = re.compile(r"^HTTP/\d(?:\.\d)?\s+(\d{3})\b")
 HEADER_RE = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]+:\s")
 
 NON_LAYER_SECTIONS = {
-    "Summary", "Context", "Requirement", "Specs", "Designs", "Tests", "Decisions",
+    "Summary", "Context", "Requirement", "Specs", "Designs", "Architecture", "Tests", "Decisions",
     "Risks and rollout", "Open questions", "Stories", "Story specs", "Delivery order",
 }
 # A feature page renders in plan mode (the same answer form and decision store) under
@@ -144,6 +147,7 @@ LANG_ALIAS = {"cs": "csharp", "c#": "csharp", "gql": "graphql", "feature": "gher
               "sh": "bash", "ps1": "powershell", "patch": "diff"}
 QUESTIONS_SECTION = "Open questions"
 CONTEXT_SECTION = "Context"
+ARCHITECTURE_SECTION = "Architecture"
 REVIEW_MODES = {"Verdict": "verdict", "Plan versus delivered": "plan", "Changes": "changes",
                 "Findings": "findings", "QA report": "qa", "Rollout": "rollout"}
 PLAN_CHIP_KEYS = ("ticket", "branch", "base", "size", "date")
@@ -409,7 +413,7 @@ def render_example(lang, label, body):
 def flow_node_file(node, resolved):
     """The node's path as it appears in the diff, or None when the file did not change."""
     raw = node.get("file", "").strip("`")
-    if not raw:
+    if not raw or KIND == "plan":
         return None
     path = resolved(raw)
     if path is None and node["status"] not in ("context", "missing"):
@@ -442,7 +446,9 @@ def render_flow_panel(fid, node, path):
         file_line = f'<a class="filelink fm-file" href="#{file_anchor(path)}"><code>{html.escape(path)}</code></a>'
     elif raw:
         file_line = f'<span class="fm-file"><code>{html.escape(raw)}</code></span>'
-    if path:
+    if KIND == "plan":
+        diff = None  # a plan's node has no diff yet; its note and examples carry it
+    elif path:
         diff = f'<div class="fm-diff" data-file="{file_anchor(path)}"></div>'
     elif node["status"] == "missing":
         diff = '<p class="fnote">No test file yet: this is a gap the review calls out.</p>'
@@ -456,13 +462,14 @@ def render_flow_panel(fid, node, path):
         f'<span class="fm-chip s-{node["status"]}">{FLOW_STATUS_LABEL[node["status"]]}</span>'
         f'{"<span class=fm-row>" + html.escape(node["row"]) + "</span>" if node.get("row") else ""}</div>'
         f'<h4 class="fm-title">{inline(node["title"])}</h4>{file_line}{note}'
-        f'<h5 class="fm-ex-label">Diff</h5>{diff}{examples}</div></template>'
+        + ("" if diff is None else f'<h5 class="fm-ex-label">Diff</h5>{diff}')
+        + f'{examples}</div></template>'
     )
 
 
 def render_flowmap(body):
     spec, errors = flowmap.parse(body)
-    errors += flowmap.validate(spec)
+    errors += flowmap.validate(spec, planned=KIND == "plan")
     if errors:
         WARNINGS.extend("flowmap: " + e for e in errors)
         return render_code("", body)
@@ -476,7 +483,11 @@ def render_flowmap(body):
             paths[raw] = resolve_path(raw)
         return paths[raw]
 
-    flowmap.resolve(spec, lambda raw: FILE_STATUS.get(resolved(raw) or ""))
+    if KIND == "plan":
+        # A plan has no diff yet: every node states its own status (flowmap.validate).
+        flowmap.resolve(spec, lambda raw: None)
+    else:
+        flowmap.resolve(spec, lambda raw: FILE_STATUS.get(resolved(raw) or ""))
     lanes = spec["lanes"]
     rows = spec["rows"] or [""]
     by_id = {n["id"]: n for n in spec["nodes"]}
@@ -512,21 +523,25 @@ def render_flowmap(body):
             key.append(f'<li data-views="{" ".join(views)}"{" class=ev" if e["event"] else ""}><b>{n}</b>'
                        f'<span>{inline(by_id[e["from"]]["title"])} {arrow} {inline(by_id[e["to"]]["title"])}: {inline(e["label"])}</span></li>')
     data = json.dumps({"edges": edges}).replace("</", "<\\/")
-    base = html.escape(META.get("base", "base"))
-    branch = "this branch"
+    if KIND == "plan":
+        before, after, where, detail = "today", "this plan", "by the plan", "detail"
+        compare = "Compare today with the plan"
+    else:
+        before, after, where, detail = html.escape(META.get("base", "base")), "this branch", "on branch", "diff"
+        compare = "Compare with the base branch"
     toggle = (
-        '<div class="fm-toggle" role="group" aria-label="Compare with the base branch">'
-        f'<button type="button" data-view="before" aria-pressed="false">Before · {base}</button>'
-        f'<button type="button" data-view="after" aria-pressed="true">After · {branch}</button></div>'
+        f'<div class="fm-toggle" role="group" aria-label="{compare}">'
+        f'<button type="button" data-view="before" aria-pressed="false">Before · {before}</button>'
+        f'<button type="button" data-view="after" aria-pressed="true">After · {after}</button></div>'
     )
     legend = (
         '<div class="fm-legend">'
         '<span class="lg-after"><i class="sw s-modified"></i>changed</span>'
-        '<span class="lg-before"><i class="sw s-deleted"></i>deleted on branch</span>'
-        '<span class="lg-before"><i class="sw s-modified"></i>modified on branch</span>'
+        f'<span class="lg-before"><i class="sw s-deleted"></i>deleted {where}</span>'
+        f'<span class="lg-before"><i class="sw s-modified"></i>modified {where}</span>'
         '<span><i class="sw s-context"></i>unchanged</span>'
         '<span><i class="sw ev"></i>event</span>'
-        f'<span class="fm-hint">Select a box for its diff{" and example" if FLOW_EXAMPLES else ""}.</span></div>'
+        f'<span class="fm-hint">Select a box for its {detail}{" and example" if FLOW_EXAMPLES else ""}.</span></div>'
     )
     return (
         f'<figure class="flowmap" id="{fid}" data-view="after">'
@@ -703,7 +718,7 @@ def render_blocks(lines, mode=None, state=None):
             continue
         if line.startswith("```"):
             lang, body, i = read_fence(lines, i)
-            out.append(render_flowmap(body) if lang == "flowmap" and mode == "changes" else render_code(lang, body))
+            out.append(render_flowmap(body) if lang == "flowmap" and mode in ("changes", "architecture") else render_code(lang, body))
             continue
         if line.startswith("#### "):
             title = line[5:].strip()
@@ -1201,6 +1216,8 @@ def parse(text, kind=None):
             if name == QUESTIONS_SECTION:
                 body, count = render_questions(lines)
                 questions += count
+            elif name == ARCHITECTURE_SECTION:
+                body = render_blocks(take_examples(lines), "architecture")
             elif name == CONTEXT_SECTION:
                 summary = CONTEXT_SUMMARY[PAGE_LABEL or "Plan"]
                 body = f'<details class="context"><summary>{summary}</summary>{render_blocks(lines)}</details>'

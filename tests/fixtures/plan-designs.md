@@ -55,6 +55,111 @@ Canvas: [Design - Signup grant once per payer](https://claude.ai/artifact/exampl
 
 ![Wallet page, repeat payer sees no granted credit](design/project/Main.dc.html)
 
+## Architecture
+All code lands in SubscriptionService; the only other change is a new container in the shared Terraform. UserService already raises `UserCreated` and is not touched.
+
+```flowmap
+lanes: API, Application, Domain, Infrastructure
+rows: SubscriptionService, UserService, Terraform
+
+node issuer: SignupCampaignGrantIssuer
+  lane: API
+  row: SubscriptionService
+  file: src/Acme.Api.Subscription/LoyaltyPoints/SignupCampaignGrantIssuer.cs
+  status: modified
+  note: passes the token email as a fallback payer key
+
+node admin: grantLoyaltyPointsCampaignCredit
+  lane: API
+  row: SubscriptionService
+  file: src/Acme.Api.Subscription/LoyaltyPoints/GrantLoyaltyPointsCampaignCreditMutation.cs
+  status: modified
+  kind: mutation
+  note: throws for Refused and Deferred
+
+node created: UserCreatedEventHandler
+  lane: Application
+  row: SubscriptionService
+  file: src/Acme.Grains.Subscription/Users/UserCreatedEventHandler.cs
+  status: modified
+  note: stamps the payer key beside the creation date
+
+node account: LoyaltyPointsAccountGrain
+  lane: Application
+  row: SubscriptionService
+  file: src/Acme.Grains.Subscription/LoyaltyPoints/LoyaltyPointsAccountGrain.cs
+  status: modified
+  kind: grain
+  note: once per payer gate before the ledger append
+
+node payer: GrantedCreditPayerGrain
+  lane: Application
+  row: SubscriptionService
+  file: src/Acme.Grains.Subscription/LoyaltyPoints/GrantedCreditPayerGrain.cs
+  status: new
+  kind: grain
+  note: one activation per payer key serialises racing accounts
+
+node payerkey: PayerKey
+  lane: Domain
+  row: SubscriptionService
+  file: src/Acme.Domain.Subscription/LoyaltyPoints/GrantedCredit/PayerKey.cs
+  status: new
+  note: hashed email root, no plain email stored
+
+node storage: GrainStorage.GrantedCreditPayer
+  lane: Infrastructure
+  row: SubscriptionService
+  file: src/Acme.Grains.Subscription/GrainStorage.cs
+  status: modified
+  kind: storage
+
+node user-created: UserCreated
+  lane: Application
+  row: UserService
+  status: context
+  kind: event
+
+node container: GrainStorage-GrantedCreditPayer
+  lane: Infrastructure
+  row: Terraform
+  file: environments/sand/shared/vars.auto.tfvars
+  status: new
+  kind: cosmos container
+  note: all five environments, own PR from main
+
+test payerkey-tests: PayerKeyTests
+  covers: payerkey
+  file: tests/Acme.Domain.Subscription.Tests/PayerKeyTests.cs
+  status: new
+
+test payer-tests: GrantedCreditPayerGrainTests
+  covers: payer
+  file: tests/Acme.Grains.Tests/GrantedCreditPayerGrainTests.cs
+  status: new
+
+test api-tests: GetLoyaltyPointsOncePerPayerTests
+  covers: issuer
+  file: tests/Acme.Api.Test/LoyaltyPoints/GetLoyaltyPointsOncePerPayerTests.cs
+  status: new
+
+issuer -> account: GrantCampaignCreditAsync
+admin -> account
+user-created ~> created: Event Grid
+created -> account: SetPayerKeyAsync
+account -> payerkey
+account -> payer: TryClaimAsync
+payer -> storage
+storage -> container: needs the container first
+```
+
+```record @payer Claim state
+PayerKey | email:9f2c41… | SHA-256 of sam.jones@gmail.com
+CampaignId | signup-grant | first claim blocks every once per payer campaign
+UserId | 4b1e0c… | the account that took the grant
+ClaimedAtUtc | 2026-03-14T09:12:00Z |
+```
+
 ## Domain
 `PayerKey` hashes the root so no plain email lands in a grain id or state. `GrantCreditResult` gains an outcome enum because today a deferred grant would be indistinguishable from an already-applied one.
 

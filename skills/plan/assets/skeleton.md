@@ -31,6 +31,26 @@ Feature: <name>
 ## Designs
 <!-- Optional; only when the ticket changes a screen and the profile's stack.frontend is not none, otherwise delete this section. One line linking the Design canvas (or the tracker's design links), then one embed per artboard: ![caption](design/project/<Name>.dc.html), or the tracker's ![caption](context/<file>.png). -->
 
+## Architecture
+<!-- One line on where the change lives: which services it touches, which it only reads, and any infrastructure that must land first. Then one ```flowmap of the proposed change, the same layer map the review draws (format: scripts/flowmap.py). `lanes:` are the slices the change touches, in the profile's names and in request order (API before Application before Domain before Infrastructure); `rows:` are the services, plus one per infrastructure repo or stack (Terraform, Bicep, pipelines) that changes. A `node` is a component on the path with the file it lives in or will live in, and every node states `status:` (new, modified, deleted, or context for something the change calls but does not touch), because there is no diff yet. Infrastructure changes are nodes too: a table, container, queue, topic, config key or IaC resource in the Infrastructure lane, with `kind:` naming what it is. A `test` node names the planned test file and the node it `covers:`. Edges: `a -> b` for a call, `a ~> b` for an event or message, `: label` for what crosses it. Sixteen nodes at most: the path a request takes, not every file. Then, optionally, one fence per example captioned `@<node id> <label>` (a ```record row for a new table, the payload of a new event, a request and response), taken from the Domain, Application or API sections, never invented. -->
+
+```flowmap
+lanes: API, Application, Domain, Infrastructure
+rows: <Service>
+
+node <id>: <Component>
+  lane: API
+  row: <Service>
+  file: <repo-relative path>
+  status: new
+  note: <what it does in this change>
+
+test <id>-tests: <TestClass>
+  covers: <id>
+  file: <repo-relative path>
+  status: new
+```
+
 ## Domain
 <!-- Aggregates, value objects, events, enums that change, as type signatures in a ```csharp fence. Prose only for an invariant the signature cannot show. "No change." if untouched. -->
 

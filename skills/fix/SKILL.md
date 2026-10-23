@@ -94,6 +94,9 @@ Anything else, decide, and write the decision as a Decisions bullet in the plan.
    - Requirement: expected against actual, then one line, "Repro: <outcome>, <how>".
    - Specs: the bug as one Gherkin scenario, written as the fixed behaviour, plus any
      sibling case the fix must keep working. Up to three.
+   - Architecture: one line naming the service, then a small ```flowmap of the path
+     the bug takes: the node the fix changes as `status: modified`, its callers as
+     `status: context`, and the regression test as a `test` node.
    - Layers: the fix in the one or two layers it touches, the root cause as the
      load-bearing branch. "No change." for the rest.
    - Tests: the regression test's row, then one row per regression-area filter from

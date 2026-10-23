@@ -95,10 +95,62 @@ def test_given_vertical_profile_then_check_expects_slice_sections(tmp_path, plan
     assert "Slice" in out
 
 
+def test_given_fixture_then_architecture_draws_the_proposed_change(tmp_path, plan_fixture_text):
+    plan_path = tmp_path / "plan.md"
+    plan_path.write_text(plan_fixture_text, encoding="utf-8")
+    out_path = tmp_path / "plan.html"
+
+    code, out, err = run_py(BUILD_PLAN_PY, plan_path, "--out", out_path)
+
+    assert code == 0, out + err
+    html = out_path.read_text(encoding="utf-8")
+    section = html[html.index('id="architecture"'):html.index('id="domain"')]
+    assert '<figure class="flowmap" id="fm1" data-view="after"' in section
+    assert "Before · today" in section and "After · this plan" in section
+    # Status comes from the map: a new node shows only after, a modified one in both views.
+    assert re.search(r'class="fm-node s-new" data-node="payer" data-views="after"', section)
+    assert re.search(r'class="fm-node s-modified" data-node="account" data-views="before after"', section)
+    # No diff exists yet, so the dialog carries the note and the @payer example instead.
+    payer = section[section.index('<template id="fm1-payer">'):]
+    payer = payer[:payer.index("</template>")]
+    assert "Diff" not in payer and "Claim state" in payer
+    # Architecture is not a layer, so the onion rings still count Domain as the first.
+    assert '<section class="plan-section" id="architecture">' in html
+    assert '<section class="plan-section" id="domain" data-layer="0">' in html
+
+
+def test_given_architecture_without_flowmap_then_exit1(plan_fixture_path):
+    text = plan_fixture_path.read_text(encoding="utf-8")
+    text = re.sub(r"```flowmap\n.*?\n```\n", "", text, count=1, flags=re.S)
+    plan_fixture_path.write_text(text, encoding="utf-8")
+
+    code, out, err = run_py(CHECK_PLAN_PY, plan_fixture_path)
+
+    assert code == 1
+    assert "Architecture: needs exactly one ```flowmap" in out
+
+
+@pytest.mark.parametrize("old, new, message", [
+    ("  status: new\n  kind: grain\n", "  kind: grain\n", "node 'payer': a plan's map has no diff yet"),
+    ("  lane: Domain\n", "  lane: Persistence\n", "lane 'Persistence' is not in the lanes line"),
+    ("account -> payer: TryClaimAsync", "account -> ledger: TryClaimAsync", "unknown node 'ledger'"),
+    ("```record @payer Claim state", "```record @wallet Claim state", "example '@wallet' names no node"),
+])
+def test_given_broken_architecture_flowmap_then_exit1(plan_fixture_path, old, new, message):
+    text = plan_fixture_path.read_text(encoding="utf-8")
+    assert old in text
+    plan_fixture_path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+    code, out, err = run_py(CHECK_PLAN_PY, plan_fixture_path)
+
+    assert code == 1
+    assert message in out
+
+
 VERTICAL_FIXTURE_PATH = FIXTURES_DIR / "plan-vertical.md"
 VERTICAL_PROFILE_PATH = FIXTURES_DIR / "profile-vertical.json"
 VERTICAL_SECTIONS = [
-    "Summary", "Context", "Requirement", "Specs", "Slice", "Persistence", "Integration",
+    "Summary", "Context", "Requirement", "Specs", "Architecture", "Slice", "Persistence", "Integration",
     "Endpoint", "Tests", "Decisions", "Risks and rollout", "Open questions",
 ]
 
@@ -246,6 +298,7 @@ def test_given_plan_walkthrough_on_then_player_points_at_the_questions(plan_fixt
     assert 'data-target="walkthrough"' not in page
     scenes = plan_scenes(page)
     assert (scenes[5]["section"], scenes[5]["find"]) == ("open-questions", "durable sign-in identity")
+    assert scenes[2]["node"] == "payer"
     assert all("audio" in line for scene in scenes for line in scene["lines"])
     files = json.loads((plan_fixture_path.parent / "plan.files.json").read_text(encoding="utf-8"))
     assert files and all(f.startswith("walkthrough/plan/") for f in files)

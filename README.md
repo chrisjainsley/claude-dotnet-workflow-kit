@@ -133,6 +133,13 @@ Use for an implementation plan. It reads the ticket and codebase, then writes
 with test scenarios, decisions, risks and open questions. A script checks section
 budgets before publication.
 
+Before the layer sections, an Architecture diagram shows the proposed change and where
+it lives: one lane per architecture layer, one row per service or infrastructure
+stack, and a box per component with new, changed and unchanged marked. It is the same
+layer map the review draws from the diff, with a Before (today) / After (this plan)
+toggle, so the plan's map and the review's map can be compared side by side. Click a
+box for its file, what changes and any example data.
+
 When `stack.frontend` is set and a ticket changes a screen that came with no design,
 the skill draws the screens first, with Claude Code's `/design` command or the Design
 canvas Artifact type, and embeds the artboards in a Designs section of the plan page
